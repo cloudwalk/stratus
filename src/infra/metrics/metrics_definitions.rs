@@ -13,6 +13,9 @@ metrics! {
     "Number of JSON-RPC requests that finished."
     histogram_duration rpc_requests_finished{client, method, contract, function, result, result_code, success},
 
+    "Response size in bytes for JSON-RPC responses."
+    histogram_counter rpc_response_size{client, method},
+
     "Number of JSON-RPC subscriptions active right now."
     gauge rpc_subscriptions_active{subscription, client}
 }
@@ -28,7 +31,7 @@ metrics! {
     histogram_duration storage_read_mined_block_number{storage, success},
 
     "Time executing storage read_account operation."
-    histogram_duration storage_read_account{storage, point_in_time},
+    histogram_duration storage_read_account{storage, point_in_time, hit},
 
     "Time executing storage read_block operation."
     histogram_duration storage_read_block{storage, success},
@@ -40,7 +43,7 @@ metrics! {
     histogram_duration storage_read_logs{storage, success},
 
     "Time executing storage read_slot operation."
-    histogram_duration storage_read_slot{storage, point_in_time},
+    histogram_duration storage_read_slot{storage, point_in_time, hit},
 
     "Time executing storage read_transaction operation."
     histogram_duration storage_read_transaction{storage, success},
@@ -72,7 +75,7 @@ metrics! {
     histogram_duration storage_finish_pending_block{storage, success},
 
     "Time executing storage save_block operation."
-    histogram_duration storage_save_block{storage, size_by_tx, size_by_gas, success},
+    histogram_duration storage_save_block{storage, tens_of_millions_gas_used, success},
 
     "Time executing storage reset operation."
     histogram_duration storage_reset{storage, success},
@@ -88,8 +91,20 @@ metrics! {
     "Time to import one block."
     histogram_duration import_online_mined_block{},
 
+    "Time to fetch one block."
+    histogram_duration import_online_fetched_block{},
+
+    "Time to post-process one fetched block."
+    histogram_duration import_online_post_process_block{},
+
+    "Total time to fetch and post-process one block."
+    histogram_duration import_online_fetch_and_post_process_block{},
+
     "Number of transactions imported."
-    counter importer_online_transactions_total{}
+    counter importer_online_transactions_total{},
+
+    "Number of blocks between follower and leader, determined by the direction label (Ahead or Behind)."
+    gauge importer_online_lag_blocks{direction}
 }
 
 // Execution metrics.
@@ -120,6 +135,9 @@ metrics! {
     "Time executing a local transaction."
     histogram_duration executor_local_transaction{success, contract, function},
 
+    "Time waiting to acquire the local transaction execution lock."
+    histogram_duration executor_local_transaction_lock_wait{},
+
     "Time executing a local transaction."
     counter executor_local_transaction_reverts{contract, function, reason},
 
@@ -142,23 +160,13 @@ metrics! {
     histogram_counter executor_local_call_slot_reads{contract, function},
 
     "Gas spent executing a local call."
-    histogram_counter executor_local_call_gas{contract, function}
-}
-
-metrics! {
-    group: evm,
-
-    "Time executing EVM execution."
-    histogram_duration evm_execution{point_in_time, success},
-
-    "Number of accounts read in a single EVM execution."
-    histogram_counter evm_execution_account_reads{},
-
-    "Number of slots read in a single EVM execution."
-    histogram_counter evm_execution_slot_reads{},
+    histogram_counter executor_local_call_gas{contract, function},
 
     "Time executing trace_transaction"
-    histogram_duration evm_inspect{trace_type}
+    histogram_duration executor_inspect{trace_type},
+
+    "Number of EVM pool workers busy executing right now."
+    gauge executor_workers_busy{pool}
 }
 
 metrics! {

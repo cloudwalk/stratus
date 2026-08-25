@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::sync::LazyLock;
 use std::sync::atomic::AtomicBool;
@@ -6,8 +7,8 @@ use std::sync::atomic::Ordering;
 use chrono::DateTime;
 use chrono::Utc;
 use parking_lot::Mutex;
+use parking_lot::RwLock;
 use sentry::ClientInitGuard;
-use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
 use tokio::runtime::Runtime;
@@ -19,7 +20,7 @@ use crate::alias::JsonValue;
 use crate::config;
 use crate::config::StratusConfig;
 use crate::config::WithCommonConfig;
-use crate::eth::follower::importer::Importer;
+use crate::eth::rpc::RpcClientApp;
 use crate::eth::rpc::RpcContext;
 use crate::ext::not;
 use crate::ext::spawn_signal_handler;
@@ -60,6 +61,9 @@ where
 
         // Set the unknown_client_enabled value
         GlobalState::set_unknown_client_enabled(common.unknown_client_enabled);
+
+        // Set the blocked clients
+        GlobalState::init_blocked_clients(&common.blocked_clients);
 
         // init tokio
         let tokio = common.init_tokio_runtime().expect("failed to init tokio runtime");
@@ -116,13 +120,16 @@ pub static STRATUS_SHUTDOWN_SIGNAL: LazyLock<CancellationToken> = LazyLock::new(
 static IMPORTER_SHUTDOWN: AtomicBool = AtomicBool::new(true);
 
 /// A guard that is taken when importer is running.
-pub static IMPORTER_ONLINE_TASKS_SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(Importer::TASKS_COUNT));
+pub static IMPORTER_ONLINE_TASKS_SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(crate::eth::follower::importer::TASKS_COUNT));
 
 /// Transaction should be accepted?
 static TRANSACTIONS_ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// Unknown clients can interact with the application?
 static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
+
+/// Clients that are blocked from interacting with the application.
+static BLOCKED_CLIENTS: LazyLock<RwLock<HashSet<String>>> = LazyLock::new(|| RwLock::new(HashSet::new()));
 
 /// Current node mode.
 static NODE_MODE: Mutex<NodeMode> = Mutex::new(NodeMode::Follower);
@@ -135,7 +142,7 @@ static HEALTH: LazyLock<Sender<bool>> = LazyLock::new(|| tokio::sync::watch::Sen
 /// Should stratus restart when unhealthy?
 static RESTART_ON_UNHEALTHY: AtomicBool = AtomicBool::new(true);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Debug)]
 pub struct GlobalState;
 
 impl GlobalState {
@@ -226,7 +233,9 @@ impl GlobalState {
     /// Waits till importer is done.
     pub async fn wait_for_importer_to_finish() {
         // 3 permits will be available when all 3 tasks are finished
-        let result = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire_many(Importer::TASKS_COUNT as u32).await;
+        let result = IMPORTER_ONLINE_TASKS_SEMAPHORE
+            .acquire_many(crate::eth::follower::importer::TASKS_COUNT as u32)
+            .await;
 
         if let Err(e) = result {
             tracing::error!(reason = ?e, "error waiting for importer to finish");
@@ -272,6 +281,60 @@ impl GlobalState {
     /// Checks if the unknown client is enabled.
     pub fn is_unknown_client_enabled() -> bool {
         UNKNOWN_CLIENT_ENABLED.load(Ordering::Relaxed)
+    }
+
+    // -------------------------------------------------------------------------
+    // Blocked Clients
+    // -------------------------------------------------------------------------
+
+    /// Initializes the blocked clients set from configuration. Names are normalized the same way as incoming client identification.
+    pub fn init_blocked_clients(names: &[String]) {
+        let mut blocked = BLOCKED_CLIENTS.write();
+        for name in names {
+            if let RpcClientApp::Identified(normalized) = RpcClientApp::parse(name) {
+                blocked.insert(normalized);
+            }
+        }
+    }
+
+    /// Adds a client to the blocked clients set. Returns the normalized name when added.
+    pub fn add_blocked_client(name: &str) -> Option<String> {
+        match RpcClientApp::parse(name) {
+            RpcClientApp::Identified(normalized) => {
+                BLOCKED_CLIENTS.write().insert(normalized.clone());
+                Some(normalized)
+            }
+            RpcClientApp::Unknown => None,
+        }
+    }
+
+    /// Removes a client from the blocked clients set. Returns whether it was present.
+    pub fn remove_blocked_client(name: &str) -> bool {
+        match RpcClientApp::parse(name) {
+            RpcClientApp::Identified(normalized) => BLOCKED_CLIENTS.write().remove(&normalized),
+            RpcClientApp::Unknown => false,
+        }
+    }
+
+    /// Clears the blocked clients set.
+    pub fn clear_blocked_clients() {
+        BLOCKED_CLIENTS.write().clear();
+    }
+
+    /// Checks if a client is blocked.
+    pub fn is_client_blocked(client: &RpcClientApp) -> bool {
+        match client {
+            RpcClientApp::Identified(name) => BLOCKED_CLIENTS.read().contains(name),
+            RpcClientApp::Unknown => false,
+        }
+    }
+
+    /// Returns the list of blocked clients (normalized names).
+    pub fn list_blocked_clients() -> Vec<String> {
+        let blocked = BLOCKED_CLIENTS.read();
+        let mut list: Vec<String> = blocked.iter().cloned().collect();
+        list.sort();
+        list
     }
 
     // -------------------------------------------------------------------------
@@ -327,6 +390,7 @@ impl GlobalState {
             "transactions_enabled": Self::is_transactions_enabled(),
             "miner_paused": ctx.server.miner.is_paused(),
             "unknown_client_enabled": Self::is_unknown_client_enabled(),
+            "blocked_clients": Self::list_blocked_clients(),
             "start_time": start_time.format("%d/%m/%Y %H:%M UTC").to_string(),
             "elapsed_time": elapsed_time,
         })

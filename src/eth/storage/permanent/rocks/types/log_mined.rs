@@ -3,10 +3,10 @@ use std::fmt::Debug;
 use super::block_number::BlockNumberRocksdb;
 use super::hash::HashRocksdb;
 use super::log::LogRocksdb;
-use crate::eth::primitives::Index;
-use crate::eth::primitives::Log;
-use crate::eth::primitives::LogMessage;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::types::Index;
+use crate::eth::types::Log;
+use crate::eth::types::LogMessage;
 use crate::ext::OptionExt;
 
 #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]

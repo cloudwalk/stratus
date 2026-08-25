@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
-use crate::eth::primitives::Index;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::types::Index;
 
 #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, Copy, Hash, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(fake::Dummy))]

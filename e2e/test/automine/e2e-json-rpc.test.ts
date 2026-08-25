@@ -3,7 +3,7 @@ import { TransactionReceipt, keccak256 } from "ethers";
 import { JsonRpcProvider } from "ethers";
 import { Block, Bytes } from "web3-types";
 
-import { ALICE, BOB, CHARLIE } from "../helpers/account";
+import { ALICE, BOB, CHARLIE, randomAccounts } from "../helpers/account";
 import { isStratus } from "../helpers/network";
 import {
     CHAIN_ID,
@@ -14,12 +14,14 @@ import {
     ONE,
     TEST_BALANCE,
     ZERO,
+    calculateSlotPosition,
     createEIP1559Transaction,
     createEIP2930Transaction,
     createEIP4844Transaction,
     createLegacyTransaction,
     deployTestContractBalances,
     deployTestContractBlockTimestamp,
+    deployTestContractCounter,
     deployTestRevertReason,
     pollReceipt,
     prepareSignedTx,
@@ -111,6 +113,66 @@ describe("JSON-RPC", () => {
         });
     });
 
+    describe("Blocked Clients", () => {
+        const blockedClient = "blocked-test-client";
+
+        before(async () => {
+            if (isStratus) {
+                await send("stratus_enableUnknownClients");
+                await send("stratus_clearBlockedClients");
+            }
+        });
+
+        after(async () => {
+            if (isStratus) {
+                await send("stratus_clearBlockedClients");
+                await send("stratus_enableUnknownClients");
+            }
+        });
+
+        it("blocking a client rejects its requests but allows others", async function () {
+            if (!isStratus) {
+                this.skip();
+                return;
+            }
+
+            const blockedList = await send("stratus_blockClient", [blockedClient]);
+            expect(blockedList).to.be.an("array").that.is.not.empty;
+
+            // request from the blocked client should fail
+            const error = await sendAndGetError("eth_blockNumber", [], { "x-app": blockedClient });
+            expect(error.code).eq(1011);
+
+            // request from a different client should succeed
+            const blockNumber = await send("eth_blockNumber", [], { "x-app": "other-client" });
+            expect(blockNumber).to.match(/^0x[0-9a-f]+$/);
+        });
+
+        it("unblocking a client allows its requests again", async function () {
+            if (!isStratus) {
+                this.skip();
+                return;
+            }
+
+            await send("stratus_blockClient", [blockedClient]);
+            await send("stratus_unblockClient", [blockedClient]);
+
+            const blockNumber = await send("eth_blockNumber", [], { "x-app": blockedClient });
+            expect(blockNumber).to.match(/^0x[0-9a-f]+$/);
+        });
+
+        it("stratus_state exposes blocked clients", async function () {
+            if (!isStratus) {
+                this.skip();
+                return;
+            }
+
+            await send("stratus_blockClient", [blockedClient]);
+            const state = await send("stratus_state");
+            expect(state.blocked_clients).to.be.an("array").that.is.not.empty;
+        });
+    });
+
     describe("Metadata", () => {
         it("eth_chainId", async () => {
             (await sendExpect("eth_chainId")).eq(CHAIN_ID);
@@ -192,6 +254,24 @@ describe("JSON-RPC", () => {
                 let block = await send("eth_getBlockByNumber", [NON_EXISTANT_BLOCK, true]);
                 expect(block).to.be.null;
             });
+            it("accepts 'latest' as block parameter", async () => {
+                let block: Block = await send("eth_getBlockByNumber", ["latest", true]);
+                expect(block.hash).to.not.be.undefined;
+                expect(block.number).to.not.be.undefined;
+            });
+            it("accepts 'earliest' as block parameter", async () => {
+                let block: Block = await send("eth_getBlockByNumber", ["earliest", true]);
+                expect(block.number).eq("0x0");
+            });
+            it("accepts 'pending' as block parameter", async () => {
+                let block: Block = await send("eth_getBlockByNumber", ["pending", true]);
+                expect(block).to.not.be.null;
+            });
+            it("rejects block hash as parameter", async () => {
+                const error = await sendAndGetError("eth_getBlockByNumber", [hash, true]);
+                expect(error.code).eq(1010); // ParameterInvalid error code
+                expect(error.message).to.include("parameter is invalid");
+            });
         });
         describe("eth_getBlockByHash", () => {
             it("fetches genesis block correctly", async () => {
@@ -202,6 +282,26 @@ describe("JSON-RPC", () => {
             it("returns null if block does not exist", async () => {
                 let block = await send("eth_getBlockByHash", [HASH_ZERO, true]);
                 expect(block).to.be.null;
+            });
+            it("rejects 'latest' as parameter", async () => {
+                const error = await sendAndGetError("eth_getBlockByHash", ["latest", true]);
+                expect(error.code).eq(1010); // ParameterInvalid error code
+                expect(error.message).to.include("parameter is invalid");
+            });
+            it("rejects 'earliest' as parameter", async () => {
+                const error = await sendAndGetError("eth_getBlockByHash", ["earliest", true]);
+                expect(error.code).eq(1010);
+                expect(error.message).to.include("parameter is invalid");
+            });
+            it("rejects 'pending' as parameter", async () => {
+                const error = await sendAndGetError("eth_getBlockByHash", ["pending", true]);
+                expect(error.code).eq(1010);
+                expect(error.message).to.include("parameter is invalid");
+            });
+            it("rejects block number as parameter", async () => {
+                const error = await sendAndGetError("eth_getBlockByHash", ["0x1", true]);
+                expect(error.code).eq(1010);
+                expect(error.message).to.include("parameter is invalid");
             });
         });
         it("eth_getUncleByBlockHashAndIndex", async function () {
@@ -445,6 +545,146 @@ describe("JSON-RPC", () => {
                 const stringErrorTx = { to: contract.target, data: stringErrorData };
                 const stringErrorResult = await sendAndGetError("stratus_call", [stringErrorTx, "latest"]);
                 expect(stringErrorResult.data).to.equal("Custom error message");
+            });
+        });
+
+        describe("stratus_accessList", () => {
+            function accessListToMap(accessList: [string, string[]][]): Map<string, string[]> {
+                const map = new Map<string, string[]>();
+                for (const [address, slots] of accessList) {
+                    map.set(address.toLowerCase(), slots);
+                }
+                return map;
+            }
+
+            it("returns the contract address and touched storage slots for a call that writes to a mapping", async () => {
+                if (!isStratus) return;
+
+                const contract = await deployTestContractBalances();
+                const contractAddress = (await contract.getAddress()).toLowerCase();
+
+                // add(alice, 5) called by charlie: writes balances[alice] and reads balances[charlie] (msg.sender) via return
+                const data = contract.interface.encodeFunctionData("add", [ALICE.address, 5]);
+                const result = await send("stratus_accessList", [{ from: CHARLIE.address, to: contract.target, data }]);
+
+                expect(result).to.have.property("access_list").that.is.an("array");
+                const map = accessListToMap(result.access_list);
+
+                const slotAlice = calculateSlotPosition(ALICE.address, 0);
+                const slotCharlie = calculateSlotPosition(CHARLIE.address, 0);
+                const contractSlots = map.get(contractAddress);
+                expect(contractSlots).to.include(slotAlice);
+                expect(contractSlots).to.include(slotCharlie);
+
+                // the caller (charlie) is present with no storage slots
+                expect(map.get(CHARLIE.address.toLowerCase())).to.be.an("array").that.is.empty;
+            });
+
+            it("returns accessed slots for a read-only (view) call", async () => {
+                if (!isStratus) return;
+
+                const contract = await deployTestContractBalances();
+                const contractAddress = (await contract.getAddress()).toLowerCase();
+
+                const data = contract.interface.encodeFunctionData("get", [ALICE.address]);
+                const result = await send("stratus_accessList", [{ to: contract.target, data }]);
+                const map = accessListToMap(result.access_list);
+
+                const slotAlice = calculateSlotPosition(ALICE.address, 0);
+                expect(map.get(contractAddress)).to.include(slotAlice);
+            });
+
+            it("returns slot 0x0 for a direct storage variable (not a mapping)", async () => {
+                if (!isStratus) return;
+
+                const contract = await deployTestContractCounter();
+                const contractAddress = (await contract.getAddress()).toLowerCase();
+
+                // inc() writes the `counter` variable, which lives at storage slot 0
+                const data = contract.interface.encodeFunctionData("inc");
+                const result = await send("stratus_accessList", [{ from: CHARLIE.address, to: contract.target, data }]);
+                const map = accessListToMap(result.access_list);
+
+                expect(map.get(contractAddress)).to.include("0x0");
+            });
+
+            it("defaults the caller to the zero address when 'from' is omitted", async () => {
+                if (!isStratus) return;
+
+                const contract = await deployTestContractBalances();
+                const data = contract.interface.encodeFunctionData("get", [ALICE.address]);
+                const result = await send("stratus_accessList", [{ to: contract.target, data }]);
+                const map = accessListToMap(result.access_list);
+
+                expect(map.has("0x0000000000000000000000000000000000000000")).to.be.true;
+            });
+
+            it("includes the coinbase address in the access list", async () => {
+                if (!isStratus) return;
+
+                const contract = await deployTestContractBalances();
+                const data = contract.interface.encodeFunctionData("get", [ALICE.address]);
+                const result = await send("stratus_accessList", [{ to: contract.target, data }]);
+                const map = accessListToMap(result.access_list);
+
+                expect(map.has("0x00000000000000000000000000000000000000ff")).to.be.true;
+            });
+
+            it("returns an access list for a plain value transfer between EOAs (no data)", async () => {
+                if (!isStratus) return;
+
+                const result = await send("stratus_accessList", [
+                    { from: ALICE.address, to: BOB.address, value: "0x1" },
+                ]);
+                const map = accessListToMap(result.access_list);
+
+                // both sender and receiver appear, with no storage slots
+                expect(map.get(ALICE.address.toLowerCase())).to.be.an("array").that.is.empty;
+                expect(map.get(BOB.address.toLowerCase())).to.be.an("array").that.is.empty;
+            });
+
+            it("does not validate 'to' when data is empty, so a call to a contract succeeds", async () => {
+                if (!isStratus) return;
+
+                const contract = await deployTestContractBalances();
+                const result = await send("stratus_accessList", [{ to: contract.target }]);
+
+                expect(result).to.have.property("access_list").that.is.an("array");
+                const map = accessListToMap(result.access_list);
+                expect(map.has((await contract.getAddress()).toLowerCase())).to.be.true;
+            });
+
+            it("rejects a call to an EOA with non-empty data (AccountNotContract)", async () => {
+                if (!isStratus) return;
+
+                const freshEoa = randomAccounts(1)[0].address;
+                const error = await sendAndGetError("stratus_accessList", [
+                    { from: ALICE.address, to: freshEoa, data: "0x1234" },
+                ]);
+                expect(error.code).to.eq(2001);
+            });
+
+            it("returns the access list even when the call reverts, instead of an error", async () => {
+                if (!isStratus) return;
+
+                const contract = await deployTestContractBalances();
+                const contractAddress = (await contract.getAddress()).toLowerCase();
+
+                // sub with insufficient balance reverts, but balances[alice] is read before the revert
+                const data = contract.interface.encodeFunctionData("sub", [ALICE.address, 999999]);
+                const result = await send("stratus_accessList", [{ from: ALICE.address, to: contract.target, data }]);
+
+                expect(result).to.have.property("access_list");
+                const map = accessListToMap(result.access_list);
+                const slotAlice = calculateSlotPosition(ALICE.address, 0);
+                expect(map.get(contractAddress)).to.include(slotAlice);
+            });
+
+            it("returns an error when no parameters are provided", async () => {
+                if (!isStratus) return;
+
+                const error = await sendAndGetError("stratus_accessList", []);
+                expect(error.code).to.eq(1005);
             });
         });
     });

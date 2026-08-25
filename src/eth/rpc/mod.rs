@@ -1,21 +1,30 @@
 //! Ethereum JSON-RPC server.
 
-mod rpc_client_app;
-mod rpc_config;
-mod rpc_context;
-mod rpc_http_middleware;
-mod rpc_middleware;
-mod rpc_parser;
-mod rpc_server;
-mod rpc_subscriptions;
+pub mod blockchain_client;
+mod config;
+mod context;
+pub mod middleware;
+mod parser;
+mod server;
+mod subscriptions;
+pub mod types;
 
-pub use rpc_client_app::RpcClientApp;
-pub use rpc_config::RpcServerConfig;
-pub use rpc_context::RpcContext;
-use rpc_http_middleware::RpcHttpMiddleware;
-use rpc_middleware::RpcMiddleware;
-use rpc_parser::next_rpc_param;
-use rpc_parser::next_rpc_param_or_default;
-use rpc_parser::parse_rpc_rlp;
-pub use rpc_server::Server;
-pub use rpc_subscriptions::RpcSubscriptions;
+pub use blockchain_client::BlockchainClient;
+pub use config::RpcServerConfig;
+pub use context::RpcContext;
+pub use middleware::RpcHttpMiddleware;
+pub use middleware::RpcMiddleware;
+use parser::next_rpc_param;
+use parser::next_rpc_param_or_default;
+use parser::parse_rpc_rlp;
+pub use server::Server;
+pub use subscriptions::RpcSubscriptions;
+pub use types::BlockFilter;
+pub use types::BlockTimestampFilter;
+pub use types::BlockTimestampSeekMode;
+pub use types::LogFilter;
+pub use types::LogFilterInput;
+pub use types::LogFilterInputTopic;
+pub use types::MulticallError;
+pub use types::RpcClientApp;
+pub use types::RpcError;

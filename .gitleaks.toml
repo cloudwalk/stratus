@@ -1,0 +1,9 @@
+title = "stratus"
+[extend]
+useDefault = true
+[allowlist]
+description = "cache key false positives"
+regexes = [
+    '''v1-cargo-[a-z-]+-tests''',
+    '''lint-nightly-[0-9-]+''',
+]

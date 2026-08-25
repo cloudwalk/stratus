@@ -2,8 +2,8 @@ use std::fmt::Debug;
 
 use alloy_primitives::B64;
 
-use crate::eth::primitives::MinerNonce;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::types::MinerNonce;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]

@@ -31,75 +31,51 @@ on:
 
 env:
   CACHE_SHARED_KEY: stable-release
-  CACHE_KEY_CONTEXT: v1-cargo-contracts-tests
+  # Use the `ci` profile (deps stripped of debug symbols; stratus keeps full debug).
+  # See [profile.ci] in Cargo.toml and profile_flag in the justfile.
+  STRATUS_PROFILE: ci
   CACHE_PATH: |
     ~/.cargo/registry/index/
     ~/.cargo/registry/cache/
     ~/.cargo/git/db/
-    ~/.cargo/bin
     target/
-  CACHE_KEY: ${ CACHE_KEY_CONTEXT }
 
 jobs:
-  setup_cache:
-    name: Setup Cache for E2E Rocks tests
-    runs-on: ubuntu-22.04
+  get_contracts_matrix:
+    name: Get Contracts Matrix
+    runs-on: stratus-runner
+    timeout-minutes: 5
+
     outputs:
-      cache-key: ${{ steps.cache-key.outputs.key }}
+      contracts: ${{ steps.contracts.outputs.contracts }}
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout brlc-monorepo repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          repository: cloudwalk/brlc-monorepo
+          token: ${{ secrets.BRLC_MONOREPO_TOKEN }}
 
-      - name: Calculate and set cache key
-        id: cache-key
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+
+      - name: Collect contracts matrix
+        id: contracts
         run: |
-          CACHE_KEY="${ImageOS:-${{ runner.os }}}-${{ env.CACHE_KEY_CONTEXT }}-${{ hashFiles('**/Cargo.lock') }}"
-          echo "CACHE_KEY=$CACHE_KEY" >> $GITHUB_ENV
-          echo "key=$CACHE_KEY" >> $GITHUB_OUTPUT
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.88      
-
-      - name: Rust Cache - Restore workflow cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.CACHE_PATH }}
-          key: ${{ env.CACHE_KEY }}
-          restore-keys: ${{ env.CACHE_SHARED_KEY }}
-
-      - name: Install libsasl2-dev libssl-dev
-        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
-
-      - name: Install cargo tools
-        run: cargo install killport@1.1.0 wait-service@0.3.1 || true
-
-      - name: Set up dependencies
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov@0.6.14
-
-      - name: Build all dependencies to prime the cache
-        shell: bash
-        run: |
-          source <(cargo llvm-cov show-env --export-prefix)
-          cargo build --features dev
-
-      - name: Rust Cache - Save workflow cache
-        uses: actions/cache/save@v4
-        with:
-          key: ${{ env.CACHE_KEY }}
-          path: ${{ env.CACHE_PATH }}
+          contracts=$(corepack pnpm run -s get-e2e-contracts)
+          echo "contracts=$contracts" >> "$GITHUB_OUTPUT"
 
   contract_test_rocks:
     strategy:
       fail-fast: false
       matrix:
-        contract: [token, pix, periphery, yield, multisig, cppv2, capybara-finance, credit-agent]
+        contract: ${{ fromJson(needs.get_contracts_matrix.outputs.contracts) }}
     name: E2E Rocks on ${{ matrix.contract }}
-    needs: setup_cache
-    runs-on: ubuntu-22.04
+    needs:
+      - get_contracts_matrix
+    runs-on: stratus-runner
     timeout-minutes: 45
 
     concurrency:
@@ -108,60 +84,47 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.88
+        run: rustup show
 
-      - name: Rust Restore Cache
-        id: cache-cargo
-        uses: actions/cache/restore@v4
+      - name: Rust Cache - Restore shared key
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          key: ${{ needs.setup_cache.outputs.cache-key }}
-          restore-keys: ${{ env.CACHE_SHARED_KEY }}
           path: ${{ env.CACHE_PATH }}
+          restore-keys: ${{ env.CACHE_SHARED_KEY }}
+          key: ${{ env.CACHE_SHARED_KEY }}
 
       - name: Install cargo tools
         run: cargo install killport@1.1.0 wait-service@0.3.1 || true
-  
-      - name: Set up Just
-        uses: extractions/setup-just@v2
-
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .tool-versions
-
-      - name: Install npm
-        run: npm install -g npm@10.8.2
 
       - name: Set up dependencies
-        uses: taiki-e/install-action@v2
-        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2
         with:
           tool: cargo-llvm-cov@0.6.14
 
-      - name: Clone ${{ matrix.contract }} repository
-        run: just contracts-clone --${{ matrix.contract }}
+      - name: Set up Just
+        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .tool-versions
+
+      - name: Clone BRLC Monorepo repository
+        run: just contracts-clone
+        env:
+          BRLC_MONOREPO_TOKEN: ${{ secrets.BRLC_MONOREPO_TOKEN }}
 
       - name: Run e2e tests
-        run: just run-test contracts-test-stratus --${{ matrix.contract }}
+        run: just run-test contracts-test-stratus ${{ matrix.contract }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: error
           RELEASE: 1
           RUST_BACKTRACE: 1
-
-      - name: Upload coverage report to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          fail_ci_if_error: true
-          files: target/llvm-cov/codecov/contracts-test-stratus.info
-          token: ${{ secrets.CODECOV_TOKEN }}
-          flags: contracts-rocks-${{ matrix.group }}
-          name: contracts-rocks-${{ matrix.group }}
+          MANIFEST_DEFAULT_DIR: /tmp/oz

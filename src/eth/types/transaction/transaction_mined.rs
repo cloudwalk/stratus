@@ -1,0 +1,96 @@
+use derive_more::Deref;
+use display_json::DebugAsJson;
+
+use crate::alias::AlloyLog;
+use crate::alias::AlloyLogData;
+use crate::alias::AlloyLogPrimitive;
+use crate::alias::AlloyReceipt;
+use crate::alias::AlloyTransaction;
+use crate::eth::executor::TransactionExecution;
+use crate::eth::types::Hash;
+use crate::eth::types::Index;
+use crate::eth::types::TransactionInput;
+
+#[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
+pub struct MinedData {
+    pub index: Index,
+    pub first_log_index: Index,
+    pub block_hash: Hash,
+}
+
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, Deref)]
+#[cfg_attr(test, derive(fake::Dummy))]
+pub struct TransactionMined {
+    #[deref]
+    pub execution: TransactionExecution,
+    pub mined_data: MinedData,
+}
+
+impl TransactionMined {
+    pub fn create_alloy_logs(&self) -> Vec<AlloyLog> {
+        self.logs()
+            .iter()
+            .enumerate()
+            .map(|(idx, log)| AlloyLog {
+                inner: AlloyLogPrimitive {
+                    address: log.address.into(),
+                    data: AlloyLogData::new_unchecked(log.topics_non_empty().into_iter().map(Into::into).collect(), log.data.clone().into()),
+                },
+                block_hash: Some(self.mined_data.block_hash.into()),
+                block_number: Some(self.evm_input.block_number.as_u64()),
+                block_timestamp: None,
+                transaction_hash: Some(self.info.hash.into()),
+                transaction_index: Some(*self.mined_data.index),
+                log_index: Some(*self.mined_data.first_log_index + idx as u64),
+                removed: false,
+            })
+            .collect()
+    }
+
+    pub fn from_execution(execution: TransactionExecution, block_hash: Hash, tx_index: Index, first_log_index: Index) -> Self {
+        Self {
+            execution,
+            mined_data: MinedData {
+                index: tx_index,
+                first_log_index,
+                block_hash,
+            },
+        }
+    }
+}
+
+impl From<TransactionMined> for AlloyTransaction {
+    fn from(value: TransactionMined) -> Self {
+        let gas_price = value.execution.evm_input.gas_price;
+        let block_hash = value.mined_data.block_hash;
+        let block_number = value.execution.evm_input.block_number;
+        let block_timestamp = value.execution.evm_input.block_timestamp;
+        let transaction_index = value.mined_data.index;
+
+        let tx_input: TransactionInput = value.into();
+        let inner = AlloyTransaction::from(tx_input).inner;
+
+        Self {
+            inner,
+            block_hash: Some(block_hash.into()),
+            block_number: Some(block_number.as_u64()),
+            block_timestamp: Some(*block_timestamp),
+            transaction_index: Some(transaction_index.into()),
+            effective_gas_price: Some(gas_price),
+        }
+    }
+}
+
+impl From<TransactionMined> for TransactionInput {
+    fn from(value: TransactionMined) -> Self {
+        value.execution.into()
+    }
+}
+
+impl From<TransactionMined> for AlloyReceipt {
+    fn from(value: TransactionMined) -> Self {
+        let alloy_logs = value.create_alloy_logs();
+        value.execution.to_alloy_receipt(alloy_logs, Some(value.mined_data))
+    }
+}

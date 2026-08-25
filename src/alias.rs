@@ -2,7 +2,7 @@
 
 use alloy_primitives::B256;
 
-use crate::eth::primitives::ExternalTransaction;
+use crate::eth::types::ExternalTransaction;
 
 // -----------------------------------------------------------------------------
 // Serde

@@ -1,4 +1,5 @@
 use anyhow::Result;
+use anyhow::anyhow;
 use clap::Parser;
 use clap::ValueEnum;
 use display_json::DebugAsJson;
@@ -84,7 +85,6 @@ impl std::fmt::Display for KafkaSecurityProtocol {
 }
 
 impl KafkaConnector {
-    #[allow(clippy::expect_used)]
     pub fn new(config: &KafkaConfig) -> Result<Self> {
         tracing::info!(
             topic = %config.topic,
@@ -107,23 +107,33 @@ impl KafkaConnector {
                 .set("security.protocol", "SASL_SSL")
                 .set(
                     "sasl.mechanisms",
-                    config.sasl_mechanisms.as_ref().expect("sasl mechanisms is required").as_str(),
+                    config.sasl_mechanisms.as_ref().ok_or(anyhow!("sasl mechanisms is required"))?.as_str(),
                 )
-                .set("sasl.username", config.sasl_username.as_ref().expect("sasl username is required").as_str())
-                .set("sasl.password", config.sasl_password.as_ref().expect("sasl password is required").as_str())
+                .set(
+                    "sasl.username",
+                    config.sasl_username.as_ref().ok_or(anyhow!("sasl username is required"))?.as_str(),
+                )
+                .set(
+                    "sasl.password",
+                    config.sasl_password.as_ref().ok_or(anyhow!("sasl password is required"))?.as_str(),
+                )
                 .create()?,
             KafkaSecurityProtocol::Ssl => client_config
                 .set(
                     "ssl.ca.location",
-                    config.ssl_ca_location.as_ref().expect("ssl ca location is required").as_str(),
+                    config.ssl_ca_location.as_ref().ok_or(anyhow!("ssl ca location is required"))?.as_str(),
                 )
                 .set(
                     "ssl.certificate.location",
-                    config.ssl_certificate_location.as_ref().expect("ssl certificate location is required").as_str(),
+                    config
+                        .ssl_certificate_location
+                        .as_ref()
+                        .ok_or(anyhow!("ssl certificate location is required"))?
+                        .as_str(),
                 )
                 .set(
                     "ssl.key.location",
-                    config.ssl_key_location.as_ref().expect("ssl key location is required").as_str(),
+                    config.ssl_key_location.as_ref().ok_or(anyhow!("ssl key location is required"))?.as_str(),
                 )
                 .create()?,
         };

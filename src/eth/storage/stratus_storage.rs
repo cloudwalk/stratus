@@ -1,42 +1,45 @@
-use parking_lot::RwLockReadGuard;
 use tracing::Span;
 
-use super::InMemoryTemporaryStorage;
-use super::RocksPermanentStorage;
-use super::StorageCache;
+use crate::eth::executor::AccountOriginalsReader;
+use crate::eth::executor::Changes;
+use crate::eth::executor::TransactionExecution;
 #[cfg(feature = "dev")]
 use crate::eth::genesis::GenesisConfig;
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockFilter;
-use crate::eth::primitives::BlockNumber;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::Hash;
-use crate::eth::primitives::LogFilter;
-use crate::eth::primitives::LogMessage;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Nonce;
-use crate::eth::primitives::PendingBlock;
-use crate::eth::primitives::PendingBlockHeader;
-use crate::eth::primitives::PointInTime;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::SlotValue;
-use crate::eth::primitives::StorageError;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionStage;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Wei;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::test_accounts;
-use crate::eth::storage::ReadKind;
+use crate::eth::rpc::BlockFilter;
+use crate::eth::rpc::LogFilter;
+use crate::eth::storage::ExecutionKind;
+use crate::eth::storage::InMemoryTemporaryStorage;
+use crate::eth::storage::RocksPermanentStorage;
+use crate::eth::storage::StorageCache;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::TxCount;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
+use crate::eth::storage::resolve_pending;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
+use crate::eth::types::Block;
+use crate::eth::types::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::types::Bytes;
+use crate::eth::types::ExternalBlock;
+use crate::eth::types::Hash;
+use crate::eth::types::LogMessage;
+#[cfg(feature = "dev")]
+use crate::eth::types::Nonce;
+use crate::eth::types::PendingBlock;
+use crate::eth::types::PendingBlockHeader;
+use crate::eth::types::PointInTime;
+use crate::eth::types::Slot;
+use crate::eth::types::SlotIndex;
+#[cfg(feature = "dev")]
+use crate::eth::types::SlotValue;
+use crate::eth::types::TransactionStage;
+use crate::eth::types::UnixTime;
+#[cfg(feature = "dev")]
+use crate::eth::types::Wei;
+#[cfg(feature = "dev")]
+use crate::eth::types::primitives::test_accounts;
 use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
@@ -56,9 +59,184 @@ pub struct StratusStorage {
     cache: StorageCache,
     pub perm: RocksPermanentStorage,
     // CONTRACT: Always acquire a lock when reading slots or accounts from latest (cache OR perm) and when saving a block
-    transient_state_lock: parking_lot::RwLock<()>,
+    pub(super) transient_state_lock: parking_lot::RwLock<()>,
     #[cfg(feature = "dev")]
     perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
+}
+
+impl AccountOriginalsReader for StratusStorage {
+    fn read_accounts(&self, addresses: Vec<Address>) -> anyhow::Result<Vec<(Address, Account)>> {
+        Ok(self.perm.read_accounts(addresses)?)
+    }
+}
+
+pub use resolve_pending::MinedPointInTime;
+
+/// Where a completed read obtained its value. Drives the post-read caching decision.
+#[derive(Debug)]
+enum FoundAt {
+    /// Hit in a cache (pending or latest). Already cached; nothing to write.
+    Cache,
+    /// Found in temporary (pending or latest) storage.
+    Temp,
+    /// Read from permanent storage at the latest mined point.
+    PermLatest,
+    /// Read from permanent storage at a historical block.
+    PermHistorical,
+}
+
+/// Abstraction over address-keyed ([`Account`]) and slot-keyed ([`Slot`]) reads
+pub(super) trait EntityRead: Sized + Clone {
+    type Key: Copy;
+
+    /// Reads the pending (current block) value from the cache, if present.
+    fn read_pending_cache(s: &StratusStorage, key: Self::Key) -> Option<Self>;
+    /// Reads the latest (mined tip) value from the cache, if present.
+    fn read_latest_cache(s: &StratusStorage, key: Self::Key) -> Option<Self>;
+    /// Reads from temporary (pending) storage.
+    fn read_temp(s: &StratusStorage, key: Self::Key, kind: ExecutionKind) -> Result<Option<Self>, StorageError>;
+    /// Reads from permanent storage at the resolved mined point.
+    fn read_perm(s: &StratusStorage, key: Self::Key, point: MinedPointInTime<'_>) -> Result<Self, StorageError>;
+    /// Caches the value as a pending entry, if not already cached.
+    fn cache_if_missing(s: &StratusStorage, key: Self::Key, value: Self);
+    /// Caches the value as a latest (mined tip) entry, if not already cached.
+    fn cache_latest_if_missing(s: &StratusStorage, key: Self::Key, value: Self);
+}
+
+impl EntityRead for Account {
+    type Key = Address;
+
+    fn read_pending_cache(s: &StratusStorage, address: Address) -> Option<Self> {
+        timed(|| s.cache.get_account(address)).with(|m| {
+            if m.result.is_some() {
+                tracing::debug!(storage = %label::CACHE, %address, "account found in cache");
+                metrics::inc_storage_read_account(m.elapsed, label::CACHE, PointInTime::Pending, true);
+            }
+        })
+    }
+
+    fn read_temp(s: &StratusStorage, address: Address, kind: ExecutionKind) -> Result<Option<Self>, StorageError> {
+        tracing::debug!(storage = %label::TEMP, %address, "reading account");
+        timed(|| s.temp.read_account(address, kind)).with(|m| {
+            if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
+                metrics::inc_storage_read_account(m.elapsed, label::TEMP, PointInTime::Pending, true);
+            }
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read account from temporary storage");
+            }
+        })
+    }
+
+    fn read_latest_cache(s: &StratusStorage, address: Address) -> Option<Self> {
+        timed(|| s.cache.get_account_latest(address)).with(|m| {
+            if m.result.is_some() {
+                tracing::debug!(storage = %label::CACHE, %address, "account found in cache");
+                metrics::inc_storage_read_account(m.elapsed, label::CACHE, PointInTime::Latest, true);
+            }
+        })
+    }
+
+    fn read_perm(s: &StratusStorage, address: Address, point: MinedPointInTime<'_>) -> Result<Self, StorageError> {
+        tracing::debug!(storage = %label::PERM, %address, "reading account");
+        let account = timed(|| s.perm.read_account(address, &point)).with(|m| {
+            m.result
+                .as_ref()
+                .inspect(|opt| {
+                    metrics::inc_storage_read_account(m.elapsed, label::PERM, point, opt.is_some());
+                })
+                .inspect_err(|err| tracing::error!(reason = ?err, "failed to read account from permanent storage"))
+                .ok();
+        })?;
+        Ok(match account {
+            Some(account) => {
+                tracing::debug!(storage = %label::PERM, %address, ?account, "account found in permanent storage");
+                account
+            }
+            None => {
+                tracing::debug!(storage = %label::PERM, %address, "account not found, assuming default value");
+                Account::new_empty(address)
+            }
+        })
+    }
+
+    fn cache_if_missing(s: &StratusStorage, _address: Address, account: Self) {
+        s.cache.cache_account_if_missing(account);
+    }
+
+    fn cache_latest_if_missing(s: &StratusStorage, address: Address, account: Self) {
+        s.cache.cache_account_latest_if_missing(address, account);
+    }
+}
+
+impl EntityRead for Slot {
+    type Key = (Address, SlotIndex);
+
+    fn read_pending_cache(s: &StratusStorage, key: (Address, SlotIndex)) -> Option<Self> {
+        let (address, index) = key;
+        timed(|| s.cache.get_slot(address, index)).with(|m| {
+            if m.result.is_some() {
+                tracing::debug!(storage = %label::CACHE, %address, slot = ?m.result, "slot found in cache");
+                metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Pending, true);
+            }
+        })
+    }
+
+    fn read_temp(s: &StratusStorage, key: (Address, SlotIndex), kind: ExecutionKind) -> Result<Option<Self>, StorageError> {
+        let (address, index) = key;
+        tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
+        timed(|| s.temp.read_slot(address, index, kind)).with(|m| {
+            if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
+                metrics::inc_storage_read_slot(m.elapsed, label::TEMP, PointInTime::Pending, true);
+            }
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read slot from temporary storage");
+            }
+        })
+    }
+
+    fn read_latest_cache(s: &StratusStorage, key: (Address, SlotIndex)) -> Option<Self> {
+        let (address, index) = key;
+        timed(|| s.cache.get_slot_latest(address, index)).with(|m| {
+            if m.result.is_some() {
+                tracing::debug!(storage = %label::CACHE, %address, slot = ?m.result, "slot found in cache");
+                metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Latest, true);
+            }
+        })
+    }
+
+    fn read_perm(s: &StratusStorage, key: (Address, SlotIndex), point: MinedPointInTime<'_>) -> Result<Self, StorageError> {
+        let (address, index) = key;
+        tracing::debug!(storage = %label::PERM, %address, %index, %point, "reading slot");
+        let slot = timed(|| s.perm.read_slot(address, index, &point)).with(|m| {
+            m.result
+                .as_ref()
+                .inspect(|opt| {
+                    metrics::inc_storage_read_slot(m.elapsed, label::PERM, point, opt.is_some());
+                })
+                .inspect_err(|err| tracing::error!(reason = ?err, "failed to read slot from permanent storage"))
+                .ok();
+        })?;
+        Ok(match slot {
+            Some(slot) => {
+                tracing::debug!(storage = %label::PERM, %address, %index, ?slot, "slot found in permanent storage");
+                slot
+            }
+            None => {
+                tracing::debug!(storage = %label::PERM, %address, %index, "slot not found, assuming default value");
+                Slot::new_empty(index)
+            }
+        })
+    }
+
+    fn cache_if_missing(s: &StratusStorage, key: (Address, SlotIndex), slot: Self) {
+        let (address, _) = key;
+        s.cache.cache_slot_if_missing(address, slot);
+    }
+
+    fn cache_latest_if_missing(s: &StratusStorage, key: (Address, SlotIndex), slot: Self) {
+        let (address, _) = key;
+        s.cache.cache_slot_latest_if_missing(address, slot);
+    }
 }
 
 impl StratusStorage {
@@ -102,7 +280,7 @@ impl StratusStorage {
     pub fn new_test() -> Result<Self, StorageError> {
         use tempfile::tempdir;
 
-        use super::cache::CacheConfig;
+        use crate::eth::storage::cache::CacheConfig;
 
         let temp = InMemoryTemporaryStorage::new(0.into());
 
@@ -176,7 +354,11 @@ impl StratusStorage {
     }
 
     pub fn set_pending_from_external(&self, block: &ExternalBlock) {
-        self.temp.set_pending_from_external(block);
+        self.temp.set_pending_header(block.number(), block.timestamp());
+    }
+
+    pub fn set_pending_header(&self, number: BlockNumber, timestamp: UnixTime) {
+        self.temp.set_pending_header(number, timestamp);
     }
 
     pub fn set_mined_block_number(&self, block_number: BlockNumber) {
@@ -198,13 +380,9 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::save_accounts").entered();
 
         // keep only accounts that does not exist in permanent storage
-        let mut missing_accounts = Vec::new();
-        for account in accounts {
-            let perm_account = self.perm.read_account(account.address, PointInTime::Mined)?;
-            if perm_account.is_none() {
-                missing_accounts.push(account);
-            }
-        }
+        let addresses: Vec<Address> = accounts.iter().map(|a| a.address).collect();
+        let existing: std::collections::HashSet<Address> = self.perm.read_accounts(addresses)?.into_iter().map(|(addr, _)| addr).collect();
+        let missing_accounts: Vec<Account> = accounts.into_iter().filter(|a| !existing.contains(&a.address)).collect();
 
         tracing::debug!(storage = %label::PERM, accounts = ?missing_accounts, "saving initial accounts");
         timed(|| self.perm.save_accounts(missing_accounts)).with(|m| {
@@ -215,233 +393,60 @@ impl StratusStorage {
         })
     }
 
-    fn _read_account_pending_cache(&self, address: Address) -> Option<Account> {
-        timed(|| self.cache.get_account(address)).with(|m| {
-            if m.result.is_some() {
-                tracing::debug!(storage = %label::CACHE, %address, "account found in cache");
-                metrics::inc_storage_read_account(m.elapsed, label::CACHE, PointInTime::Pending);
-            }
-        })
-    }
-
-    fn _read_account_latest_cache(&self, address: Address) -> Option<Account> {
-        timed(|| self.cache.get_account_latest(address)).with(|m| {
-            if m.result.is_some() {
-                tracing::debug!(storage = %label::CACHE, %address, "account found in cache");
-                metrics::inc_storage_read_account(m.elapsed, label::CACHE, PointInTime::Mined);
-            }
-        })
-    }
-
-    fn _read_account_temp(&self, address: Address, kind: ReadKind) -> Result<Option<Account>, StorageError> {
-        tracing::debug!(storage = %label::TEMP, %address, "reading account");
-        timed(|| self.temp.read_account(address, kind)).with(|m| {
-            if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
-                metrics::inc_storage_read_account(m.elapsed, label::TEMP, PointInTime::Pending);
-            }
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to read account from temporary storage");
-            }
-        })
-    }
-
-    fn _read_account_perm(&self, address: Address, point_in_time: PointInTime) -> Result<Account, StorageError> {
-        tracing::debug!(storage = %label::PERM, %address, "reading account");
-        let account = timed(|| self.perm.read_account(address, point_in_time)).with(|m| {
-            if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
-                metrics::inc_storage_read_account(m.elapsed, label::PERM, point_in_time);
-            }
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to read account from permanent storage");
-            }
-        })?;
-        Ok(match account {
-            Some(account) => {
-                tracing::debug!(storage = %label::PERM, %address, ?account, "account found in permanent storage");
-                account
-            }
-            None => {
-                tracing::debug!(storage = %label::PERM, %address, "account not found, assuming default value");
-                Account::new_empty(address)
-            }
-        })
-    }
-
-    // For calls, this function returns a guard if latest is safe to read
-    fn _latest_is_valid(&self, point_in_time: PointInTime, kind: ReadKind) -> (bool, Option<RwLockReadGuard<'_, ()>>) {
-        if matches!(point_in_time, PointInTime::MinedPast(_)) {
-            return (false, None);
-        }
-        match kind {
-            ReadKind::Call((block_number, _)) => {
-                let guard = self.transient_state_lock.read();
-                // Check if the provided block number is less than or equal to the mined block number
-                let is_valid = block_number <= self.read_mined_block_number();
-                (is_valid, (is_valid).then_some(guard))
-            }
-            _ => (true, None),
-        }
-    }
-
-    pub fn read_account(&self, address: Address, mut point_in_time: PointInTime, kind: ReadKind) -> Result<Account, StorageError> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::debug_span!("storage::read_account", %address, %point_in_time).entered();
-
-        let (account, found_in_perm) = 'query: {
-            if point_in_time == PointInTime::Pending {
-                if matches!(kind, ReadKind::Transaction)
-                    && let Some(account) = self._read_account_pending_cache(address)
-                {
-                    return Ok(account);
-                }
-
-                if let Some(account) = self._read_account_temp(address, kind)? {
-                    tracing::debug!(storage = %label::TEMP, %address, ?account, "account found in temporary storage");
-                    break 'query (account, false);
+    /// Generic read algorithm shared by [`read_account`] and [`read_slot`].
+    fn read<E: resolve_pending::Resolve>(&self, key: E::Key, kind: ExecutionKind) -> Result<E, StorageError> {
+        let (value, found_at) = 'query: {
+            match E::resolve(self, key, kind)? {
+                resolve_pending::Resolved::PendingCache(value) => break 'query (value, FoundAt::Cache),
+                resolve_pending::Resolved::Temp(value) => break 'query (value, FoundAt::Temp),
+                resolve_pending::Resolved::Miss(mined_point) => {
+                    let found_at = match &mined_point {
+                        MinedPointInTime::Latest(_, _) =>
+                        // Latest: try latest cache while guard is held, then fall through to perm.
+                        {
+                            if let Some(value) = E::read_latest_cache(self, key) {
+                                break 'query (value, FoundAt::Cache);
+                            }
+                            FoundAt::PermLatest
+                        }
+                        MinedPointInTime::Past(_, _) => FoundAt::PermHistorical,
+                    };
+                    break 'query (E::read_perm(self, key, mined_point)?, found_at);
                 }
             }
-
-            let (is_valid, guard) = self._latest_is_valid(point_in_time, kind);
-            if is_valid {
-                if let Some(account) = self._read_account_latest_cache(address) {
-                    return Ok(account);
-                }
-            } else if let ReadKind::Call((block_number, _)) = kind
-                && !matches!(point_in_time, PointInTime::MinedPast(_))
-            {
-                point_in_time = PointInTime::MinedPast(block_number);
-            }
-
-            // always read from perm if necessary
-            let ret = (self._read_account_perm(address, point_in_time)?, true);
-            if let Some(inner) = guard {
-                RwLockReadGuard::unlock_fair(inner);
-            }
-            ret
         };
 
-        match (point_in_time, found_in_perm) {
-            // Pending accounts found in the permanent storage (or not found in any storage) are always mined already
-            (PointInTime::Pending, true) => {
-                self.cache.cache_account_if_missing(account.clone());
-                self.cache.cache_account_latest_if_missing(address, account.clone());
+        // Cache non-historical reads according to the point-in-time and where the value came from.
+        match (kind.point_in_time(), found_at) {
+            // A pending read that hit perm (i.e. not in any cache/temp) is already mined, so cache in both.
+            (PointInTime::Pending, FoundAt::PermLatest) => {
+                E::cache_if_missing(self, key, value.clone());
+                E::cache_latest_if_missing(self, key, value.clone());
             }
-            (PointInTime::Pending, false) => {
-                self.cache.cache_account_if_missing(account.clone());
+            // A pending read that hit temp was not found in the pending cache, so populate it.
+            (PointInTime::Pending, FoundAt::Temp) => {
+                E::cache_if_missing(self, key, value.clone());
             }
-            (PointInTime::Mined, _) => {
-                self.cache.cache_account_latest_if_missing(address, account.clone());
+            // A mined read that hit perm is the latest state, so populate the latest cache.
+            (PointInTime::Latest, FoundAt::PermLatest) => {
+                E::cache_latest_if_missing(self, key, value.clone());
             }
+            // Cache / Historical / (Mined, Temp): nothing to cache.
             _ => {}
         }
-        Ok(account)
+        Ok(value)
     }
 
-    fn _read_slot_pending_cache(&self, address: Address, index: SlotIndex) -> Option<Slot> {
-        timed(|| self.cache.get_slot(address, index)).with(|m| {
-            if m.result.is_some() {
-                tracing::debug!(storage = %label::CACHE, %address, slot = ?m.result, "slot found in cache");
-                metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Pending);
-            }
-        })
-    }
-
-    fn _read_slot_latest_cache(&self, address: Address, index: SlotIndex) -> Option<Slot> {
-        timed(|| self.cache.get_slot_latest(address, index)).with(|m| {
-            if m.result.is_some() {
-                tracing::debug!(storage = %label::CACHE, %address, slot = ?m.result, "slot found in cache");
-                metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Mined);
-            }
-        })
-    }
-
-    fn _read_slot_temp(&self, address: Address, index: SlotIndex, kind: ReadKind) -> Result<Option<Slot>, StorageError> {
-        tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
-        timed(|| self.temp.read_slot(address, index, kind)).with(|m| {
-            if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
-                metrics::inc_storage_read_slot(m.elapsed, label::TEMP, PointInTime::Pending);
-            }
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to read slot from temporary storage");
-            }
-        })
-    }
-
-    fn _read_slot_perm(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> Result<Slot, StorageError> {
-        tracing::debug!(storage = %label::PERM, %address, %index, %point_in_time, "reading slot");
-        let slot = timed(|| self.perm.read_slot(address, index, point_in_time)).with(|m| {
-            if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
-                metrics::inc_storage_read_slot(m.elapsed, label::PERM, point_in_time);
-            }
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to read slot from permanent storage");
-            }
-        })?;
-        Ok(match slot {
-            Some(slot) => {
-                tracing::debug!(storage = %label::PERM, %address, %index, ?slot, "slot found in permanent storage");
-                slot
-            }
-            None => {
-                tracing::debug!(storage = %label::PERM, %address, %index, "slot not found, assuming default value");
-                Slot::new_empty(index)
-            }
-        })
-    }
-
-    pub fn read_slot(&self, address: Address, index: SlotIndex, mut point_in_time: PointInTime, kind: ReadKind) -> Result<Slot, StorageError> {
+    pub fn read_account(&self, address: Address, kind: ExecutionKind) -> Result<Account, StorageError> {
         #[cfg(feature = "tracing")]
-        let _span = tracing::debug_span!("storage::read_slot", %address, %index, %point_in_time).entered();
+        let _span = tracing::debug_span!("storage::read_account", %address).entered();
+        self.read::<Account>(address, kind)
+    }
 
-        let (slot, found_in_perm) = 'query: {
-            if point_in_time == PointInTime::Pending {
-                // tx can read from pending cache
-                if matches!(kind, ReadKind::Transaction)
-                    && let Some(slot) = self._read_slot_pending_cache(address, index)
-                {
-                    return Ok(slot);
-                }
-
-                if let Some(slot) = self._read_slot_temp(address, index, kind)? {
-                    tracing::debug!(storage = %label::TEMP, %address, %index, value = %slot.value, "slot found in temporary storage");
-                    break 'query (slot, false);
-                }
-            }
-
-            let (is_valid, guard) = self._latest_is_valid(point_in_time, kind);
-            if is_valid {
-                if let Some(slot) = self._read_slot_latest_cache(address, index) {
-                    return Ok(slot);
-                }
-            } else if let ReadKind::Call((block_number, _)) = kind
-                && !matches!(point_in_time, PointInTime::MinedPast(_))
-            {
-                point_in_time = PointInTime::MinedPast(block_number);
-            }
-
-            // always read from perm if necessary
-            let ret = (self._read_slot_perm(address, index, point_in_time)?, true);
-            if let Some(inner) = guard {
-                RwLockReadGuard::unlock_fair(inner);
-            }
-            ret
-        };
-
-        match (point_in_time, found_in_perm) {
-            // Pending slots found in the permanent storage (or not found in any storage) are always mined already
-            (PointInTime::Pending, true) => {
-                self.cache.cache_slot_if_missing(address, slot);
-                self.cache.cache_slot_latest_if_missing(address, slot);
-            }
-            (PointInTime::Pending, false) => {
-                self.cache.cache_slot_if_missing(address, slot);
-            }
-            (PointInTime::Mined, _) => {
-                self.cache.cache_slot_latest_if_missing(address, slot);
-            }
-            _ => {}
-        }
-        Ok(slot)
+    pub fn read_slot(&self, address: Address, index: SlotIndex, kind: ExecutionKind) -> Result<Slot, StorageError> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::debug_span!("storage::read_slot", %address, %index).entered();
+        self.read::<Slot>((address, index), kind)
     }
 
     // -------------------------------------------------------------------------
@@ -449,14 +454,14 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     pub fn save_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
-        let changes = tx.result.execution.changes.clone();
+        let changes = tx.result.changes.clone();
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.info.hash).entered();
-        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.info.hash, changes = ?tx.result.execution.changes, "saving execution");
+        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.info.hash, changes = ?tx.result.changes, "saving execution");
 
         // Log warning if a failed transaction has slot changes
-        if !tx.result.execution.result.is_success() {
+        if !tx.result.result.is_success() {
             let total_slot_changes: usize = changes.slots.len();
 
             if total_slot_changes > 0 {
@@ -483,7 +488,7 @@ impl StratusStorage {
         self.temp.read_pending_executions()
     }
 
-    pub fn finish_pending_block(&self) -> Result<(PendingBlock, ExecutionChanges), StorageError> {
+    pub fn finish_pending_block(&self) -> Result<(PendingBlock, Changes), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::finish_pending_block", block_number = tracing::field::Empty).entered();
         tracing::debug!(storage = %label::TEMP, "finishing pending block");
@@ -502,22 +507,23 @@ impl StratusStorage {
         result
     }
 
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, changes: ExecutionChanges) -> Result<(), StorageError> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, changes: Changes) -> Result<(), StorageError> {
         let block_number = block.number();
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_genesis_block", block_number = %block_number).entered();
         tracing::debug!(storage = %label::PERM, "saving genesis block");
+        let tens_of_millions_gas_used = block.header.gas_used.as_u64() / 10_000_000;
 
         timed(|| self.perm.save_genesis_block(block, accounts, changes)).with(|m| {
-            metrics::inc_storage_save_block(m.elapsed, label::PERM, "genesis", "genesis", m.result.is_ok());
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, tens_of_millions_gas_used, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to save genesis block");
             }
         })
     }
 
-    pub fn save_block(&self, block: Block, changes: ExecutionChanges) -> Result<(), StorageError> {
+    pub fn save_block(&self, block: Block, changes: Changes) -> Result<(), StorageError> {
         let block_number = block.number();
 
         #[cfg(feature = "tracing")]
@@ -551,8 +557,7 @@ impl StratusStorage {
             return Err(StorageError::BlockConflict { number: block_number });
         }
 
-        // save block
-        let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
+        let tens_of_millions_gas_used = block.header.gas_used.as_u64() / 10_000_000;
 
         timed(|| {
             let guard = self.transient_state_lock.write();
@@ -562,7 +567,7 @@ impl StratusStorage {
             Ok(())
         })
         .with(|m| {
-            metrics::inc_storage_save_block(m.elapsed, label::PERM, label_size_by_tx, label_size_by_gas, m.result.is_ok());
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, tens_of_millions_gas_used, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, %block_number, "failed to save block");
             }
@@ -586,7 +591,7 @@ impl StratusStorage {
         })
     }
 
-    pub fn read_block_with_changes(&self, filter: BlockFilter) -> Result<Option<(Block, BlockChangesRocksdb)>, StorageError> {
+    pub fn read_block_with_changes(&self, filter: BlockFilter) -> Result<Option<(BlockRocksdb, BlockChangesRocksdb)>, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block_with_changes", %filter).entered();
         tracing::debug!(storage = %label::PERM, ?filter, "reading block with changes");
@@ -803,7 +808,7 @@ impl StratusStorage {
             }
         };
         // Save the genesis block
-        self.save_block(genesis_block, ExecutionChanges::default())?;
+        self.save_block(genesis_block, Changes::default())?;
 
         // accounts
         self.save_accounts(genesis_accounts)?;
@@ -830,13 +835,101 @@ impl StratusStorage {
     pub fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StorageError> {
         match block_filter {
             BlockFilter::Pending => Ok(PointInTime::Pending),
-            BlockFilter::Latest => Ok(PointInTime::Mined),
-            BlockFilter::Earliest => Ok(PointInTime::MinedPast(BlockNumber::ZERO)),
-            BlockFilter::Number(number) => Ok(PointInTime::MinedPast(number)),
-            BlockFilter::Hash(_) => match self.read_block(block_filter)? {
-                Some(block) => Ok(PointInTime::MinedPast(block.header.number)),
+            BlockFilter::Latest => Ok(PointInTime::Latest),
+            BlockFilter::Earliest => Ok(PointInTime::Past(BlockNumber::ZERO)),
+            BlockFilter::Number(number) => Ok(PointInTime::Past(number)),
+            BlockFilter::Hash(_) | BlockFilter::Timestamp(_) => match self.read_block(block_filter)? {
+                Some(block) => Ok(PointInTime::Past(block.header.number)),
                 None => Err(StorageError::BlockNotFound { filter: block_filter }),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::eth::executor::AccountChanges;
+    use crate::eth::executor::ExecutionResult;
+    use crate::eth::executor::TransactionExecutionInput;
+    use crate::eth::executor::TransactionExecutionOutput;
+    use crate::eth::types::Signature;
+    use crate::eth::types::SlotValue;
+    use crate::eth::types::TransactionInfo;
+    use crate::eth::types::TransactionInput;
+    use crate::eth::types::Wei;
+
+    /// Mines a block applying `changes`
+    fn mine_block(storage: &StratusStorage, changes: Changes) -> BlockNumber {
+        let (header, _) = storage.read_pending_block_header();
+        let evm_input = TransactionExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
+
+        let result = TransactionExecutionOutput {
+            result: ExecutionResult::Success,
+            changes,
+            ..Default::default()
+        };
+
+        let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
+        storage.save_execution(tx).expect("save execution");
+
+        let (block, block_changes) = storage.finish_pending_block().expect("finish pending block");
+        storage.save_block(block.into(), block_changes).expect("save block");
+
+        storage.read_mined_block_number()
+    }
+
+    /// An `eth_call` pinned to a block that is no longer the latest must read the historical
+    /// state at its captured block, not the current latest state.
+    #[test]
+    fn read_slot_for_call_pinned_to_older_block_must_not_read_latest_state() {
+        let storage = StratusStorage::new_test().expect("failed to build test storage");
+
+        let address = Address::new([0xAA; 20]);
+        let index = SlotIndex::ZERO;
+
+        // Mine a block setting slot S = 100. The eth_call captures this block.
+        let mut changes1 = Changes::default();
+        changes1.slots.insert((address, index), SlotValue::from([100u64, 0, 0, 0]));
+        let call_block = mine_block(&storage, changes1);
+
+        // A new block is mined while the call is in flight, changing the slot to 200.
+        let mut changes2 = Changes::default();
+        changes2.slots.insert((address, index), SlotValue::from([200u64, 0, 0, 0]));
+        let latest = mine_block(&storage, changes2);
+        assert_ne!(call_block, latest);
+
+        // The in-flight call (pinned to the first block) reads the slot.
+        let slot = storage.read_slot(address, index, ExecutionKind::CallLatest(call_block)).expect("read slot");
+
+        // Must reflect the first block (100), not the freshly mined latest (200).
+        assert_eq!(slot.value, SlotValue::from([100u64, 0, 0, 0]));
+    }
+
+    #[test]
+    fn read_account_for_call_pinned_to_older_block_must_not_read_latest_state() {
+        let storage = StratusStorage::new_test().expect("failed to build test storage");
+
+        let address = Address::new([0xBB; 20]);
+
+        // Mine a block setting the account balance to 100. The eth_call captures this block.
+        let mut changes1 = Changes::default();
+        changes1
+            .accounts
+            .insert(address, AccountChanges::from_changed(Account::new_with_balance(address, Wei::from(100u64))));
+        let call_block = mine_block(&storage, changes1);
+
+        // A new block is mined while the call is in flight, changing the balance to 200.
+        let mut changes2 = Changes::default();
+        changes2
+            .accounts
+            .insert(address, AccountChanges::from_changed(Account::new_with_balance(address, Wei::from(200u64))));
+        let latest = mine_block(&storage, changes2);
+        assert_ne!(call_block, latest);
+
+        let account = storage.read_account(address, ExecutionKind::CallLatest(call_block)).expect("read account");
+
+        // Must reflect the first block (100), not the freshly mined latest (200).
+        assert_eq!(account.balance, Wei::from(100u64));
     }
 }

@@ -8,28 +8,29 @@ use anyhow::bail;
 
 use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_state::RocksStorageState;
+use super::types::BlockRocksdb;
 use crate::GlobalState;
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockFilter;
-use crate::eth::primitives::BlockNumber;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::Hash;
-use crate::eth::primitives::LogFilter;
-use crate::eth::primitives::LogMessage;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Nonce;
-use crate::eth::primitives::PointInTime;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StorageError;
-use crate::eth::primitives::TransactionMined;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Wei;
+use crate::eth::executor::Changes;
+use crate::eth::rpc::BlockFilter;
+use crate::eth::rpc::LogFilter;
+use crate::eth::storage::MinedPointInTime;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
+use crate::eth::types::Block;
+use crate::eth::types::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::types::Bytes;
+use crate::eth::types::Hash;
+use crate::eth::types::LogMessage;
+#[cfg(feature = "dev")]
+use crate::eth::types::Nonce;
+use crate::eth::types::Slot;
+use crate::eth::types::SlotIndex;
+use crate::eth::types::TransactionMined;
+#[cfg(feature = "dev")]
+use crate::eth::types::Wei;
 use crate::ext::SleepReason;
 use crate::ext::spawn;
 use crate::ext::traced_sleep;
@@ -153,9 +154,9 @@ impl RocksPermanentStorage {
     // State operations
     // -------------------------------------------------------------------------
 
-    pub fn read_account(&self, address: Address, point_in_time: PointInTime) -> anyhow::Result<Option<Account>, StorageError> {
+    pub fn read_account(&self, address: Address, point: &MinedPointInTime<'_>) -> anyhow::Result<Option<Account>, StorageError> {
         self.state
-            .read_account(address, point_in_time)
+            .read_account(address, point)
             .map_err(|err| StorageError::RocksError { err })
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to read account in RocksPermanent");
@@ -166,9 +167,9 @@ impl RocksPermanentStorage {
         self.state.read_accounts(addresses).map_err(|err| StorageError::RocksError { err })
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>, StorageError> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, point: &MinedPointInTime<'_>) -> anyhow::Result<Option<Slot>, StorageError> {
         self.state
-            .read_slot(address, index, point_in_time)
+            .read_slot(address, index, point)
             .map_err(|err| StorageError::RocksError { err })
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to read slot in RocksPermanent");
@@ -185,7 +186,7 @@ impl RocksPermanentStorage {
         block.map_err(|err| StorageError::RocksError { err })
     }
 
-    pub fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<(Block, BlockChangesRocksdb)>, StorageError> {
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<(BlockRocksdb, BlockChangesRocksdb)>, StorageError> {
         let result = self.state.read_block_with_changes(selection).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read block with changes in RocksPermanent");
         });
@@ -210,7 +211,7 @@ impl RocksPermanentStorage {
         })
     }
 
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: Changes) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
             self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
@@ -226,7 +227,7 @@ impl RocksPermanentStorage {
             })
     }
 
-    pub fn save_block(&self, block: Block, account_changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
+    pub fn save_block(&self, block: Block, account_changes: Changes) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
             self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
