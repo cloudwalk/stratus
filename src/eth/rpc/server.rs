@@ -1358,7 +1358,7 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
             }
         },
         NodeMode::Follower => match &ctx.server.read_importer() {
-            Some(importer) => match Handle::current().block_on(importer.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
+            Some(importer) => match Handle::current().block_on(importer.forward_to_leader(tx_hash, tx_data)) {
                 Ok(hash) => Ok(hex_data(hash)),
                 Err(e) => Err(e),
             },

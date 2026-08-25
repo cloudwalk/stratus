@@ -42,6 +42,7 @@ thiserror = "=2.0.18"
 uuid = { version = "=1.23.3", features = ["v7"]}
 stratus_macros = { path = "./crates/stratus_macros" }
 libc = "=0.2.186"
+hostname = "=0.4.2"
 
 # async
 tokio = { version = "=1.50.0", features = [
