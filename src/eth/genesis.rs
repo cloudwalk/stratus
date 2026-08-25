@@ -10,24 +10,23 @@ use alloy_primitives::U256;
 use alloy_primitives::hex;
 use anyhow::Result;
 use const_hex::FromHex;
-use serde::Deserialize;
 use serde::Serialize;
 
 use crate::alias::RevmBytecode;
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::Nonce;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotValue;
-use crate::eth::primitives::Wei;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
+use crate::eth::types::Nonce;
+use crate::eth::types::Slot;
+use crate::eth::types::SlotIndex;
+use crate::eth::types::SlotValue;
+use crate::eth::types::Wei;
 
 /// Type alias for a collection of storage slots in the format (address, slot)
 pub type GenesisSlots = Vec<(Address, Slot)>;
 
 /// Represents the configuration of an Ethereum genesis.json file
 #[allow(non_snake_case)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct GenesisConfig {
     pub config: ChainConfig,
     pub nonce: String,
@@ -50,7 +49,7 @@ pub struct GenesisConfig {
 
 /// Chain configuration in genesis.json
 #[allow(non_snake_case)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct ChainConfig {
     pub chainId: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -82,7 +81,7 @@ pub struct ChainConfig {
 }
 
 /// Account in the genesis.json file
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct GenesisAccount {
     pub balance: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -180,18 +179,18 @@ impl GenesisConfig {
     }
 
     /// Creates a genesis block from the genesis configuration.
-    pub fn to_genesis_block(&self) -> Result<crate::eth::primitives::Block> {
+    pub fn to_genesis_block(&self) -> Result<crate::eth::types::Block> {
         use std::str::FromStr;
 
         use alloy_primitives::hex;
 
-        use crate::eth::primitives::Block;
-        use crate::eth::primitives::BlockHeader;
-        use crate::eth::primitives::BlockNumber;
-        use crate::eth::primitives::Bytes;
-        use crate::eth::primitives::Gas;
-        use crate::eth::primitives::Hash;
-        use crate::eth::primitives::UnixTime;
+        use crate::eth::types::Block;
+        use crate::eth::types::BlockHeader;
+        use crate::eth::types::BlockNumber;
+        use crate::eth::types::Bytes;
+        use crate::eth::types::Gas;
+        use crate::eth::types::Hash;
+        use crate::eth::types::UnixTime;
         // Parse timestamp
         let timestamp_str = self.timestamp.trim_start_matches("0x");
         let timestamp = if self.timestamp.starts_with("0x") {
@@ -238,9 +237,9 @@ impl GenesisConfig {
         // Parse extra data
         let extra_data_str = self.extraData.trim_start_matches("0x");
         let extra_data = if let Ok(bytes) = hex::decode(extra_data_str) {
-            Bytes(bytes)
+            Bytes::from(bytes)
         } else {
-            Bytes(vec![])
+            Bytes::default()
         };
 
         // Parse parent hash (if present)
@@ -311,7 +310,7 @@ impl Default for GenesisConfig {
         let mut alloc = BTreeMap::new();
 
         // Add test accounts
-        let test_accounts = crate::eth::primitives::test_accounts();
+        let test_accounts = crate::eth::types::primitives::test_accounts();
         for account in test_accounts {
             let address_str = format!("0x{}", hex::encode(account.address.as_slice()));
             let balance_hex = format!("0x{:x}", account.balance.0);
@@ -470,7 +469,7 @@ mod tests {
         #[cfg(feature = "dev")]
         {
             // In dev mode, we should have test accounts
-            let test_accounts = crate::eth::primitives::test_accounts();
+            let test_accounts = crate::eth::types::primitives::test_accounts();
             let stratus_accounts = default_genesis.to_stratus_accounts().unwrap();
 
             // Verify the number of accounts matches

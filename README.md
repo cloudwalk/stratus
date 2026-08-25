@@ -1,12 +1,10 @@
-[![codecov](https://codecov.io/github/cloudwalk/stratus/graph/badge.svg?token=D1795GHLG6)](https://codecov.io/github/cloudwalk/stratus)
-
 # Stratus ☁️
 
 Welcome to Stratus, the cutting-edge EVM-compatible ledger and JSON-RPC server. This projects has 3 focuses of optimization:
 
 1. Reliability: We have nodes running for months without any sort of restart or maintenance, and we give you the tools needed to do maintenance on the leader node with less than 5 seconds of downtime.
 2. Observability: We have a lot of metric, logs, tracing implemented so that you can effectively monitor every aspect of the application.
-3. Performance: By not aiming to be a blockchain (i.e. no decentralization) and by optimizing for scenarios with a limited number of contracts, we've been able to get single-token performances unheardof in any other evm-compatible ledger*. Currently we can achieve around 500M gas per second**. 
+3. Performance: By not aiming to be a blockchain (i.e. no decentralization) and by optimizing for scenarios with a limited number of contracts, we've been able to get single-token performances unheardof in any other evm-compatible ledger*. Currently we can achieve around 500M gas per second**.
 
 You'd be hard pressed to find a private evm-compatible ledger solution that achieves those 3 factors as well as we do.
 

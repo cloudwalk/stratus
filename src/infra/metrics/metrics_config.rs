@@ -1,11 +1,9 @@
 use std::net::SocketAddr;
-use std::stringify;
 
 use clap::Parser;
 use display_json::DebugAsJson;
 
 use crate::infra::metrics::metrics_for_consensus;
-use crate::infra::metrics::metrics_for_evm;
 use crate::infra::metrics::metrics_for_executor;
 use crate::infra::metrics::metrics_for_importer_online;
 use crate::infra::metrics::metrics_for_json_rpc;
@@ -31,7 +29,6 @@ impl MetricsConfig {
         metrics.extend(metrics_for_importer_online());
         metrics.extend(metrics_for_json_rpc());
         metrics.extend(metrics_for_executor());
-        metrics.extend(metrics_for_evm());
         metrics.extend(metrics_for_storage_read());
         metrics.extend(metrics_for_storage_write());
         metrics.extend(metrics_for_rocks());

@@ -15,13 +15,10 @@ use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 
 use crate::eth::executor::ExecutorConfig;
-use crate::eth::external_rpc::ExternalRpcConfig;
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::MinerConfig;
-use crate::eth::primitives::Address;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::StorageConfig;
-use crate::ext::parse_duration;
 use crate::infra::build_info;
 use crate::infra::kafka::KafkaConfig;
 use crate::infra::metrics::MetricsConfig;
@@ -117,6 +114,11 @@ pub struct CommonConfig {
     /// Enables or disables unknown client interactions.
     #[arg(long = "unknown-client-enabled", env = "UNKNOWN_CLIENT_ENABLED", default_value = "true")]
     pub unknown_client_enabled: bool,
+
+    /// Comma-separated list of client names that are blocked from interacting with the application.
+    /// Client names are matched the same way as the `app`/`client` identification headers/params.
+    #[arg(long = "blocked-clients", env = "BLOCKED_CLIENTS", value_delimiter = ',')]
+    pub blocked_clients: Vec<String>,
 }
 
 impl WithCommonConfig for CommonConfig {
@@ -220,113 +222,6 @@ pub struct StratusConfig {
 }
 
 impl WithCommonConfig for StratusConfig {
-    fn common(&self) -> &CommonConfig {
-        &self.common
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Config: RpcDownloader
-// -----------------------------------------------------------------------------
-
-/// Configuration for `rpc-downlaoder` binary.
-#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
-pub struct RpcDownloaderConfig {
-    /// Final block number to be downloaded.
-    #[arg(long = "block-end", env = "BLOCK_END")]
-    pub block_end: Option<u64>,
-
-    #[clap(flatten)]
-    pub rpc_storage: ExternalRpcConfig,
-
-    /// External RPC endpoint to sync blocks with Stratus.
-    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
-    pub external_rpc: String,
-
-    /// Timeout for blockchain requests
-    #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s")]
-    pub external_rpc_timeout: Duration,
-
-    /// Maximum response size in bytes for external RPC requests
-    #[arg(
-        long = "external-rpc-max-response-size-bytes",
-        env = "EXTERNAL_RPC_MAX_RESPONSE_SIZE_BYTES",
-        default_value = "10485760"
-    )]
-    pub external_rpc_max_response_size_bytes: u32,
-
-    /// Number of parallel downloads.
-    #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
-    pub paralellism: usize,
-
-    /// Accounts to retrieve initial balance information.
-    ///
-    /// For Cloudwalk networks, provide these addresses:
-    /// - Mainnet: 0xF56A88A4afF45cdb5ED7Fe63a8b71aEAaFF24FA6
-    /// - Testnet: 0xE45b176cAd7090A5CF70B69a73b6DEF9296ba6A2
-    #[arg(long = "initial-accounts", env = "INITIAL_ACCOUNTS", value_delimiter = ',')]
-    pub initial_accounts: Vec<Address>,
-
-    #[deref]
-    #[clap(flatten)]
-    pub common: CommonConfig,
-}
-
-impl WithCommonConfig for RpcDownloaderConfig {
-    fn common(&self) -> &CommonConfig {
-        &self.common
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Config: ImporterOffline
-// -----------------------------------------------------------------------------
-
-/// Configuration for `importer-offline` binary.
-#[derive(Parser, DebugAsJson, derive_more::Deref, serde::Serialize)]
-pub struct ImporterOfflineConfig {
-    /// Initial block number to be imported.
-    #[arg(long = "block-start", env = "BLOCK_START")]
-    pub block_start: Option<u64>,
-
-    /// Final block number to be imported.
-    #[arg(long = "block-end", env = "BLOCK_END")]
-    pub block_end: Option<u64>,
-
-    /// Number of parallel database fetches.
-    #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
-    pub paralellism: usize,
-
-    /// Number of blocks by database fetch.
-    #[arg(short = 'b', long = "blocks-by-fetch", env = "BLOCKS_BY_FETCH", default_value = "10000")]
-    pub blocks_by_fetch: usize,
-
-    /// Number of blocks to be accumulated before sending to the block saver. (cache needs to be sufficiently big)
-    #[arg(long = "block-saver-batch-size", env = "BLOCK_SAVER_BATCH_SIZE", default_value = "100")]
-    pub block_saver_batch_size: usize,
-
-    /// Number of blocks batches that can be queued to the saver before blocking. (cache needs to be sufficiently big)
-    #[arg(long = "block-saver-queue-size", env = "BLOCK_SAVER_QUEUE_SIZE", default_value = "10")]
-    pub block_saver_queue_size: usize,
-
-    #[clap(flatten)]
-    pub executor: ExecutorConfig,
-
-    #[clap(flatten)]
-    pub miner: MinerConfig,
-
-    #[clap(flatten)]
-    pub storage: StorageConfig,
-
-    #[clap(flatten)]
-    pub rpc_storage: ExternalRpcConfig,
-
-    #[deref]
-    #[clap(flatten)]
-    pub common: CommonConfig,
-}
-
-impl WithCommonConfig for ImporterOfflineConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }

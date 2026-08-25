@@ -30,6 +30,9 @@ on:
 
 env:
   CACHE_SHARED_KEY: stable-release
+  # Use the `ci` profile (deps stripped of debug symbols; stratus keeps full debug).
+  # See [profile.ci] in Cargo.toml and profile_flag in the justfile.
+  STRATUS_PROFILE: ci
   CACHE_PATH: |
     ~/.cargo/registry/index/
     ~/.cargo/registry/cache/
@@ -39,7 +42,7 @@ env:
 jobs:
   unit_tests:
     name: Rust Tests
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 25
 
     concurrency:
@@ -48,7 +51,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Free disk space
         run: |
@@ -58,12 +61,10 @@ jobs:
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.88
+        run: rustup show
 
       - name: Rust Cache - Restore shared key
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ env.CACHE_PATH }}
           restore-keys: ${{ env.CACHE_SHARED_KEY }}
@@ -73,20 +74,12 @@ jobs:
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
       - name: Set up Just
-        uses: extractions/setup-just@v2
+        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
 
-      - uses: taiki-e/install-action@v2
+      - name: Set up dependencies
+        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2
         with:
           tool: cargo-llvm-cov@0.6.14
 
       - name: Rust tests
         run: just test
-
-      - name: Upload coverage report to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          fail_ci_if_error: true
-          files: target/llvm-cov/codecov/rust_tests.info
-          token: ${{ secrets.CODECOV_TOKEN }}
-          flags: rust-tests
-          name: rust-tests
