@@ -1,8 +1,8 @@
 //! In-memory storage implementations.
 
-use crate::eth::executor::Complete;
 use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
+use crate::eth::executor::types::state::Complete;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::TxCount;

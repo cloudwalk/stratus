@@ -1,7 +1,7 @@
 mod config;
 mod evm;
 mod evm_worker_pool;
-mod types;
+pub mod types;
 
 use std::mem;
 use std::sync::Arc;
@@ -23,17 +23,9 @@ use tracing::Span;
 use tracing::debug_span;
 #[cfg(feature = "tracing")]
 use tracing::info_span;
-pub use types::AccountChanges;
-pub use types::AccountOriginalsReader;
-pub use types::Complete;
-pub use types::CompleteValue;
 pub use types::ExecutionResult;
 pub use types::ExecutorError;
-pub use types::Final;
-pub use types::Incomplete;
-pub use types::IncompleteValue;
 pub use types::RevertReason;
-pub use types::Stage;
 pub use types::State;
 pub use types::TransactionExecution;
 
@@ -256,7 +248,10 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Validates that the target account is a contract, reading it from storage at the given point in time.
-    pub fn validate_to_is_contract(&self, to_address: Address, kind: ExecutionKind) -> Result<(), StratusError> {
+    pub fn validate_to_is_contract(&self, to_address: Address, mut kind: ExecutionKind) -> Result<(), StratusError> {
+        if matches!(kind, ExecutionKind::Transaction) {
+            kind = ExecutionKind::CallLatest(self.storage.read_mined_block_number());
+        }
         let account = self.storage.read_account(to_address, kind)?;
         if account.bytecode.is_none() {
             if self.reject_not_contract {

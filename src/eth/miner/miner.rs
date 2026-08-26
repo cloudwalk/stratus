@@ -13,9 +13,9 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::Span;
 
-use crate::eth::executor::Complete;
 use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
+use crate::eth::executor::types::state::Complete;
 use crate::eth::miner::MinerMode;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
@@ -383,8 +383,8 @@ pub mod interval_miner {
     use tokio::time::Instant;
     use tokio_util::sync::CancellationToken;
 
-    use crate::eth::executor::Complete;
     use crate::eth::executor::State;
+    use crate::eth::executor::types::state::Complete;
     use crate::eth::miner::Miner;
     use crate::eth::miner::miner::CommitItem;
     use crate::eth::types::Block;

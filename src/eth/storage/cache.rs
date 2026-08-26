@@ -10,8 +10,8 @@ use quick_cache::sync::DefaultLifecycle;
 use quick_cache::sync::GuardResult;
 use rustc_hash::FxBuildHasher;
 
-use crate::eth::executor::Complete;
 use crate::eth::executor::State;
+use crate::eth::executor::types::state::Complete;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::Slot;
