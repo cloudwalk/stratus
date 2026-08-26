@@ -5,11 +5,11 @@ use itertools::Itertools;
 use revm::context::result::ExecutionResult as RevmExecutionResult;
 use revm_state::EvmState;
 
-use crate::eth::executor::AccountChanges;
 use crate::eth::executor::ExecutionResult;
 use crate::eth::executor::State;
 use crate::eth::executor::evm::RevmResultAndState;
-use crate::eth::executor::types::Complete;
+use crate::eth::executor::types::state::AccountChanges;
+use crate::eth::executor::types::state::Complete;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::Bytes;
@@ -274,9 +274,6 @@ impl TransactionExecutionOutput {
 
         for (revm_address, mut revm_account) in revm_state {
             let address: Address = revm_address.into();
-            if address.is_ignored() {
-                continue;
-            }
 
             // apply changes according to account status
             tracing::debug!(
@@ -618,7 +615,7 @@ mod tests {
         sender_changes.apply_original(sender);
         let mut accounts = HashMap::with_hasher(foldhash::fast::RandomState::default());
         accounts.insert(sender_address, sender_changes);
-        let changes = State::<crate::eth::executor::types::Complete> {
+        let changes = State::<crate::eth::executor::types::state::Complete> {
             accounts,
             ..Default::default()
         };
