@@ -580,6 +580,7 @@ impl RocksStorageState {
     #[cfg(feature = "dev")]
     pub fn save_account_code(&self, address: Address, code: Bytes) -> Result<()> {
         use crate::alias::RevmBytecode;
+        use crate::ext::OptionExt;
 
         let mut batch = WriteBatch::default();
 
