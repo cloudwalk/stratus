@@ -91,7 +91,7 @@ impl ImporterPagination {
         Ok(BlockAndReceiptsPageResponse {
             block: block.to_json_rpc_with_full_transactions(),
             receipts,
-            pagination: paginator.finish(),
+            pagination: Some(paginator.finish()),
         })
     }
 
@@ -117,7 +117,7 @@ impl ImporterPagination {
                 transactions: transactions[tx_range].to_vec(),
             },
             changes: page_changes,
-            pagination: paginator.finish(),
+            pagination: Some(paginator.finish()),
         })
     }
 
@@ -149,15 +149,50 @@ impl ImporterPagination {
 pub struct BlockAndReceiptsPageResponse {
     pub block: JsonValue,
     pub receipts: Vec<ExternalReceipt>,
-    pub pagination: CursorPageInfo,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pagination: Option<CursorPageInfo>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BlockWithChangesPageResponse {
     pub block: BlockRocksdb,
     pub changes: BlockChangesRocksdb,
-    pub pagination: CursorPageInfo,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pagination: Option<CursorPageInfo>,
+}
+
+impl<'de> serde::Deserialize<'de> for BlockWithChangesPageResponse {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ObjectForm {
+            block: BlockRocksdb,
+            changes: BlockChangesRocksdb,
+            #[serde(default)]
+            pagination: Option<CursorPageInfo>,
+        }
+
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum Both {
+            Object(ObjectForm),
+            Array(BlockRocksdb, BlockChangesRocksdb),
+        }
+
+        match Both::deserialize(deserializer)? {
+            Both::Object(obj) => Ok(Self {
+                block: obj.block,
+                changes: obj.changes,
+                pagination: obj.pagination,
+            }),
+            Both::Array(block, changes) => Ok(Self {
+                block,
+                changes,
+                pagination: None,
+            }),
+        }
+    }
 }
 
 fn sorted_account_changes(changes: &BlockChangesRocksdb) -> Vec<(AddressRocksdb, AccountChangesRocksdb)> {
@@ -246,6 +281,7 @@ mod tests {
     use super::ImporterPageRequest;
     use super::ImporterPagination;
     use super::RpcError;
+    use crate::alias::AlloyReceipt;
     use crate::eth::rpc::BlockFilter;
     use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
     use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
@@ -255,6 +291,7 @@ mod tests {
     use crate::eth::storage::permanent::rocks::types::SlotValueRocksdb;
     use crate::eth::types::Block;
     use crate::eth::types::BlockNumber;
+    use crate::eth::types::ExternalReceipt;
     use crate::eth::types::Hash;
     use crate::eth::types::SlotIndex;
     use crate::eth::types::SlotValue;
@@ -384,11 +421,12 @@ mod tests {
         let block = block_with_txs(3);
         let pagination = ImporterPagination::for_test(0, 10);
         let response = pagination.block_and_receipts_response(block).expect("ok");
+        let info = response.pagination.expect("pagination present");
 
-        assert_eq!(response.pagination.returned, 3);
-        assert_eq!(response.pagination.total, 3);
+        assert_eq!(info.returned, 3);
+        assert_eq!(info.total, 3);
         assert_eq!(response.receipts.len(), 3);
-        assert!(response.pagination.next_cursor.is_none());
+        assert!(info.next_cursor.is_none());
     }
 
     #[test]
@@ -398,11 +436,12 @@ mod tests {
         // page 1: start=0, limit=3
         let pagination = ImporterPagination::for_test(0, 3);
         let response = pagination.block_and_receipts_response(block.clone()).expect("ok");
+        let info = response.pagination.expect("pagination present");
 
-        assert_eq!(response.pagination.returned, 3);
-        assert_eq!(response.pagination.total, 5);
+        assert_eq!(info.returned, 3);
+        assert_eq!(info.total, 5);
         assert_eq!(response.receipts.len(), 3);
-        let cursor = response.pagination.next_cursor.expect("more pages");
+        let cursor = info.next_cursor.expect("more pages");
 
         // decode cursor -> start=3
         let (_, start) = BlockHashCursor::decode_cursor(&cursor).expect("valid cursor");
@@ -411,11 +450,12 @@ mod tests {
         // page 2: start=3, limit=3
         let pagination = ImporterPagination::for_test(start, 3);
         let response = pagination.block_and_receipts_response(block).expect("ok");
+        let info = response.pagination.expect("pagination present");
 
-        assert_eq!(response.pagination.returned, 2);
-        assert_eq!(response.pagination.total, 5);
+        assert_eq!(info.returned, 2);
+        assert_eq!(info.total, 5);
         assert_eq!(response.receipts.len(), 2);
-        assert!(response.pagination.next_cursor.is_none());
+        assert!(info.next_cursor.is_none());
     }
 
     // block_with_changes_response (3-section slicing)
@@ -454,37 +494,40 @@ mod tests {
         // page 1: start=0, limit=3 -> 2 txs + 1 account
         let pagination = ImporterPagination::for_test(0, 3);
         let response = pagination.block_with_changes_response(block.clone(), changes.clone()).expect("ok");
+        let info = response.pagination.expect("pagination present");
 
-        assert_eq!(response.pagination.returned, 3);
-        assert_eq!(response.pagination.total, 7);
+        assert_eq!(info.returned, 3);
+        assert_eq!(info.total, 7);
         assert_eq!(response.block.transactions.len(), 2);
         assert_eq!(response.changes.account_changes.len(), 1);
         assert_eq!(response.changes.slot_changes.len(), 0);
-        let cursor = response.pagination.next_cursor.expect("more pages");
+        let cursor = info.next_cursor.expect("more pages");
         let (_, start) = BlockHashCursor::decode_cursor(&cursor).expect("valid cursor");
         assert_eq!(start, 3);
 
         // page 2: start=3, limit=3 -> 2 accounts + 1 slot
         let pagination = ImporterPagination::for_test(3, 3);
         let response = pagination.block_with_changes_response(block.clone(), changes.clone()).expect("ok");
+        let info = response.pagination.expect("pagination present");
 
-        assert_eq!(response.pagination.returned, 3);
+        assert_eq!(info.returned, 3);
         assert_eq!(response.block.transactions.len(), 0);
         assert_eq!(response.changes.account_changes.len(), 2);
         assert_eq!(response.changes.slot_changes.len(), 1);
-        let cursor = response.pagination.next_cursor.expect("more pages");
+        let cursor = info.next_cursor.expect("more pages");
         let (_, start) = BlockHashCursor::decode_cursor(&cursor).expect("valid cursor");
         assert_eq!(start, 6);
 
         // page 3: start=6, limit=3 -> 1 slot
         let pagination = ImporterPagination::for_test(6, 3);
         let response = pagination.block_with_changes_response(block, changes).expect("ok");
+        let info = response.pagination.expect("pagination present");
 
-        assert_eq!(response.pagination.returned, 1);
+        assert_eq!(info.returned, 1);
         assert_eq!(response.block.transactions.len(), 0);
         assert_eq!(response.changes.account_changes.len(), 0);
         assert_eq!(response.changes.slot_changes.len(), 1);
-        assert!(response.pagination.next_cursor.is_none());
+        assert!(info.next_cursor.is_none());
     }
 
     #[test]
@@ -495,12 +538,105 @@ mod tests {
 
         let pagination = ImporterPagination::for_test(0, 10);
         let response = pagination.block_with_changes_response(block, changes).expect("ok");
+        let info = response.pagination.expect("pagination present");
 
-        assert_eq!(response.pagination.returned, 6);
-        assert_eq!(response.pagination.total, 6);
+        assert_eq!(info.returned, 6);
+        assert_eq!(info.total, 6);
         assert_eq!(response.block.transactions.len(), 1);
         assert_eq!(response.changes.account_changes.len(), 3);
         assert_eq!(response.changes.slot_changes.len(), 2);
-        assert!(response.pagination.next_cursor.is_none());
+        assert!(info.next_cursor.is_none());
+    }
+
+    // -------------------------------------------------------------------------
+    // Backward compatibility: legacy (old leader without pagination) responses
+    // -------------------------------------------------------------------------
+
+    use super::BlockAndReceiptsPageResponse;
+    use super::BlockWithChangesPageResponse;
+
+    #[test]
+    fn receipts_response_deserializes_legacy_object_without_pagination() {
+        let block = block_with_txs(1);
+        let receipts: Vec<ExternalReceipt> = block.transactions.iter().cloned().map(AlloyReceipt::from).map(ExternalReceipt).collect();
+
+        // Shape returned by an old leader's stratus_getBlockAndReceipts: no `pagination` key.
+        let legacy = serde_json::json!({
+            "block": block.to_json_rpc_with_full_transactions(),
+            "receipts": receipts,
+        });
+
+        let response: BlockAndReceiptsPageResponse = serde_json::from_value(legacy).expect("legacy response deserializes");
+        assert!(response.pagination.is_none());
+        assert_eq!(response.receipts.len(), 1);
+    }
+
+    #[test]
+    fn receipts_response_deserializes_paginated_object() {
+        let block = block_with_txs(2);
+        let pagination = ImporterPagination::for_test(0, 10);
+        let paginated = pagination.block_and_receipts_response(block).expect("ok");
+
+        let json = serde_json::to_value(&paginated).expect("serialize");
+        assert!(json.get("pagination").is_some());
+
+        let response: BlockAndReceiptsPageResponse = serde_json::from_value(json).expect("paginated response deserializes");
+        assert!(response.pagination.is_some());
+    }
+
+    #[test]
+    fn receipts_response_omits_pagination_key_when_serializing_none() {
+        let response = BlockAndReceiptsPageResponse {
+            block: serde_json::json!({}),
+            receipts: vec![],
+            pagination: None,
+        };
+        let json = serde_json::to_value(&response).expect("serialize");
+        assert!(json.get("pagination").is_none());
+    }
+
+    #[test]
+    fn changes_response_deserializes_legacy_tuple_array() {
+        let block = block_rocksdb_with_txs(2);
+        let changes = changes_fixture();
+
+        // Shape returned by an old leader's stratus_getBlockWithChanges: bare [block, changes] tuple.
+        let legacy = serde_json::json!([block, changes]);
+
+        let response: BlockWithChangesPageResponse = serde_json::from_value(legacy).expect("legacy tuple deserializes");
+        assert!(response.pagination.is_none());
+        assert_eq!(response.block, block);
+        assert_eq!(response.changes, changes);
+    }
+
+    #[test]
+    fn changes_response_deserializes_object_without_pagination() {
+        let block = block_rocksdb_with_txs(2);
+        let changes = changes_fixture();
+
+        // Defensive shape: object form but no pagination key.
+        let json = serde_json::json!({
+            "block": block,
+            "changes": changes,
+        });
+
+        let response: BlockWithChangesPageResponse = serde_json::from_value(json).expect("object without pagination deserializes");
+        assert!(response.pagination.is_none());
+        assert_eq!(response.block, block);
+        assert_eq!(response.changes, changes);
+    }
+
+    #[test]
+    fn changes_response_deserializes_paginated_object() {
+        let block = block_rocksdb_with_txs(1);
+        let changes = changes_fixture();
+        let pagination = ImporterPagination::for_test(0, 10);
+        let paginated = pagination.block_with_changes_response(block, changes).expect("ok");
+
+        let json = serde_json::to_value(&paginated).expect("serialize");
+        assert!(json.get("pagination").is_some());
+
+        let response: BlockWithChangesPageResponse = serde_json::from_value(json).expect("paginated response deserializes");
+        assert!(response.pagination.is_some());
     }
 }

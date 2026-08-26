@@ -119,7 +119,10 @@ impl PageReducer<BlockAndReceiptsPageResponse> for BlockAndReceiptsReducer {
     type NextPage = String;
 
     fn reduce(&mut self, page: BlockAndReceiptsPageResponse) -> anyhow::Result<Option<String>> {
-        let cursor = validate_page(&page.pagination, &mut self.expected_total, "block with receipts")?;
+        let cursor = match &page.pagination {
+            Some(pagination) => validate_page(pagination, &mut self.expected_total, "block with receipts")?,
+            None => None,
+        };
         let page_block = ExternalBlock::try_from(page.block)?;
         self.push_block(page_block)?;
         self.receipts.extend(page.receipts);
@@ -139,11 +142,14 @@ impl PageReducer<BlockAndReceiptsPageResponse> for BlockAndReceiptsReducer {
             return Ok(None);
         };
 
-        let expected_total = self.expected_total.unwrap_or_default();
-        let transactions_len = block.try_full_transactions_len()?;
-        if transactions_len != expected_total {
-            bail!("paginated block with receipts assembled {transactions_len} transactions but expected {expected_total}");
+        if let Some(expected_total) = self.expected_total {
+            let transactions_len = block.try_full_transactions_len()?;
+            if transactions_len != expected_total {
+                bail!("paginated block with receipts assembled {transactions_len} transactions but expected {expected_total}");
+            }
         }
+
+        let transactions_len = block.try_full_transactions_len()?;
         if transactions_len != self.receipts.len() {
             bail!(
                 "paginated block with receipts assembled {} transactions but {} receipts",
@@ -218,7 +224,10 @@ impl PageReducer<BlockWithChangesPageResponse> for BlockWithChangesReducer {
     type NextPage = String;
 
     fn reduce(&mut self, page: BlockWithChangesPageResponse) -> anyhow::Result<Option<String>> {
-        let cursor = validate_page(&page.pagination, &mut self.expected_total, "block with changes")?;
+        let cursor = match &page.pagination {
+            Some(pagination) => validate_page(pagination, &mut self.expected_total, "block with changes")?,
+            None => None,
+        };
         self.push_block(page.block)?;
         self.push_changes(page.changes)?;
         Ok(cursor)
@@ -237,10 +246,11 @@ impl PageReducer<BlockWithChangesPageResponse> for BlockWithChangesReducer {
             return Ok(None);
         };
 
-        let expected_total = self.expected_total.unwrap_or_default();
-        let total = block.transactions.len() + self.changes.account_changes.len() + self.changes.slot_changes.len();
-        if total != expected_total {
-            bail!("paginated block with changes assembled {total} items but expected {expected_total}");
+        if let Some(expected_total) = self.expected_total {
+            let total = block.transactions.len() + self.changes.account_changes.len() + self.changes.slot_changes.len();
+            if total != expected_total {
+                bail!("paginated block with changes assembled {total} items but expected {expected_total}");
+            }
         }
 
         Ok(Some((block, self.changes)))
@@ -310,7 +320,7 @@ mod tests {
         BlockAndReceiptsPageResponse {
             block: to_json_value(block),
             receipts,
-            pagination,
+            pagination: Some(pagination),
         }
     }
 
@@ -440,6 +450,59 @@ mod tests {
         assert!(reducer.finish_after_not_found().is_err());
     }
 
+    // Backward compatibility: legacy responses (no pagination field) from old leaders
+
+    #[test]
+    fn receipts_reducer_legacy_single_page_without_pagination() {
+        // Old leader returns the whole block in one go without a pagination field.
+        let block = external_block_with_txs(3);
+        let receipts: Vec<ExternalReceipt> = vec![Faker.fake(); 3];
+        let block_number = block.number();
+
+        let mut reducer = BlockAndReceiptsReducer::new(block_number);
+        let page = BlockAndReceiptsPageResponse {
+            block: to_json_value(block.clone()),
+            receipts,
+            pagination: None,
+        };
+
+        // No cursor -> the fetcher treats this as the final (single) page.
+        let cursor = reducer.reduce(page).expect("ok");
+        assert!(cursor.is_none());
+
+        // finish() must succeed without a reported total and without slicing expectations.
+        let result = reducer.finish().expect("ok").expect("some output");
+        assert_eq!(result.block.try_full_transactions_len().unwrap(), 3);
+        assert_eq!(result.receipts.len(), 3);
+    }
+
+    #[test]
+    fn receipts_reducer_legacy_page_block_number_mismatch_still_errors() {
+        let block = external_block_with_txs(1);
+        let mut reducer = BlockAndReceiptsReducer::new(BlockNumber::from(999u64));
+        let page = BlockAndReceiptsPageResponse {
+            block: to_json_value(block),
+            receipts: vec![Faker.fake()],
+            pagination: None,
+        };
+
+        assert!(reducer.reduce(page).is_err());
+    }
+
+    #[test]
+    fn receipts_reducer_legacy_tx_receipt_count_mismatch_still_errors() {
+        let block = external_block_with_txs(2);
+        let mut reducer = BlockAndReceiptsReducer::new(block.number());
+        let page = BlockAndReceiptsPageResponse {
+            block: to_json_value(block),
+            receipts: vec![Faker.fake()],
+            pagination: None,
+        };
+        reducer.reduce(page).expect("ok");
+
+        assert!(reducer.finish().is_err());
+    }
+
     // BlockWithChangesReducer reducer
 
     #[test]
@@ -465,7 +528,7 @@ mod tests {
         let page1 = BlockWithChangesPageResponse {
             block: page1_block,
             changes: changes1,
-            pagination: page_info(2, 5, Some("cursor")),
+            pagination: Some(page_info(2, 5, Some("cursor"))),
         };
         let cursor = reducer.reduce(page1).expect("ok");
         assert_eq!(cursor, Some("cursor".to_string()));
@@ -473,7 +536,7 @@ mod tests {
         let page2 = BlockWithChangesPageResponse {
             block: page2_block,
             changes: changes2,
-            pagination: page_info(3, 5, None),
+            pagination: Some(page_info(3, 5, None)),
         };
         let cursor = reducer.reduce(page2).expect("ok");
         assert!(cursor.is_none());
@@ -490,7 +553,7 @@ mod tests {
         let page = BlockWithChangesPageResponse {
             block,
             changes: BlockChangesRocksdb::default(),
-            pagination: page_info(1, 1, None),
+            pagination: Some(page_info(1, 1, None)),
         };
         assert!(reducer.reduce(page).is_err());
     }
@@ -506,14 +569,14 @@ mod tests {
         let page1 = BlockWithChangesPageResponse {
             block: block1,
             changes: BlockChangesRocksdb::default(),
-            pagination: page_info(1, 2, Some("cursor")),
+            pagination: Some(page_info(1, 2, Some("cursor"))),
         };
         reducer.reduce(page1).expect("ok");
 
         let page2 = BlockWithChangesPageResponse {
             block: block2,
             changes: BlockChangesRocksdb::default(),
-            pagination: page_info(1, 2, None),
+            pagination: Some(page_info(1, 2, None)),
         };
         assert!(reducer.reduce(page2).is_err());
     }
@@ -529,14 +592,14 @@ mod tests {
         let page1 = BlockWithChangesPageResponse {
             block: block.clone(),
             changes: changes.clone(),
-            pagination: page_info(1, 2, Some("cursor")),
+            pagination: Some(page_info(1, 2, Some("cursor"))),
         };
         reducer.reduce(page1).expect("ok");
 
         let page2 = BlockWithChangesPageResponse {
             block,
             changes,
-            pagination: page_info(1, 2, None),
+            pagination: Some(page_info(1, 2, None)),
         };
         assert!(reducer.reduce(page2).is_err());
     }
@@ -553,14 +616,14 @@ mod tests {
         let page1 = BlockWithChangesPageResponse {
             block: block.clone(),
             changes: changes.clone(),
-            pagination: page_info(1, 2, Some("cursor")),
+            pagination: Some(page_info(1, 2, Some("cursor"))),
         };
         reducer.reduce(page1).expect("ok");
 
         let page2 = BlockWithChangesPageResponse {
             block,
             changes,
-            pagination: page_info(1, 2, None),
+            pagination: Some(page_info(1, 2, None)),
         };
         assert!(reducer.reduce(page2).is_err());
     }
@@ -573,7 +636,7 @@ mod tests {
         let page = BlockWithChangesPageResponse {
             block,
             changes: BlockChangesRocksdb::default(),
-            pagination: page_info(2, 10, None),
+            pagination: Some(page_info(2, 10, None)),
         };
         reducer.reduce(page).expect("ok");
 
@@ -593,10 +656,66 @@ mod tests {
         let page = BlockWithChangesPageResponse {
             block,
             changes: BlockChangesRocksdb::default(),
-            pagination: page_info(1, 1, Some("cursor")),
+            pagination: Some(page_info(1, 1, Some("cursor"))),
         };
         reducer.reduce(page).expect("ok");
 
         assert!(reducer.finish_after_not_found().is_err());
+    }
+
+    // Backward compatibility: legacy responses (no pagination field) from old leaders
+
+    #[test]
+    fn changes_reducer_legacy_single_page_without_pagination() {
+        // Old leader returns the whole block and changes in one go without a pagination field.
+        let block_number = BlockNumber::from(1u64);
+        let block = block_rocksdb_with_txs(1, 3);
+        let changes = changes_with_accounts(&[[0x01; 20], [0x02; 20]]);
+
+        let mut reducer = BlockWithChangesReducer::new(block_number);
+        let page = BlockWithChangesPageResponse {
+            block,
+            changes,
+            pagination: None,
+        };
+
+        // No cursor -> the fetcher treats this as the final (single) page.
+        let cursor = reducer.reduce(page).expect("ok");
+        assert!(cursor.is_none());
+
+        // finish() must succeed without a reported total.
+        let (block, changes) = reducer.finish().expect("ok").expect("some output");
+        assert_eq!(block.transactions.len(), 3);
+        assert_eq!(changes.account_changes.len(), 2);
+    }
+
+    #[test]
+    fn changes_reducer_legacy_page_block_number_mismatch_still_errors() {
+        let block = block_rocksdb_with_txs(1, 1);
+        let mut reducer = BlockWithChangesReducer::new(BlockNumber::from(999u64));
+        let page = BlockWithChangesPageResponse {
+            block,
+            changes: BlockChangesRocksdb::default(),
+            pagination: None,
+        };
+
+        assert!(reducer.reduce(page).is_err());
+    }
+
+    #[test]
+    fn changes_reducer_legacy_duplicate_account_change_not_applicable_in_single_page() {
+        // Legacy responses arrive as a single page; duplicate detection is exercised by
+        // paginated responses only. Just assert single-page reduce+finish succeeds here.
+        let block = block_rocksdb_with_txs(1, 0);
+        let changes = changes_with_accounts(&[[0x01; 20]]);
+
+        let mut reducer = BlockWithChangesReducer::new(BlockNumber::from(1u64));
+        let page = BlockWithChangesPageResponse {
+            block,
+            changes,
+            pagination: None,
+        };
+        assert!(reducer.reduce(page).is_ok());
+        assert!(reducer.finish().is_ok());
     }
 }

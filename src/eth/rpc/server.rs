@@ -910,7 +910,8 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
         };
 
         let response = pagination.block_and_receipts_response(block)?;
-        tracing::info!(%filter, returned = response.pagination.returned, total = response.pagination.total, "block with transactions page found");
+        let info = response.pagination.as_ref().expect("paginated response always has page info");
+        tracing::info!(%filter, returned = info.returned, total = info.total, "block with transactions page found");
         return Ok(json!(response));
     }
 
@@ -948,7 +949,8 @@ fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext:
         };
 
         let response = pagination.block_with_changes_response(block, changes)?;
-        tracing::info!(%filter, returned = response.pagination.returned, total = response.pagination.total, "block with changes page found");
+        let info = response.pagination.as_ref().expect("paginated response always has page info");
+        tracing::info!(%filter, returned = info.returned, total = info.total, "block with changes page found");
         return Ok(json!(response));
     }
 
