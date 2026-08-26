@@ -42,6 +42,7 @@ use crate::eth::types::Wei;
 use crate::eth::types::primitives::test_accounts;
 use crate::ext::not;
 use crate::infra::metrics;
+use crate::infra::metrics::MetricLabelValue;
 use crate::infra::metrics::timed;
 use crate::infra::tracing::SpanExt;
 
@@ -73,16 +74,26 @@ impl AccountOriginalsReader for StratusStorage {
 pub use resolve_pending::MinedPointInTime;
 
 /// Where a completed read obtained its value. Drives the post-read caching decision.
-#[derive(Debug)]
-enum FoundAt {
+#[derive(Debug, Clone, Copy, strum::Display)]
+pub enum FoundAt {
     /// Hit in a cache (pending or latest). Already cached; nothing to write.
+    #[strum(to_string = "cache")]
     Cache,
     /// Found in temporary (pending or latest) storage.
+    #[strum(to_string = "temporary")]
     Temp,
     /// Read from permanent storage at the latest mined point.
+    #[strum(to_string = "permanent-latest")]
     PermLatest,
     /// Read from permanent storage at a historical block.
+    #[strum(to_string = "permanent-historical")]
     PermHistorical,
+}
+
+impl From<FoundAt> for MetricLabelValue {
+    fn from(value: FoundAt) -> Self {
+        Self::Some(value.to_string())
+    }
 }
 
 /// Abstraction over address-keyed ([`Account`]) and slot-keyed ([`Slot`]) reads
@@ -394,7 +405,7 @@ impl StratusStorage {
     }
 
     /// Generic read algorithm shared by [`read_account`] and [`read_slot`].
-    fn read<E: resolve_pending::Resolve>(&self, key: E::Key, kind: ExecutionKind) -> Result<E, StorageError> {
+    fn read<E: resolve_pending::Resolve>(&self, key: E::Key, kind: ExecutionKind) -> Result<(E, FoundAt), StorageError> {
         let (value, found_at) = 'query: {
             match E::resolve(self, key, kind)? {
                 resolve_pending::Resolved::PendingCache(value) => break 'query (value, FoundAt::Cache),
@@ -434,16 +445,16 @@ impl StratusStorage {
             // Cache / Historical / (Mined, Temp): nothing to cache.
             _ => {}
         }
-        Ok(value)
+        Ok((value, found_at))
     }
 
-    pub fn read_account(&self, address: Address, kind: ExecutionKind) -> Result<Account, StorageError> {
+    pub fn read_account(&self, address: Address, kind: ExecutionKind) -> Result<(Account, FoundAt), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_account", %address).entered();
         self.read::<Account>(address, kind)
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, kind: ExecutionKind) -> Result<Slot, StorageError> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, kind: ExecutionKind) -> Result<(Slot, FoundAt), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_slot", %address, %index).entered();
         self.read::<Slot>((address, index), kind)
@@ -900,7 +911,7 @@ mod tests {
         assert_ne!(call_block, latest);
 
         // The in-flight call (pinned to the first block) reads the slot.
-        let slot = storage.read_slot(address, index, ExecutionKind::CallLatest(call_block)).expect("read slot");
+        let (slot, _) = storage.read_slot(address, index, ExecutionKind::CallLatest(call_block)).expect("read slot");
 
         // Must reflect the first block (100), not the freshly mined latest (200).
         assert_eq!(slot.value, SlotValue::from([100u64, 0, 0, 0]));
@@ -927,7 +938,7 @@ mod tests {
         let latest = mine_block(&storage, changes2);
         assert_ne!(call_block, latest);
 
-        let account = storage.read_account(address, ExecutionKind::CallLatest(call_block)).expect("read account");
+        let (account, _) = storage.read_account(address, ExecutionKind::CallLatest(call_block)).expect("read account");
 
         // Must reflect the first block (100), not the freshly mined latest (200).
         assert_eq!(account.balance, Wei::from(100u64));

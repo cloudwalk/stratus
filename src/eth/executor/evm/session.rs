@@ -15,6 +15,7 @@ use crate::eth::storage::StratusStorage;
 use crate::eth::types::Address;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::StratusError;
+use crate::infra::metrics;
 
 /// Contextual data that is read or set durint the execution of a transaction in the EVM.
 pub struct RevmSession {
@@ -71,19 +72,27 @@ impl DatabaseRef for RevmSession {
     type Error = StratusError;
 
     fn basic_ref(&self, address: revm::primitives::Address) -> Result<Option<AccountInfo>, Self::Error> {
+        let point_in_time = self.kind.point_in_time();
+        let start = metrics::now();
+
         // retrieve account
         let address: Address = address.into();
-        let account = self.storage.read_account(address, self.kind)?;
+        let (account, found_at) = self.storage.read_account(address, self.kind)?;
+        metrics::inc_evm_basic_ref(start.elapsed(), point_in_time, found_at);
         Ok(Some(account.into()))
     }
 
     fn storage_ref(&self, address: revm::primitives::Address, index: U256) -> Result<U256, Self::Error> {
+        let point_in_time = self.kind.point_in_time();
+        let start = metrics::now();
+
         // convert slot
         let address: Address = address.into();
         let index: SlotIndex = index.into();
 
         // load slot from storage
-        let slot = self.storage.read_slot(address, index, self.kind)?;
+        let (slot, found_at) = self.storage.read_slot(address, index, self.kind)?;
+        metrics::inc_evm_storage_ref(start.elapsed(), point_in_time, found_at);
 
         Ok(slot.value.into())
     }

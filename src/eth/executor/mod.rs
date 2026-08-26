@@ -219,6 +219,8 @@ impl Executor {
                     metrics::inc_executor_external_transaction(start.elapsed(), tx_contract, tx_function);
                     metrics::inc_executor_external_transaction_account_reads(evm_metrics.slot_access.account_reads, tx_contract, tx_function);
                     metrics::inc_executor_external_transaction_slot_reads(evm_metrics.slot_access.slot_reads, tx_contract, tx_function);
+                    metrics::inc_executor_external_transaction_accounts_produced(evm_result.changes.accounts.len(), tx_contract, tx_function);
+                    metrics::inc_executor_external_transaction_slots_produced(evm_result.changes.slots.len(), tx_contract, tx_function);
                     metrics::inc_executor_external_transaction_gas(evm_result.gas_used.as_u64() as usize, tx_contract, tx_function);
                 }
 
@@ -227,7 +229,7 @@ impl Executor {
             //
             // failed external transaction, re-create from receipt without re-executing
             false => {
-                let sender = self.storage.read_account(receipt.from.into(), ExecutionKind::Transaction)?;
+                let (sender, _) = self.storage.read_account(receipt.from.into(), ExecutionKind::Transaction)?;
                 if tx_input.execution_info.nonce != sender.nonce {
                     bail!(
                         "reverted external transaction should have the correct nonce. address: {:?}, input: {:?}, sender: {:?}",
@@ -256,7 +258,7 @@ impl Executor {
 
     /// Validates that the target account is a contract, reading it from storage at the given point in time.
     pub fn validate_to_is_contract(&self, to_address: Address, kind: ExecutionKind) -> Result<(), StratusError> {
-        let account = self.storage.read_account(to_address, kind)?;
+        let (account, _) = self.storage.read_account(to_address, kind)?;
         if account.bytecode.is_none() {
             if self.reject_not_contract {
                 return Err(ExecutorError::AccountNotContract { address: to_address }.into());
@@ -371,6 +373,8 @@ impl Executor {
             let function = codegen::function_sig(&tx_input.execution_info.input);
             #[cfg(feature = "metrics")]
             let contract = codegen::contract_name(&tx_input.execution_info.to);
+            #[cfg(feature = "metrics")]
+            let (accounts_produced, slots_produced) = (tx_execution.result.changes.accounts.len(), tx_execution.result.changes.slots.len());
 
             if let ExecutionResult::Reverted { reason } = &tx_execution.result.result {
                 tracing::info!(?reason, "local transaction execution reverted");
@@ -385,6 +389,8 @@ impl Executor {
                     {
                         metrics::inc_executor_local_transaction_account_reads(evm_metrics.slot_access.account_reads, contract, function);
                         metrics::inc_executor_local_transaction_slot_reads(evm_metrics.slot_access.slot_reads, contract, function);
+                        metrics::inc_executor_local_transaction_accounts_produced(accounts_produced, contract, function);
+                        metrics::inc_executor_local_transaction_slots_produced(slots_produced, contract, function);
                         metrics::inc_executor_local_transaction_gas(gas_used.as_u64() as usize, true, contract, function);
                     }
                     return Ok(());

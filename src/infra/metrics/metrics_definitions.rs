@@ -123,6 +123,12 @@ metrics! {
     "Number of slot reads executing an external transaction."
     histogram_counter executor_external_transaction_slot_reads{contract, function},
 
+    "Number of accounts in the state produced by an external transaction."
+    histogram_counter executor_external_transaction_accounts_produced{contract, function},
+
+    "Number of slots in the state produced by an external transaction."
+    histogram_counter executor_external_transaction_slots_produced{contract, function},
+
     "Gas spent executing an external transaction."
     histogram_counter executor_external_transaction_gas{contract, function},
 
@@ -147,6 +153,12 @@ metrics! {
     "Number of slot reads when executing a local transaction."
     histogram_counter executor_local_transaction_slot_reads{contract, function},
 
+    "Number of accounts in the state produced by a local transaction."
+    histogram_counter executor_local_transaction_accounts_produced{contract, function},
+
+    "Number of slots in the state produced by a local transaction."
+    histogram_counter executor_local_transaction_slots_produced{contract, function},
+
     "Gas spent executing a local transaction."
     histogram_counter executor_local_transaction_gas{success, contract, function},
 
@@ -167,6 +179,17 @@ metrics! {
 
     "Number of EVM pool workers busy executing right now."
     gauge executor_workers_busy{pool}
+}
+
+// REVM DatabaseRef reads (account and slot reads issued by the EVM).
+metrics! {
+    group: evm_database_ref,
+
+    "Time executing the basic_ref (account read) operation in the REVM database."
+    histogram_duration evm_basic_ref{point_in_time, found_at},
+
+    "Time executing the storage_ref (slot read) operation in the REVM database."
+    histogram_duration evm_storage_ref{point_in_time, found_at}
 }
 
 metrics! {
