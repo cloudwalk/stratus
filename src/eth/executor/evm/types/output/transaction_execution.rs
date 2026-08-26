@@ -275,7 +275,10 @@ impl TransactionExecutionOutput {
         for (revm_address, mut revm_account) in revm_state {
             let address: Address = revm_address.into();
 
-            // apply changes according to account status
+            if address.is_ignored() {
+                continue;
+            }
+
             tracing::debug!(
                 %address,
                 status = ?revm_account.status,
