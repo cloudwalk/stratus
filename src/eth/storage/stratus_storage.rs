@@ -1,10 +1,10 @@
 use tracing::Span;
 
-use crate::eth::executor::AccountOriginalsReader;
-use crate::eth::executor::Complete;
-use crate::eth::executor::Final;
 use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
+use crate::eth::executor::types::state::AccountOriginalsReader;
+use crate::eth::executor::types::state::Complete;
+use crate::eth::executor::types::state::Final;
 #[cfg(feature = "dev")]
 use crate::eth::genesis::GenesisConfig;
 use crate::eth::rpc::BlockFilter;
@@ -796,11 +796,11 @@ impl StratusStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eth::executor::AccountChanges;
-    use crate::eth::executor::CompleteValue;
     use crate::eth::executor::ExecutionResult;
     use crate::eth::executor::TransactionExecutionInput;
     use crate::eth::executor::TransactionExecutionOutput;
+    use crate::eth::executor::types::state::AccountChanges;
+    use crate::eth::executor::types::state::CompleteValue;
     use crate::eth::types::Signature;
     use crate::eth::types::SlotValue;
     use crate::eth::types::TransactionInfo;

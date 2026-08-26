@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::eth::executor::Incomplete;
 use crate::eth::executor::State;
+use crate::eth::executor::types::state::Incomplete;
 use crate::eth::follower::importer::importers::ImportData;
 use crate::eth::follower::importer::importers::ImporterWorker;
 use crate::eth::follower::importer::send_block_to_kafka;

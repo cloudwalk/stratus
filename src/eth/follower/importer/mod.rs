@@ -270,14 +270,14 @@ mod tests {
 
     use hash_hasher::HashBuildHasher;
 
-    use crate::eth::executor::AccountChanges;
-    use crate::eth::executor::Complete;
-    use crate::eth::executor::CompleteValue;
     use crate::eth::executor::ExecutionResult;
     use crate::eth::executor::State;
     use crate::eth::executor::TransactionExecution;
     use crate::eth::executor::TransactionExecutionInput;
     use crate::eth::executor::TransactionExecutionOutput;
+    use crate::eth::executor::types::state::AccountChanges;
+    use crate::eth::executor::types::state::Complete;
+    use crate::eth::executor::types::state::CompleteValue;
     use crate::eth::follower::importer::fetchers::DataFetcher;
     use crate::eth::follower::importer::fetchers::block_with_changes::BlockWithChangesFetcher;
     use crate::eth::follower::importer::importers::ImporterWorker;
