@@ -3,12 +3,12 @@ use std::time::Duration;
 
 use clap::Parser;
 use display_json::DebugAsJson;
+use foldhash::fast::FixedState;
 use indexmap::Equivalent;
 use quick_cache::UnitWeighter;
 use quick_cache::sync::Cache;
 use quick_cache::sync::DefaultLifecycle;
 use quick_cache::sync::GuardResult;
-use rustc_hash::FxBuildHasher;
 
 use crate::eth::executor::State;
 use crate::eth::executor::types::state::Complete;
@@ -18,9 +18,11 @@ use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::SlotValue;
 
+type CacheHasher = FixedState;
+
 pub struct StorageCache {
-    account_latest_cache: Cache<Address, Account, UnitWeighter, FxBuildHasher>,
-    slot_latest_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
+    account_latest_cache: Cache<Address, Account, UnitWeighter, CacheHasher>,
+    slot_latest_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, CacheHasher>,
 }
 
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
@@ -47,14 +49,14 @@ impl StorageCache {
                 config.account_history_cache_capacity,
                 config.account_history_cache_capacity as u64,
                 UnitWeighter,
-                FxBuildHasher,
+                CacheHasher::default(),
                 DefaultLifecycle::default(),
             ),
             slot_latest_cache: Cache::with(
                 config.slot_history_cache_capacity,
                 config.slot_history_cache_capacity as u64,
                 UnitWeighter,
-                FxBuildHasher,
+                CacheHasher::default(),
                 DefaultLifecycle::default(),
             ),
         }
@@ -67,8 +69,8 @@ impl StorageCache {
 
     fn _cache_account_and_slots_from_changes_impl(
         changes: &State<Complete>,
-        account_cache: &Cache<Address, Account, UnitWeighter, FxBuildHasher>,
-        slot_cache: &Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
+        account_cache: &Cache<Address, Account, UnitWeighter, CacheHasher>,
+        slot_cache: &Cache<(Address, SlotIndex), SlotValue, UnitWeighter, CacheHasher>,
     ) {
         // cache accounts
         for (address, change) in changes.accounts.iter() {
