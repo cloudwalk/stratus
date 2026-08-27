@@ -55,6 +55,12 @@ criteria = "safe-to-deploy"
 delta = "1.0.41 -> 2.3.0"
 notes = "Diff only touches header.rs (adds optional EIP-7928/7843 fields, a saturating base_fee_per_gas serde adapter clamping >u64::MAX) and receipt/envelope.rs (drops redundant Clone bound); Cargo.toml bumps alloy deps + MSRV 1.94.1, adds bincode dev-dep. No unsafe/FFI/transmute/pointers/build.rs/network/fs/env in the diff — pure domain-type and serde logic plus tests."
 
+[[audits.alloy-dyn-abi]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+version = "1.6.1"
+notes = 'Full review of 1.6.1. Pure-Rust no-std ABI/EIP-712 encode/decode crate (~8.7k LOC). build=false (no build script), no C FFI (only `extern crate alloc` + a parser re-export alias), no env/fs/net/process IO. Stratus enables only default features = ["std"] (arbitrary/eip712/debug off). Unsafe is minimal and sound: token.rs:190 reuses a Box<T> allocation via the canonical `Vec::from_raw_parts(Box::into_raw(t),1,1)` (len1/cap1) idiom for array-token decoding; coerce.rs:167 slices `get_unchecked(..l)` on a `[char;2]` with l in {1,2} set in the same branch (always in-bounds); remaining `unwrap_unchecked` calls follow exhaustive matches that guarantee Some (value.rs/ty.rs). The sole `from_utf8_unchecked` is gated behind the unused `arbitrary` feature (fuzzing) and is not in the deployed build. Deps are alloy siblings + serde/itoa/winnow. No capability surface beyond in-memory ABI parsing.'
+
 [[audits.alloy-eip2930]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
@@ -521,6 +527,18 @@ criteria = "safe-to-deploy"
 delta = "2.1.5 -> 2.1.8"
 notes = "Only Rust change is ethereum_kzg_settings/mod.rs: 16 OnceBox statics -> one [OnceLock;16] array (std::sync::OnceLock or once_cell OnceBox), panic!->assert!. No new unsafe/extern C/transmute/pointers; build.rs unchanged; no network/fs/env access. C/blst diff is internal crypto refinement (g1_add/fr_* wrappers, 383->384 inverse-mod asm, batch affine, g1_ifft->g1_ifft_unscaled) with no new Rust FFI s"
 
+[[audits.cargo-platform]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.1.9 -> 0.3.2"
+notes = "Benign feature additions (raw identifiers in cfg expressions, boolean cfg literals, keyword warnings) and a dependency optimization (serde -> serde_core). No unsafe code, no network/IO, no build scripts. No advisories."
+
+[[audits.cargo_metadata]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.19.2 -> 0.23.1"
+notes = "Reviewed 0.19.2 -> 0.23.1 via cargo vet diff. Benign: newtype wrappers (FeatureName/PackageName) with Deref/AsRef/PartialEq, Metadata.build_directory field stabilization, env_remove helper, default-generic Result<T,E=Error>, inline format strings, re-export of cargo_platform, routine dep bumps (camino/cargo-platform/semver/serde/serde_json/thiserror). No unsafe, no build scripts, no proc-macros, no new network/IO; Command::new hits are pre-existing doc-examples/tests (the crate shells out to `cargo metadata` by design). delta_from 0.19.2 valid via bytecode-alliance foreign audit (imports.lock, delta 0.18.1 -> 0.19.2). MSRV bump 1.78 -> 1.86 (stratus toolchain 1.97). Breaking API type changes (Package.name->PackageName, Dependency.source Option<String>->Option<Source>) don't affect stratus (cargo_metadata is transitive via vergen build-dep only). No RustSec advisories."
+
 [[audits.chrono]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -548,6 +566,30 @@ Supply-Chain Integrity Risk:
 
 Conclusion:
 Based on the available evidence, the update of 'chrono' from 0.4.42 to 0.4.43 does not introduce observable supply-chain or security risks within the evaluated scope."""
+
+[[audits.clap]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "4.5.51 -> 4.5.60"
+notes = "Thin facade crate re-exporting clap_builder/clap_derive. Diff is version+pin bumps and a CHANGELOG URL update. No unsafe, no logic, build=false, MSRV unchanged (1.74). cargo audit clean for clap. Backward-compatible PATCH releases."
+
+[[audits.clap_builder]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "4.5.51 -> 4.5.60"
+notes = "Parsing logic. Benign PATCH bug fixes: value_terminator/-- escape precedence, subcommand-error usage panic fix, ignore_errors no longer masks help/version on subcommands, empty default/possible values now quoted. Additive default_values_if/_ifs API. No unsafe, no build.rs, no fs/net/process/env. clap_lex dep bump transitive (already exempted). MSRV unchanged (1.74)."
+
+[[audits.clap_derive]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "4.5.49 -> 4.5.55"
+notes = "Proc-macro crate. Diff is exclusively error-message wording in args.rs/subcommand.rs/value_enum.rs/item.rs. Zero changes to generated code logic, no new unsafe in generated code, no token-stream construction changes. build=false, deps unchanged, MSRV unchanged (1.74). Error messages are not contractual API."
+
+[[audits.clap_lex]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.7.5 -> 1.1.0"
+notes = "Only runtime code change is explicit lifetime annotations in public API signatures, with zero runtime behavior change. No new unsafe, network, IO, crypto, build scripts, or proc-macros. No advisories."
 
 [[audits.console]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -713,6 +755,12 @@ Dependencies/features: bumps windows-link to 0.2; dev-only bumps windows-bindgen
 Main change: repository moved to github.com/djc/hostname with doc badge updates; tests unwrap bindgen result; behavior remains the same.
 """
 
+[[audits.http]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+version = "1.4.2"
+notes = "Reviewed 1.3.1->1.4.2 delta (1.3.1 was previously exempted, not audited). Pure HTTP message-types crate (Request/Response/HeaderMap/Uri, no I/O). Unsafe changes are net soundness improvements: IterMut/ValueIterMut refactored to stop reborrowing whole map (Stacked Borrows fix PR#837), IntoIter::drop guard fixes use-after-free on panic (PR#838), Extend reserve-clamp fixes overflow panic. FNV dep removed (vendored inline, identical constants). URI parsing tightened (rejects empty/non-slash-start/0x7F DEL). No build.rs, no proc-macro, fewer runtime deps (bytes+itoa). MSRV 1.57 (stratus 1.86). No advisory against http 1.4.x."
+
 [[audits.humantime]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -741,6 +789,30 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "0.18.2 -> 0.18.3"
 notes = "0.18.3 removes demo examples, derives Default for MultiProgressAlignment/ProgressFinish, and adds ProgressBar::set_elapsed which rewinds the start Instant via checked_sub; no unsafe code touched."
+
+[[audits.jni]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.21.1 -> 0.22.4"
+notes = "Major 0.22 safety-focused refactor (docs/0.22-MIGRATION.md). build.rs reviewed: benign, only emits cfg(use_fls_attach_guard)/cfg(use_tls_attach_guard) based on target_os + one env var, no I/O/network/codegen. New unsafe (~430 hits) is uniform JNI FFI dispatch via the JNIEnv function-pointer table with catch_unwind/resume_unwind panic safety; API restructured into finer Env/JavaVM borrows (safety improvement). Replaced cesu8 with simd_cesu8, jni-sys 0.3->0.4, thiserror 1->2. MSRV 1.85 (stratus 1.86). Breaking API overhaul (JNIEnv->Env, GlobalRef->Global, closure-based attach) absorbed by parent consumers; stratus does not use jni directly (transitive via rustls-platform-verifier, exercised only on Android)."
+
+[[audits.jni-macros]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+version = "0.22.4"
+notes = "New proc-macro crate (companion to jni 0.22): jni_str!/jni_sig!/native_method!/bind_java_type! compile-time token manipulation generating JNI signature strings and bindings. unsafe grep hits are inside quote! token streams, not runtime unsafe. No env/fs/net/process access. Standard proc-macro2/quote/syn."
+
+[[audits.jni-sys]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.3.0 -> 0.4.1"
+notes = "Pure FFI type/constant declarations for JNI (extern C blocks, type aliases, fn-pointer structs); no logic, no unsafe execution. 0.4.0 turned JNINativeInterface_/JNIInvokeInterface_ into versioned unions and made jboolean an alias for bool; 0.4.1 adds JNI_VERSION_24 + GetStringUTFLengthAsLong and bumps syn to 2. Now #![no_std]. MSRV 1.76. Consumed only by the jni crate."
+
+[[audits.jni-sys-macros]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+version = "0.4.1"
+notes = "New proc-macro crate providing #[jni_to_union] that emits #[repr(C)] versioned unions for jni-sys 0.4. Single src/lib.rs reviewed: pure syn/quote token manipulation, no unsafe execution, no env/fs/net access. Standard proc-macro."
 
 [[audits.keccak]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
@@ -788,11 +860,23 @@ criteria = "safe-to-deploy"
 delta = "0.2.0 -> 0.2.1"
 notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
 
+[[audits.objc2-io-kit]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+version = "0.3.1"
+notes = "Auto-generated FFI binding crate to Apple's IOKit framework from the well-known objc2 ecosystem. No build scripts, no proc macros. All unsafe code is standard FFI declarations and objc2 trait implementations. No advisories."
+
 [[audits.opentelemetry]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "0.31.0"
 notes = "Reviewed 0.30.0->0.31.0: adds Extractor::get_all default/tests, aligns trace/span id conversions and global tracer setter returns (); no unsafe."
+
+[[audits.opentelemetry]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.31.0 -> 0.32.0"
+notes = "Added BoundCounter/BoundHistogram (experimental perf types behind flag), Injector::reserve default impl, #[must_use] on AsyncInstrumentBuilder, removed empty message field from internal tracing events. Bug fix: panic calling Context::current() from Drop via ContextGuard cleanup (#3262). No new unsafe, no network. Breaking: removed public SpanBuilder fields/setters; SamplingDecision/SamplingResult moved to opentelemetry_sdk::trace; logs now stable and enabled by default. Stratus uses KeyValue + TracerProvider only (unaffected)."
 
 [[audits.opentelemetry-http]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -800,11 +884,23 @@ criteria = "safe-to-deploy"
 version = "0.31.0"
 notes = "Reviewed 0.30.0->0.31.0: implements Extractor::get_all, adds reqwest feature split and generic HyperClient transport; only new tests/docs, no unsafe."
 
+[[audits.opentelemetry-http]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.31.0 -> 0.32.0"
+notes = "Small diff: adds reserve to the Injector impl for HeaderInjector (+tests). The sole unsafe (http-body map_unchecked_mut) is byte-identical, just shifted line. reqwest 0.12->0.13.1; TLS feature flags renamed. No new unsafe/network."
+
 [[audits.opentelemetry-otlp]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "0.31.0"
 notes = "Reviewed 0.30.0->0.31.0: wire up HTTP compression features, align internal-logs usage, regen docs/tests; no unsafe code."
+
+[[audits.opentelemetry-otlp]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.31.0 -> 0.32.0"
+notes = "OTLP network exporter. Zero unsafe, no build.rs. New retry.rs/retry_classification.rs properly bounded: attempt capped at max_retries, exponential backoff capped at max_delay_ms, gRPC throttle capped at 600s, non-retryable errors return immediately; honors HTTP Retry-After and gRPC RetryInfo per OTLP spec. Retry gated behind off-by-default experimental-grpc-retry/experimental-http-retry. New tonic-types dep used for StatusExt::get_details_retry_info(). No new hardcoded endpoints. TLS features reorganized."
 
 [[audits.opentelemetry-proto]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -812,11 +908,23 @@ criteria = "safe-to-deploy"
 version = "0.31.0"
 notes = "Reviewed 0.30.0->0.31.0: regen proto bindings incl profiles v1development, adds span flag propagation + serde helpers; codegen only, no unsafe."
 
+[[audits.opentelemetry-proto]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.31.0 -> 0.32.0"
+notes = "Generated protobuf message code. Zero unsafe, no build.rs, no network. New with-serde feature (gated), profiles.v1development proto added. New base64/const-hex/serde deps are for the optional serde feature. prost/tonic bumped to 0.32."
+
 [[audits.opentelemetry_sdk]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "0.31.0"
 notes = "Reviewed 0.30.0->0.31.0: propagates parent remote flag, skips on_start for non-recording spans, restores async BatchSpanProcessor concurrency limits; no unsafe."
+
+[[audits.opentelemetry_sdk]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.31.0 -> 0.32.1"
+notes = "SDK in-memory processing. Zero unsafe, no build.rs, no new net/fs/env. BaggagePropagator now enforces W3C DoS limits (8192-byte/64-member caps on inbound baggage) - security improvement for a network-facing node. Fixed SpanExporter::shutdown default timeout bug (5ns -> 5s); 0.32.1 reverted a telemetry-suppression change causing a RefCell already borrowed panic. Added BoundCounter/BoundHistogram, portable-atomic for 32-bit. Breaking: shutdown/force_flush take &self; removed SimpleConcurrentLogProcessor; service.name fallback unknown_service:<exe>. Stratus uses SdkTracerProvider/BatchConfigBuilder/Resource (unaffected)."
 
 [[audits.phf]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
@@ -883,6 +991,12 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "0.14.1"
 notes = "Reviewed 0.13.5->0.14.1: oneof merge logic uses single if-let path, docs/version bumps only; no unsafe changes."
+
+[[audits.prost-types]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+version = "0.14.1"
+notes = "Protobuf well-known types (Timestamp/Duration/Any/Struct) from tokio-rs/prost. Zero unsafe, no build.rs, no network/fs. Pure data types + conversions. Historical RUSTSEC-2021-0073 (Timestamp->SystemTime overflow) patched in 0.8.0; 0.14.1 long-fixed. MSRV 1.71.1. Pulled transitively by the new tonic-types."
 
 [[audits.quick_cache]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
@@ -952,6 +1066,18 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "4.2.0"
 notes = "Inspected 4.2.0: pure hashing crate; default build keeps safety checks. Unsafe usage limited to guarded pointer reads in util::read with explicit length assertions; no I/O or syscalls."
+
+[[audits.regex]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "1.11.1 -> 1.12.3"
+notes = "Reviewed 1.11.1 -> 1.12.3 via cargo vet diff. Bug-fix/doc releases across 1.11.2-1.12.3: one additive method Captures::get_match(), lazy-DFA/sparse-DFA memory fixes (1.12.0), 1.12.0 yanked + lifetime fix in 1.12.1, archive/test-data cleanup. regex is entirely unsafe-free (no unsafe/extern/transmute/Command/net/fs in the src diff). MSRV unchanged 1.65. No RustSec advisories. stratus uses regex only transitively (sentry-backtrace, bindgen/vergen build-deps)."
+
+[[audits.regex-automata]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.4.9 -> 0.4.14"
+notes = "Reviewed 0.4.9 -> 0.4.14 via cargo vet diff. Unsafe footprint identical between versions (37 unsafe blocks, 12 unsafe fn, 7 unsafe impl, 3 transmute; 0 added unsafe/extern/transmute/Command/net/fs). Hardening: corrupted dense DFA deserialize now errors instead of panicking (#1295), shrink_to_fit memory trims, additive DFA::set_prefilter(), perf-literal-multisubstring no longer implies std. No new deps/IO/network/build scripts. MSRV unchanged 1.65. No RustSec advisories. stratus uses regex-automata only transitively (via regex)."
 
 [[audits.revm]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -1169,6 +1295,24 @@ criteria = "safe-to-deploy"
 version = "0.2.3"
 notes = "Tiny crate (~340 LOC, no build.rs) that runs `rustc -vV` via std::process::Command and parses output. Only env access is reading RUSTC (Cargo convention). No unsafe, no FFI, no transmute, no network, no filesystem access. Command execution with fixed args is the crate's advertised purpose. No new/expanded unsafe/FFI/build.rs/network/fs/env/data-exposure concerns."
 
+[[audits.rustls-platform-verifier]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.5.3 -> 0.7.0"
+notes = "Bridges rustls to OS trust stores (most crypto-relevant). Linux fallback (what stratus uses) + mod.rs/apple.rs diffs reviewed: clean eager-init refactor replacing lazy OnceCell<Arc<WebPkiServerVerifier>> + Mutex<extra_roots> with eager Arc<WebPkiServerVerifier>; CryptoProvider now a required constructor arg; extra-root parse errors forwarded to caller. Cert-verification logic UNCHANGED - verify_server_cert/verify_tls12/13 still delegate to rustls WebPkiServerVerifier; crate only loads platform roots. with_platform_verifier() now returns Result (surfaces root-load failures instead of panicking - safety improvement). MSRV 1.71->1.85. Breaking API changes absorbed by parent consumers; stratus does not use it directly."
+
+[[audits.security-framework]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "3.3.0 -> 3.7.0"
+notes = "High-level Apple Security framework wrappers. secure_transport.rs (TLS) diff read in full: null-pointer guards added to read_func/write_func C callbacks (errSecParam on null - safety improvement), unsafe blocks made explicit, String::from_utf8 unwrap replaced with map_err, ALPN/session-ticket ungated (macOS 10.13 floor). Trust-evaluation logic unchanged in substance. edition 2024, MSRV 1.85. macOS-only (not compiled on stratus Linux target)."
+
+[[audits.security-framework-sys]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "2.14.0 -> 2.17.0"
+notes = "Pure FFI extern C link declarations + type/constant defs for Apple Security framework. Diffs only restructure cfg gating (types unconditionally available, macOS-only items get target_os=macos + deprecated notes, link(name=Security) uses target_vendor=apple). No function logic, no unsafe execution. MSRV 1.65->1.70, default OSX_10_12->OSX_10_13."
+
 [[audits.semver]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
@@ -1211,6 +1355,18 @@ criteria = "safe-to-deploy"
 delta = "0.1.4 -> 0.1.8"
 notes = "build.rs expanded with read-only standard Cargo cfg env reads (CARGO_CFG_TARGET_VENDOR, CARGO_ENCODED_RUSTFLAGS) for Zen5/ARM heuristics, and maybe_patch_script applies vendored CFI .patch files via the `patch` utility confined to crate source + OUT_DIR — analogous to the pre-existing `perl` perlasm spawn; no network, no arbitrary/secret file access. src/lib.rs refactors hardcoded link_name string"
 
+[[audits.simd_cesu8]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+version = "1.2.0"
+notes = "CESU-8 / Modified UTF-8 codec (encoding JNI uses for Java strings); pulled by jni 0.22 replacing cesu8. Pure byte-buffer processing, no fs/net/env/process. 31 unsafe hits are SIMD intrinsics + one unsafe fn as_arrays (standard slice::as_chunks cast with debug_assert len%N==0). MSRV 1.85. Exercised only on Android (JNI string data), not remote/network input."
+
+[[audits.simdutf8]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+version = "0.1.5"
+notes = "SIMD-accelerated UTF-8 validation (drop-in for std::str::from_utf8), ported from simdjson. 0.1.5 fixed UB in the WASM SIMD128 path (#86); thoroughly fuzz-tested. ~142 unsafe are uniform SIMD intrinsics (AVX2/NEON/WASM) wrapped by the safe basic::from_utf8/compat::from_utf8 API. No fs/net/env. Safe API boundary preserved."
+
 [[audits.small_btree]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
@@ -1234,6 +1390,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "1.4.1 -> 1.6.1"
 notes = "Diff is minimal and confined to Cargo.toml (version bump only, build=false, no new deps) plus 3 source files: stmt/mod.rs adds a `delete` keyword parser branch (routes to Stmt::Expr, with cfg(test) tests), type/mod.rs removes a deprecated is_one_word method, variable/mod.rs refactors fmt_eip712 to recurse into Type::Array for EIP-712 formatting. No unsafe, FFI, transmute, build.rs, network, fs/env"
+
+[[audits.sysinfo]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.34.2 -> 0.37.2"
+notes = "Read-only system-information crate. Delta is bug fixes, new read-only APIs, and adoption of objc2-io-kit bindings. Unsafe footprint largely unchanged (mostly #[unsafe(no_mangle)] edition syntax changes). No advisories."
 
 [[audits.tag_ptr]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
@@ -1276,11 +1438,47 @@ criteria = "safe-to-deploy"
 version = "0.14.2"
 notes = "Inspected 0.14.2: prost-based codec/encoder/decoder split from tonic, simple BufferSettings plumbing; crate contains no unsafe."
 
+[[audits.tonic-types]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+version = "0.14.5"
+notes = "gRPC Richer Error Model types - StatusExt trait (on tonic::Status) for attaching/extracting error details (RetryInfo, ErrorInfo, BadRequest) + generated google_rpc protobuf. Zero unsafe, no build.rs, no network. Pure types + trait. Used by opentelemetry-otlp for gRPC RetryInfo extraction (experimental retry). edition 2021, MSRV 1.75."
+
 [[audits.tower]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "0.5.3"
 notes = "Safety: no new I/O or network; no build.rs or proc-macros; unsafe usage unchanged. Dependencies/features: feature table reshuffled (removes internal __common), slab bumped to 0.4.9; dev deps adjust futures/rand/tokio versions. Main change: adds ServiceBuilder::boxed_clone_sync and validates retry jitter isn’t NaN; behavior otherwise unchanged."
+
+[[audits.tower-http]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.6.8 -> 0.6.11"
+notes = "Spanning 0.6.9-0.6.11. Additive/benign: on-early-drop middleware, set-header multiple-headers API, classify::GrpcCode From impls, follow-redirect iri-string->url swap, fs fixes. Deployed library unsafe-free (forbid unsafe_code); single unsafe is Windows-only cfg(test) read-only GetFileType FFI. New is_reserved_dos_name Windows path-traversal guard (security improvement). No build script, no proc-macro, no crypto. Advisories RUSTSEC-2021-0135/2022-0043 patched in >=0.2.1. MSRV unchanged (1.64). stratus uses cors feature only (one-char doc typo fix in cors/mod.rs)."
+
+[[audits.tower-http]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.6.8 -> 0.7.0"
+notes = "Minor (breaking) release. Deployed library unsafe-free (deny unsafe_code; single unsafe is Windows-only cfg(test) GetFileType FFI not compiled into lib). New csrf module is pure Sec-Fetch-Site/Origin/Host header inspection (security-adding, no unsafe/fs/net/crypto). No build script, no proc-macro, no FFI in deployed code, no crypto. cargo audit clean; advisories patched in >=0.2.1. MSRV 1.64->1.65 (stratus 1.86). stratus cors-only: Vary header now derived from request-dependency (fixed Any origin -> no Vary, more correct caching, no security impact)."
+
+[[audits.tracing]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.1.41 -> 0.1.44"
+notes = "0.1.42 yanked (breaking valueset macro-sanitation #3382), 0.1.43 reverted, 0.1.44 is the stable release fixing a record_all panic (#3432) and bumping tracing-core 0.1.36. macros.rs renames valueset!->valueset_all! at call sites + adds record_all!. lib.rs switches to #![no_std] (std via feature). 8 unsafe pre-existing and legitimate (str::from_utf8_unchecked, RUSTSEC-2023-0078-fixed ManuallyDrop in instrument.rs, unsafe impl Sync PhantomNotSend). MSRV 1.63->1.65. Historical RUSTSEC-2023-0078 patched >=0.1.40; 0.1.44 OK."
+
+[[audits.tracing-attributes]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.1.30 -> 0.1.31"
+notes = "Proc-macro crate providing #[instrument]. Single change: support constant expressions as instrument field names (#3158). unsafe grep hits are #unsafety token passthrough in the generated fn signature, not runtime unsafe. No env/fs/net. Standard proc-macro2/quote/syn."
+
+[[audits.tracing-core]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.1.34 -> 0.1.36"
+notes = "Smallest diff in the family. Cargo.toml just reorders the tracing_unstable rustc-cfg in build.rs (no functional dep change). src changes are pure import reorganization (crate::stdlib -> explicit alloc/core/std imports) for no_std clarity; no logic changes, no new unsafe, no network. Added sync::Mutex re-export."
 
 [[audits.tracing-opentelemetry]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -1288,11 +1486,89 @@ criteria = "safe-to-deploy"
 version = "0.32.0"
 notes = "Reviewed 0.31.0->0.32.0: optional target attr, improved context activation/set_parent error handling, metrics layer retains provider; existing downcast unsafe unchanged."
 
+[[audits.tracing-opentelemetry]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.32.0 -> 0.33.0"
+notes = "Headline change: avoid deadlock when entering a span (#251, breaking) - a concurrency safety fix. Removed direct deps on opentelemetry_sdk/thiserror/rustversion. New layer/filtered.rs + otel_context.rs. 3 unsafe (up from 1) are standard downcast_raw trait-object downcasting with SAFETY comments. Stratus uses tracing_opentelemetry::layer().with_tracer() (API preserved, unaffected)."
+
+[[audits.tracing-subscriber]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.3.20 -> 0.3.23"
+notes = "0.3.21 yanked (depended on yanked tracing 0.1.42), 0.3.22 fixed that, 0.3.23 adds an option to disable ANSI sanitization (#3484; the RUSTSEC-2025-0055 ANSI-injection fix was already in 0.3.20). unsafe 15->26 all downcast_raw delegations through layered/tuple subscribers (#3379 - standard Subscriber/Layer downcast pattern, correctness improvement). Registry exit now decrements local span ref only; removed clone_span on enter for perf. tracing dep 0.1.41->0.1.43. Historical RUSTSEC-2025-0055 patched >=0.3.20; 0.3.23 OK."
+
 [[audits.uuid]]
 who = "Claude / cargo-vet auditor"
 criteria = "safe-to-deploy"
 delta = "1.18.1 -> 1.23.3"
 notes = "Reviewed uuid 1.18.1 -> 1.23.3 via cargo vet diff and upstream sources. Changes are maintenance/bug-fix release spanning 1.19.0-1.23.3: edition 2021, dependency updates (getrandom 0.3->0.4, rand 0.9->0.10, serde renamed to serde_core alias), v7 monotonicity/counter correctness fixes, parser panic fix, and removal of uuid-macro-internal proc-macro in favor of a declarative const macro. No new unsafe code; the existing unsafe is unchanged and limited to ASCII hex formatting transmutes. No network/filesystem/process I/O, build scripts, or crypto changes. No RustSec advisories. MSRV raised to 1.85.0; project uses Rust 1.88. Breaking changes (serde adapter strictness, deprecated Context/ContextV1, Timestamp::from_gregorian_time) are not used in stratus. Project only uses Uuid::now_v7() and Uuid::nil() via uuid v7 feature."
+
+[[audits.vergen]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "9.0.6 -> 9.1.0"
+notes = "Workspace-wide version alignment and Rust 2024 edition migration. No logic changes to core functions. Unsafe usage is only env::set_var() wrapped in unsafe {} to comply with Rust 2024 semantics, behind a non-default feature. No advisories."
+
+[[audits.vergen-gitcl]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "1.0.8 -> 9.1.0"
+notes = "Workspace-wide version alignment, not a breaking API change. Zero logic changes to run_cmd, git entry computation, or dirty/local offset logic. Only import reordering, lint updates for Rust 2024, and build.rs simplification. No advisories."
+
+[[audits.vergen-lib]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.1.6 -> 9.1.0"
+notes = "Workspace-wide edition-2024 synchronization. Only meaningful delta is unsafe { env::set_var(...) } required by Rust 2024 semantics, behind a non-default feature. No new dependencies, no network/IO. No advisories."
+
+[[audits.windows]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.57.0 -> 0.61.3"
+notes = "Massive diff is almost entirely auto-generated Windows API bindings from ECMA-335 metadata, which is the normal mode of operation. Manual code additions are small, safe convenience wrappers. Replaced windows-targets binary blobs with windows-link (native raw-dylib), a net security improvement. No advisories."
+
+[[audits.windows-collections]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+version = "0.2.0"
+notes = "Thin in-memory adapter bridging Rust collections to Windows Runtime interfaces. No manual unsafe blocks. Unsafe surface limited to standard auto-generated COM bindings. No build scripts, no network/IO. No advisories."
+
+[[audits.windows-core]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.57.0 -> 0.61.2"
+notes = "Restructuring to adopt windows-link and eliminate windows-targets. Unsafe footprint dropped by ~50% (435 -> 223 occurrences). Removed unsafe wrappers (heap.rs, delay_load.rs, waiter.rs). event.rs refactored from manual unsafe memory management to safe Arc + RwLock. No advisories."
+
+[[audits.windows-future]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+version = "0.2.1"
+notes = "Official Microsoft WinRT async interface wrappers. No build scripts, no proc macros. Unsafe code is limited to auto-generated COM vtables and well-documented Win32 sync API calls. No advisories."
+
+[[audits.windows-implement]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.57.0 -> 0.60.2"
+notes = "Proc-macro crate refactoring: split monolithic lib.rs into gen.rs and tests.rs. Added opt-in Agile = true/false attribute for COM implementations. No new dependencies. No unsafe in the macro itself. No advisories."
+
+[[audits.windows-interface]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.57.0 -> 0.59.3"
+notes = "Proc-macro refactoring of COM vtable generation. Simplified dispatch logic by removing Impl associated type. No new unsafe in macro source, no new dependencies, no build scripts. No advisories."
+
+[[audits.windows-numerics]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+version = "0.2.0"
+notes = "Small math library with 3 localized FFI calls to documented Windows system DLLs (d2d1.dll). No build scripts, no proc macros, no network/IO, no crypto. No advisories."
+
+[[audits.windows-threading]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+version = "0.1.0"
+notes = "Thin no_std wrapper over standard Windows thread pool APIs (kernel32.dll). All unsafe is tightly scoped to FFI calls. Safe public API enforces Send/Sync/'static. No build scripts, no proc macros. No advisories."
 
 [[audits.winnow]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"

@@ -12,6 +12,7 @@ use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::bail;
 pub use config::ExecutorConfig;
+pub use evm::types::AccessListOutput;
 pub use evm::types::CallExecutionOutput;
 pub use evm::types::EvmExecutionMetrics;
 pub use evm::types::EvmKind;
@@ -273,8 +274,6 @@ impl Executor {
         let function = codegen::function_sig(&tx.execution_info.input);
         #[cfg(feature = "metrics")]
         let contract = codegen::contract_name(&tx.execution_info.to);
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
 
         tracing::debug!(tx_hash = %tx.transaction_info.hash, "executing local transaction");
 
@@ -292,13 +291,27 @@ impl Executor {
         // Executes transactions serially:
         // * Uses a Mutex, so a new transactions starts executing only after the previous one is executed and persisted.
         // * Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.
-        let _transaction_lock = self.locks.transaction.lock();
+        #[cfg(feature = "metrics")]
+        let lock_wait_start = metrics::now();
+        let transaction_lock = self.locks.transaction.lock();
+
+        #[cfg(feature = "metrics")]
+        let lock_wait = lock_wait_start.elapsed();
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
 
         // execute transaction
         let tx_execution = self.execute_local_transaction_attempts(tx, INFINITE_ATTEMPTS);
 
         #[cfg(feature = "metrics")]
-        metrics::inc_executor_local_transaction(start.elapsed(), tx_execution.is_ok(), contract, function);
+        let execution_elapsed = start.elapsed();
+
+        drop(transaction_lock);
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_executor_local_transaction_lock_wait(lock_wait);
+        #[cfg(feature = "metrics")]
+        metrics::inc_executor_local_transaction(execution_elapsed, tx_execution.is_ok(), contract, function);
 
         tx_execution
     }
