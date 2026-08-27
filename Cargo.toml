@@ -53,7 +53,7 @@ tokio-util = "=0.7.18"
 async-trait = "=0.1.89"
 
 # config
-clap = { version = "=4.5.51", features = ["derive", "env"] }
+clap = { version = "=4.5.60", features = ["derive", "env"] }
 dotenvy = "=0.15.7"
 
 # serialization
@@ -79,7 +79,8 @@ alloy-rpc-types-eth = "=2.3.0"
 alloy-rpc-types-trace = "=2.3.0"
 alloy-sol-types = { version = "=1.6.1", features = ["json"] }
 alloy-trie = "=0.9.5"
-ethabi = "=18.0.0"
+alloy-dyn-abi = "=1.6.1"
+alloy-json-abi = "=1.6.1"
 revm-inspectors = { version = "=0.42.0", features = ["js-tracer"] }
 revm-state = "42.0.0"
 rlp = "=0.6.1"
@@ -88,8 +89,8 @@ rlp = "=0.6.1"
 jsonrpsee = { version = "=0.26.0", features = ["server", "client"] }
 reqwest = { version = "=0.12.24", features = ["json"] }
 tower = "=0.5.3"
-tower-http = { version = "=0.6.8", features = ["cors"] }
-http = "=1.3.1"
+tower-http = { version = "=0.7.0", features = ["cors"] }
+http = "=1.4.2"
 http-body = "=1.0.1"
 http-body-util = "=0.1.3"
 bytes = "=1.11.1"
@@ -98,10 +99,11 @@ bytes = "=1.11.1"
 log = "=0.4.29"
 metrics = "=0.24.2"
 metrics-exporter-prometheus = { version = "=0.17.2", optional = true }
-opentelemetry = "=0.31.0"
-opentelemetry_sdk = { version = "=0.31.0", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "=0.31.0", features = [
+opentelemetry = "=0.32.0"
+opentelemetry_sdk = { version = "=0.32.1", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "=0.32.0", features = [
     "http-proto",
+    "http-json",
     "reqwest-client",
     "reqwest-rustls",
     "tls",
@@ -110,19 +112,13 @@ opentelemetry-otlp = { version = "=0.31.0", features = [
 ] }
 sentry = "=0.48.0"
 sentry-tracing = "=0.48.0"
-tracing = { version = "=0.1.41", features = ["attributes"] }
-tracing-opentelemetry = "=0.32.0"
-tracing-subscriber = { version = "=0.3.20", features = ["env-filter", "json"] }
+tracing = { version = "=0.1.44", features = ["attributes"] }
+tracing-opentelemetry = "=0.33.0"
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter", "json"] }
 tracing-serde = "=0.2.0"
 
 # storage
 rocksdb = { version = "=0.24.0", features = ["multi-threaded-cf", "jemalloc"] }
-sqlx = { version = "=0.8.6", features = [
-    "runtime-tokio",
-    "postgres",
-    "bigdecimal",
-    "time",
-] }
 dashmap = "=6.1.0"
 
 # test
@@ -130,7 +126,7 @@ fake = { version = "=4.4.0", features = ["chrono", "derive"] }
 rdkafka = {version = "=0.38.0", features = ["ssl", "sasl"] }
 sasl2-sys = { version = "=0.1.22", features = ["vendored"] }
 
-# Historic events processor tool
+# Data migration
 indicatif = { version = "=0.18.3", optional = true }
 
 # ------------------------------------------------------------------------------
@@ -187,24 +183,11 @@ glob = "=0.3.3"
 hostname = "=0.4.2"
 nom = "=8.0.0"
 phf_codegen = "=0.13.1"
-vergen-gitcl = { version = "=1.0.8", features = ["build", "cargo", "rustc", "si"] }
+vergen-gitcl = { version = "=9.1.0", features = ["build", "cargo", "rustc", "si"] }
 
 # ------------------------------------------------------------------------------
 # Binaries
 # ------------------------------------------------------------------------------
-
-[[bin]]
-name = "rpc-downloader"
-path = "src/bin/rpc_downloader.rs"
-
-[[bin]]
-name = "importer-offline"
-path = "src/bin/importer_offline.rs"
-
-[[bin]]
-name = "historic_events_processor"
-path = "src/bin/historic_events_processor.rs"
-required-features = ["tools"]
 
 [[bin]]
 name = "data_migration"
@@ -261,6 +244,13 @@ unwrap_used = "allow"
 expect_used = "warn"
 panic = "warn"
 
+# CI-only profile: strips debug symbols from dependencies to keep the shared
+# `stable-release` cache small, while keeping full debug info for stratus itself.
+[profile.ci]
+inherits = "dev"
+
+[profile.ci.package."*"]
+debug = false
 
 [profile.release]
 lto = "fat"
