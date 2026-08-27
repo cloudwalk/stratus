@@ -200,7 +200,7 @@ required-features = ["tools"]
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["metrics", "tracing"]
+default = []
 
 # Application is running in develoment mode.
 dev = []
