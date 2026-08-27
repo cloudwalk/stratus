@@ -271,7 +271,8 @@ impl TransactionExecutionOutput {
     fn parse_revm_state(revm_state: EvmState) -> Result<(State<Complete>, Option<Address>), StratusError> {
         let mut deployed_contract_address = None;
         let mut execution_changes = State::default();
-
+        // might be improved by only keeping slots read from perm and modified slots
+        // and discard stots found in temp and cache
         for (revm_address, mut revm_account) in revm_state {
             let address: Address = revm_address.into();
 
