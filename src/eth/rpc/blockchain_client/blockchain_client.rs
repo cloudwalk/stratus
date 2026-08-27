@@ -37,7 +37,7 @@ use crate::log_and_err;
 
 #[derive(Debug)]
 pub struct BlockchainClient {
-    pub(super) http: HttpClient,
+    http: HttpClient,
     pub http_url: String,
     ws: Option<RwLock<WsClient>>,
     ws_url: Option<String>,
@@ -160,13 +160,13 @@ impl BlockchainClient {
     /// Fetches a block by number with receipts.
     pub async fn fetch_block_and_receipts(&self, block_number: BlockNumber) -> anyhow::Result<Option<ExternalBlockWithReceipts>> {
         tracing::debug!(%block_number, "fetching block");
-        ImporterPaginationClient::new(self).fetch_block_and_receipts(block_number).await
+        ImporterPaginationClient::new(&self.http).fetch_block_and_receipts(block_number).await
     }
 
     /// Fetches a block by number with changes.
     pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<(BlockRocksdb, BlockChangesRocksdb)>> {
         tracing::debug!(%block_number, "fetching block with changes");
-        ImporterPaginationClient::new(self).fetch_block_with_changes(block_number).await
+        ImporterPaginationClient::new(&self.http).fetch_block_with_changes(block_number).await
     }
 
     /// Fetches a block by number.

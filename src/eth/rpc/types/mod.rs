@@ -21,7 +21,6 @@ pub use log_filter_input::LogFilterInputTopic;
 pub use pagination::CursorPageInfo;
 pub use pagination::PageReducer;
 pub use pagination::PaginatedPageFetcher;
-pub use pagination::PaginatorConfig;
 pub use rpc_client_app::RpcClientApp;
 pub use timestamp_filter::BlockTimestampFilter;
 pub use timestamp_filter::BlockTimestampSeekMode;

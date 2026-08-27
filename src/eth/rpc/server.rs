@@ -41,7 +41,6 @@ use tracing::info_span;
 
 use crate::GlobalState;
 use crate::NodeMode;
-use crate::alias::AlloyReceipt;
 use crate::alias::JsonValue;
 use crate::config::StratusConfig;
 use crate::eth::codegen;
@@ -258,7 +257,7 @@ impl Server {
     async fn health(&self) -> bool {
         match GlobalState::get_node_mode() {
             NodeMode::Leader | NodeMode::FakeLeader => true,
-            NodeMode::Follower =>
+            NodeMode::Follower => {
                 if GlobalState::is_importer_shutdown() {
                     tracing::warn!("stratus is unhealthy because importer is shutdown");
                     false
@@ -270,7 +269,8 @@ impl Server {
                             false
                         }
                     }
-                },
+                }
+            }
         }
     }
 }
@@ -899,21 +899,7 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
 
     // parse params
     let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
-    let pagination = ImporterPagination::from_params(params, filter)?;
-
-    if let Some((filter, pagination)) = pagination {
-        tracing::info!(%filter, "reading block and receipts (paginated)");
-
-        let Some(block) = ctx.server.storage.read_block(filter)? else {
-            tracing::info!(%filter, "block not found");
-            return Ok(JsonValue::Null);
-        };
-
-        let response = pagination.block_and_receipts_response(block)?;
-        let info = response.pagination.as_ref().expect("paginated response always has page info");
-        tracing::info!(%filter, returned = info.returned, total = info.total, "block with transactions page found");
-        return Ok(json!(response));
-    }
+    let (filter, pagination) = ImporterPagination::from_params(params, filter, ctx.server.rpc_config.rpc_max_response_size_bytes)?;
 
     tracing::info!(%filter, "reading block and receipts");
 
@@ -922,13 +908,11 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
         return Ok(JsonValue::Null);
     };
 
-    tracing::info!(%filter, "block with transactions found");
-    let receipts = block.transactions.iter().cloned().map(AlloyReceipt::from).collect::<Vec<_>>();
+    let response = pagination.block_and_receipts_response(block)?;
 
-    Ok(json!({
-        "block": block.to_json_rpc_with_full_transactions(),
-        "receipts": receipts,
-    }))
+    tracing::info!(%filter, paginated = response.get("pagination").is_some(), "block with transactions found");
+
+    Ok(response)
 }
 
 fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
@@ -938,32 +922,20 @@ fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext:
 
     // parse params
     let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
-    let pagination = ImporterPagination::from_params(params, filter)?;
-
-    if let Some((filter, pagination)) = pagination {
-        tracing::info!(%filter, "reading block and changes (paginated)");
-
-        let Some((block, changes)) = ctx.server.storage.read_block_with_changes(filter)? else {
-            tracing::info!(%filter, "block not found");
-            return Ok(JsonValue::Null);
-        };
-
-        let response = pagination.block_with_changes_response(block, changes)?;
-        let info = response.pagination.as_ref().expect("paginated response always has page info");
-        tracing::info!(%filter, returned = info.returned, total = info.total, "block with changes page found");
-        return Ok(json!(response));
-    }
+    let (filter, pagination) = ImporterPagination::from_params(params, filter, ctx.server.rpc_config.rpc_max_response_size_bytes)?;
 
     tracing::info!(%filter, "reading block and changes");
 
-    let Some(block) = ctx.server.storage.read_block_with_changes(filter)? else {
+    let Some((block, changes)) = ctx.server.storage.read_block_with_changes(filter)? else {
         tracing::info!(%filter, "block not found");
         return Ok(JsonValue::Null);
     };
 
-    tracing::info!(%filter, "block with changes found");
+    let response = pagination.block_with_changes_response(block, changes)?;
 
-    Ok(json!(block))
+    tracing::info!(%filter, paginated = response.get("pagination").is_some(), "block with changes found");
+
+    Ok(response)
 }
 
 fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {

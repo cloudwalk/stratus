@@ -58,26 +58,24 @@ describe("Pagination", function () {
             }
         });
 
-        it("returns single page when block fits within limit but pagination param is provided", async function () {
+        it("returns one-shot legacy shape when block fits within limit", async function () {
             await sendReset();
 
             const { blockHash } = await mineBlockWithTransactions(1);
 
-            // Fetch with pagination param
-            const paginated = await send("stratus_getBlockAndReceipts", [
+            // Fits within the limit: server responds with the complete block in one shot,
+            // exactly like the legacy response (no pagination field).
+            const oneShot = await send("stratus_getBlockAndReceipts", [
                 blockHash,
                 { cursor: null, limit: PAGE_LIMIT },
             ]);
-            expect(paginated.pagination.returned).to.equal(1);
-            expect(paginated.pagination.total).to.equal(1);
-            expect(paginated.pagination.nextCursor).to.be.null;
-            expect(paginated.block.transactions).to.have.length(1);
-            expect(paginated.receipts).to.have.length(1);
+            expect(oneShot).to.not.have.property("pagination");
+            expect(oneShot.block.transactions).to.have.length(1);
+            expect(oneShot.receipts).to.have.length(1);
 
-            // Compare against legacy (no pagination param)
+            // Byte-identical to the legacy (no pagination param) response
             const legacy = await send("stratus_getBlockAndReceipts", [blockHash]);
-            expect(paginated.block).to.deep.equal(legacy.block);
-            expect(paginated.receipts).to.deep.equal(legacy.receipts);
+            expect(oneShot).to.deep.equal(legacy);
         });
     });
 
@@ -123,20 +121,26 @@ describe("Pagination", function () {
             expect(reassembledTxs).to.deep.equal(legacyBlock.transactions);
         });
 
-        it("returns single page when block fits within limit but pagination param is provided", async function () {
+        it("returns one-shot legacy tuple when block fits within limit", async function () {
             await sendReset();
 
             const { blockHash } = await mineBlockWithTransactions(1);
 
-            const response = await send("stratus_getBlockWithChanges", [
+            // Fits within the limit: server responds with the legacy tuple [block, changes],
+            // no pagination field.
+            const oneShot = await send("stratus_getBlockWithChanges", [
                 blockHash,
                 { cursor: null, limit: PAGE_LIMIT },
             ]);
-            expect(response.pagination.nextCursor).to.be.null;
-            expect(response.block).to.not.be.null;
-            expect(response.changes).to.not.be.null;
-            expect(response.block.transactions).to.have.length(1);
-            expect(response.pagination.returned).to.be.greaterThan(0);
+            expect(Array.isArray(oneShot), "one-shot response should be a tuple array").to.be.true;
+            expect(oneShot).to.not.have.property("pagination");
+            expect(oneShot[0], "first element should be the block").to.not.be.null;
+            expect(oneShot[0].transactions).to.have.length(1);
+            expect(oneShot[1], "second element should be the changes").to.not.be.null;
+
+            // Byte-identical to the legacy (no pagination param) response
+            const legacy = await send("stratus_getBlockWithChanges", [blockHash]);
+            expect(oneShot).to.deep.equal(legacy);
         });
 
         it("returns raw tuple [block, changes] when no pagination param is provided", async function () {

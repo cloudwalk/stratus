@@ -25,7 +25,6 @@ use crate::alias::JsonValue;
 use crate::eth::types::Address;
 use crate::eth::types::Block;
 use crate::eth::types::BlockNumber;
-#[cfg(test)]
 use crate::eth::types::ExternalTransaction;
 use crate::eth::types::Hash;
 use crate::eth::types::UnixTime;
@@ -58,13 +57,26 @@ impl ExternalBlock {
         self.0.header.inner.beneficiary.into()
     }
 
+    /// Named error used when the transaction collection is not [`BlockTransactions::Full`].
+    const ERR_NOT_FULL_TXS: &str = "expected full transactions, got hashes or uncle";
+
+    fn full_transactions(&self) -> anyhow::Result<&Vec<ExternalTransaction>> {
+        match &self.0.transactions {
+            BlockTransactions::Full(transactions) => Ok(transactions),
+            _ => bail!(Self::ERR_NOT_FULL_TXS),
+        }
+    }
+
+    fn full_transactions_mut(&mut self) -> anyhow::Result<&mut Vec<ExternalTransaction>> {
+        match &mut self.0.transactions {
+            BlockTransactions::Full(transactions) => Ok(transactions),
+            _ => bail!(Self::ERR_NOT_FULL_TXS),
+        }
+    }
+
     /// Returns the number of full transactions in the block.
     pub fn try_full_transactions_len(&self) -> anyhow::Result<usize> {
-        let BlockTransactions::Full(transactions) = &self.0.transactions else {
-            bail!("expected full transactions, got hashes or uncle");
-        };
-
-        Ok(transactions.len())
+        Ok(self.full_transactions()?.len())
     }
 
     /// Appends full transactions from another page of the same block.
@@ -78,13 +90,11 @@ impl ExternalBlock {
         }
 
         let BlockTransactions::Full(other_transactions) = other.0.transactions else {
-            bail!("expected full transactions, got hashes or uncle");
+            bail!(Self::ERR_NOT_FULL_TXS);
         };
-        let BlockTransactions::Full(transactions) = &mut self.0.transactions else {
-            bail!("expected full transactions, got hashes or uncle");
-        };
-
+        let transactions = self.full_transactions_mut()?;
         transactions.extend(other_transactions);
+
         Ok(())
     }
 }
