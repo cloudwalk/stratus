@@ -508,8 +508,8 @@ impl StratusStorage {
 
         timed(|| {
             let guard = self.transient_state_lock.write();
-            self.cache.cache_account_and_slots_latest_from_changes(&changes);
             self.perm.save_block(block, changes.finalize())?;
+            self.cache.cache_account_and_slots_latest_from_changes(changes);
             drop(guard);
             Ok(())
         })

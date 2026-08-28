@@ -135,18 +135,18 @@ impl State<Complete> {
             .for_each(|((address, index), changes)| self.insert_slot(address, index, changes));
     }
 
-    pub fn finalize(self) -> State<Final> {
+    pub fn finalize(&self) -> State<Final> {
         let accounts = self
             .accounts
-            .into_iter()
-            .filter_map(|(address, account)| account.complete().map(|acc| (address, acc)))
+            .iter()
+            .filter_map(|(address, account)| account.complete().map(|acc| ((*address), acc)))
             .collect();
 
         let slots = self
             .slots
-            .into_iter()
+            .iter()
             .filter(|(_, change)| change.is_changed())
-            .map(|(slot_key, slot_value)| (slot_key, slot_value.take_value()))
+            .map(|(slot_key, slot_value)| (*(slot_key), slot_value.clone().take_value()))
             .collect();
         State { accounts, slots }
     }
@@ -340,13 +340,14 @@ impl AccountChanges<Complete> {
         self.nonce.is_changed() || self.balance.is_changed() || self.bytecode.is_changed()
     }
 
-    pub fn complete(self) -> Option<AccountChanges<Final>> {
+    pub fn complete(&self) -> Option<AccountChanges<Final>> {
         self.is_changed().then(|| AccountChanges {
-            nonce: self.nonce,
-            balance: self.balance,
-            bytecode: self.bytecode,
+            nonce: self.nonce.clone(),
+            balance: self.balance.clone(),
+            bytecode: self.bytecode.clone(),
         })
     }
+
     pub fn merge(&mut self, other: AccountChanges<Complete>) {
         self.nonce.merge(other.nonce);
         self.balance.merge(other.balance);

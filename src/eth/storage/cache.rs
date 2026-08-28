@@ -66,23 +66,23 @@ impl StorageCache {
     }
 
     fn _cache_account_and_slots_from_changes_impl(
-        changes: &State<Complete>,
+        changes: State<Complete>,
         account_cache: &Cache<Address, Account, UnitWeighter, FxBuildHasher>,
         slot_cache: &Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
     ) {
         // cache accounts
-        for (address, change) in changes.accounts.iter() {
-            let account = change.clone().to_account(*address);
-            account_cache.insert(*address, account);
+        for (address, change) in changes.accounts.into_iter() {
+            let account = change.clone().to_account(address);
+            account_cache.insert(address, account);
         }
 
         // cache slots
-        for ((address, index), value) in changes.slots.iter() {
-            slot_cache.insert((*address, *index), *value.value());
+        for ((address, index), value) in changes.slots.into_iter() {
+            slot_cache.insert((address, index), value.take_value());
         }
     }
 
-    pub fn cache_account_and_slots_latest_from_changes(&self, changes: &State<Complete>) {
+    pub fn cache_account_and_slots_latest_from_changes(&self, changes: State<Complete>) {
         Self::_cache_account_and_slots_from_changes_impl(changes, &self.account_latest_cache, &self.slot_latest_cache);
     }
 
