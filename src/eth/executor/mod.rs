@@ -336,35 +336,14 @@ impl Executor {
             let evm_input = TransactionExecutionInput::from_eth_transaction(&tx_input, pending_header.number, *pending_header.timestamp);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
-            let (evm_result, evm_metrics): (TransactionExecutionOutput, EvmExecutionMetrics) = self.evms.execute(EvmRoute::Transaction(evm_input.clone()))?;
+            let (evm_result, _): (TransactionExecutionOutput, EvmExecutionMetrics) = self.evms.execute(EvmRoute::Transaction(evm_input.clone()))?;
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
             let tx_execution = TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result.outcome);
 
-            #[cfg(feature = "metrics")]
-            let gas_used = tx_execution.output.gas_used;
-            #[cfg(feature = "metrics")]
-            let function = codegen::function_sig(&tx_input.execution_info.input);
-            #[cfg(feature = "metrics")]
-            let contract = codegen::contract_name(&tx_input.execution_info.to);
-
-            if let ExecutionResult::Reverted { reason } = &tx_execution.output.result {
-                #[cfg(feature = "metrics")]
-                metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());
-            }
-
             match self.miner.save_execution(tx_execution, evm_result.state) {
-                Ok(_) => {
-                    // track metrics
-                    #[cfg(feature = "metrics")]
-                    {
-                        metrics::inc_executor_local_transaction_account_reads(evm_metrics.slot_access.account_reads, contract, function);
-                        metrics::inc_executor_local_transaction_slot_reads(evm_metrics.slot_access.slot_reads, contract, function);
-                        metrics::inc_executor_local_transaction_gas(gas_used.as_u64() as usize, true, contract, function);
-                    }
-                    return Ok(());
-                }
+                Ok(_) => return Ok(()),
                 Err(e) => match e {
                     StratusError::Storage(StorageError::EvmInputMismatch { .. }) => {
                         if attempt >= max_attempts {

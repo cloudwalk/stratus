@@ -58,7 +58,6 @@ impl EvmWorkerPool {
                     return;
                 }
 
-                let _guard = kind.mark_executor_pool_busy();
                 if let Err(StratusError::Executor(ExecutorError::Panic { .. })) = task.execute(&mut evm) {
                     evm = Evm::new(Arc::clone(&storage), &config, kind);
                 }

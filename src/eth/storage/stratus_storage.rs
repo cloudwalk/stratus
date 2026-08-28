@@ -49,7 +49,6 @@ use crate::infra::tracing::SpanExt;
 mod label {
     pub(super) const TEMP: &str = "temporary";
     pub(super) const PERM: &str = "permanent";
-    pub(super) const CACHE: &str = "cache";
 }
 
 /// Proxy that simplifies interaction with permanent and temporary storages.
@@ -103,28 +102,15 @@ impl EntityRead for Account {
     type Key = Address;
 
     fn read_temp(s: &StratusStorage, address: Address) -> Option<Self> {
-        timed(|| s.temp.read_account(address)).with(|m| {
-            if m.result.is_some() {
-                metrics::inc_storage_read_account(m.elapsed, label::TEMP, PointInTime::Pending, true);
-            }
-        })
+        s.temp.read_account(address)
     }
 
     fn read_latest_cache(s: &StratusStorage, address: Address) -> Option<Self> {
-        timed(|| s.cache.get_account_latest(address)).with(|m| {
-            if m.result.is_some() {
-                metrics::inc_storage_read_account(m.elapsed, label::CACHE, PointInTime::Latest, true);
-            }
-        })
+        s.cache.get_account_latest(address)
     }
 
     fn read_perm(s: &StratusStorage, address: Address, point: MinedPointInTime<'_>) -> Result<Self, StorageError> {
-        let account = timed(|| s.perm.read_account(address, &point)).with(|m| {
-            if let Ok(opt) = &m.result {
-                metrics::inc_storage_read_account(m.elapsed, label::PERM, point, opt.is_some());
-            }
-        })?;
-        Ok(account.unwrap_or_else(|| Account::new_empty(address)))
+        Ok(s.perm.read_account(address, &point)?.unwrap_or_else(|| Account::new_empty(address)))
     }
 
     fn cache_latest_if_missing(s: &StratusStorage, address: Address, account: Self) {
@@ -137,30 +123,17 @@ impl EntityRead for Slot {
 
     fn read_temp(s: &StratusStorage, key: (Address, SlotIndex)) -> Option<Self> {
         let (address, index) = key;
-        timed(|| s.temp.read_slot(address, index)).with(|m| {
-            if m.result.is_some() {
-                metrics::inc_storage_read_slot(m.elapsed, label::TEMP, PointInTime::Pending, true);
-            }
-        })
+        s.temp.read_slot(address, index)
     }
 
     fn read_latest_cache(s: &StratusStorage, key: (Address, SlotIndex)) -> Option<Self> {
         let (address, index) = key;
-        timed(|| s.cache.get_slot_latest(address, index)).with(|m| {
-            if m.result.is_some() {
-                metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Latest, true);
-            }
-        })
+        s.cache.get_slot_latest(address, index)
     }
 
     fn read_perm(s: &StratusStorage, key: (Address, SlotIndex), point: MinedPointInTime<'_>) -> Result<Self, StorageError> {
         let (address, index) = key;
-        let slot = timed(|| s.perm.read_slot(address, index, &point)).with(|m| {
-            if let Ok(opt) = &m.result {
-                metrics::inc_storage_read_slot(m.elapsed, label::PERM, point, opt.is_some());
-            }
-        })?;
-        Ok(slot.unwrap_or_else(|| Slot::new_empty(index)))
+        Ok(s.perm.read_slot(address, index, &point)?.unwrap_or_else(|| Slot::new_empty(index)))
     }
 
     fn cache_latest_if_missing(s: &StratusStorage, key: (Address, SlotIndex), slot: Self) {
@@ -262,9 +235,7 @@ impl StratusStorage {
     }
 
     pub fn read_pending_block_header(&self) -> PendingBlockHeader {
-        timed(|| self.temp.read_pending_block_header()).with(|m| {
-            metrics::inc_storage_read_pending_block_number(m.elapsed, label::TEMP, true);
-        })
+        self.temp.read_pending_block_header()
     }
 
     pub fn read_mined_block_number(&self) -> BlockNumber {
@@ -367,9 +338,7 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     pub fn save_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
-        timed(|| self.temp.save_pending_execution(tx, state)).with(|m| {
-            metrics::inc_storage_save_execution(m.elapsed, label::TEMP, m.result.is_ok());
-        })
+        self.temp.save_pending_execution(tx, state)
     }
 
     /// Retrieves pending transactions being mined.
