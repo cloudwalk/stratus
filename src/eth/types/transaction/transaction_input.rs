@@ -126,21 +126,13 @@ impl TransactionInput {
     /// Returns the recovered signer address.
     ///
     /// If the signer has not been recovered yet, this method recovers it on demand
-    /// from the transaction fields and logs a warning so that missing recovery calls
-    /// are visible.
+    /// from the transaction fields.
     pub fn signer(&self) -> Address {
         if let Some(addr) = self.execution_info.signer.address() {
             return addr;
         }
 
-        tracing::warn!(tx_hash = %self.transaction_info.hash, "Transaction signer was not recovered before accessing it; recovering on demand");
-        match self.recover_signer_address() {
-            Ok(addr) => addr,
-            Err(e) => {
-                tracing::error!(tx_hash = %self.transaction_info.hash, error = ?e, "failed to recover transaction signer on demand");
-                Address::ZERO
-            }
-        }
+        self.recover_signer_address().unwrap_or(Address::ZERO)
     }
 
     /// Recovers the signer address from the transaction fields already stored in this input.

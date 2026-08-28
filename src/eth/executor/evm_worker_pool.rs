@@ -54,13 +54,11 @@ impl EvmWorkerPool {
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
-                if GlobalState::is_shutdown_warn(task_name) {
+                if GlobalState::is_shutdown() {
                     return;
                 }
 
-                let _guard = kind.mark_executor_pool_busy();
-                if let Err(StratusError::Executor(ExecutorError::Panic { err: panic_err })) = task.execute(&mut evm) {
-                    tracing::error!(?panic_err, "executor panicked; recreating EVM");
+                if let Err(StratusError::Executor(ExecutorError::Panic { .. })) = task.execute(&mut evm) {
                     evm = Evm::new(Arc::clone(&storage), &config, kind);
                 }
             }
