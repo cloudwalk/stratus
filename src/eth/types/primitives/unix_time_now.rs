@@ -3,7 +3,7 @@ use display_json::DebugAsJson;
 use crate::eth::types::UnixTime;
 
 /// [`UnixTime`] that automatically sets the current time when created.
-#[derive(DebugAsJson, Clone, PartialEq, Eq, derive_more::Deref, serde::Serialize)]
+#[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, derive_more::Deref, serde::Serialize)]
 #[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
 pub struct UnixTimeNow(#[deref] UnixTime);
 

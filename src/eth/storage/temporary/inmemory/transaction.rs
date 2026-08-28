@@ -59,10 +59,9 @@ impl InmemoryTransactionTemporaryStorage {
     // Block number
     // -------------------------------------------------------------------------
 
-    // Uneeded clone here, return Cow
     pub fn read_pending_block_header(&self) -> PendingBlockHeader {
         let pending_block = self.pending_block.read();
-        pending_block.block.header.clone()
+        pending_block.block.header
     }
 
     #[cfg(feature = "dev")]
@@ -75,7 +74,7 @@ impl InmemoryTransactionTemporaryStorage {
     // Block and executions
     // -------------------------------------------------------------------------
 
-    pub fn save_pending_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
+    pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
         // check conflicts
         let pending_block = self.pending_block.upgradable_read();
         if tx.input != &pending_block.block.header {
@@ -91,7 +90,7 @@ impl InmemoryTransactionTemporaryStorage {
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
-        pending_block.block_changes.merge(tx.output.state.clone()); // TODO: This clone can be removed by reworking the primitives
+        pending_block.block_changes.merge(state);
 
         // save execution
         pending_block.block.push_transaction(tx);
