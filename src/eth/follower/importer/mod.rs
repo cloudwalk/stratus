@@ -274,7 +274,6 @@ mod tests {
     use crate::eth::executor::State;
     use crate::eth::executor::TransactionExecution;
     use crate::eth::executor::TransactionExecutionInput;
-    use crate::eth::executor::TransactionExecutionOutput;
     use crate::eth::executor::TransactionExecutionResult;
     use crate::eth::executor::types::state::AccountChanges;
     use crate::eth::executor::types::state::Complete;
@@ -314,20 +313,17 @@ mod tests {
     }
 
     /// Mines a block applying `changes` (mirrors the helper in `stratus_storage` tests).
-    fn mine_block(storage: &StratusStorage, changes: State<Complete>) {
+    fn mine_block(storage: &StratusStorage, state: State<Complete>) {
         let header = storage.read_pending_block_header();
         let evm_input = TransactionExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
-        let result = TransactionExecutionOutput {
-            outcome: TransactionExecutionResult {
-                result: ExecutionResult::Success,
-                ..Default::default()
-            },
-            state: changes,
+        let result = TransactionExecutionResult {
+            result: ExecutionResult::Success,
+            ..Default::default()
         };
 
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
-        storage.save_execution(tx).expect("save execution");
+        storage.save_execution(tx, state).expect("save execution");
 
         let (block, block_changes) = storage.finish_pending_block();
         storage.save_block(block.into(), block_changes).expect("save block");
