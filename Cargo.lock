@@ -6209,6 +6209,7 @@ dependencies = [
  "display_json",
  "dotenvy",
  "fake",
+ "foldhash 0.2.0",
  "futures",
  "futures-channel",
  "futures-timer",
