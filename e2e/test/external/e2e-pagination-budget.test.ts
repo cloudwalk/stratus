@@ -23,11 +23,15 @@ async function fetchAllPages(method: string, blockHash: string): Promise<any[]> 
         expect(response.data.error, `${method} should succeed`).to.be.undefined;
 
         const bodyBytes = Buffer.byteLength(JSON.stringify(response.data), "utf8");
-        expect(bodyBytes, `page ${pages.length + 1} exceeded cap: ${bodyBytes} > ${RESPONSE_CAP_BYTES}`).to.be.at.most(RESPONSE_CAP_BYTES);
+        expect(bodyBytes, `page ${pages.length + 1} exceeded cap: ${bodyBytes} > ${RESPONSE_CAP_BYTES}`).to.be.at.most(
+            RESPONSE_CAP_BYTES,
+        );
 
         const page = response.data.result;
         expect(page, `page ${pages.length + 1} should be paginated`).to.have.property("pagination");
-        expect(page.pagination.limit).to.be.greaterThan(RESPONSE_CAP_BYTES / 2).and.to.be.at.most(RESPONSE_CAP_BYTES);
+        expect(page.pagination.limit)
+            .to.be.greaterThan(RESPONSE_CAP_BYTES / 2)
+            .and.to.be.at.most(RESPONSE_CAP_BYTES);
         expect(page.pagination.returned, "every page must make progress").to.be.greaterThan(0);
 
         pages.push(page);

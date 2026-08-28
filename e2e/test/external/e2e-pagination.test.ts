@@ -65,10 +65,7 @@ describe("Pagination", function () {
 
             // Fits within the limit: server responds with the complete block in one shot,
             // exactly like the legacy response (no pagination field).
-            const oneShot = await send("stratus_getBlockAndReceipts", [
-                blockHash,
-                { cursor: null, limit: PAGE_LIMIT },
-            ]);
+            const oneShot = await send("stratus_getBlockAndReceipts", [blockHash, { cursor: null, limit: PAGE_LIMIT }]);
             expect(oneShot).to.not.have.property("pagination");
             expect(oneShot.block.transactions).to.have.length(1);
             expect(oneShot.receipts).to.have.length(1);
@@ -128,10 +125,7 @@ describe("Pagination", function () {
 
             // Fits within the limit: server responds with the legacy tuple [block, changes],
             // no pagination field.
-            const oneShot = await send("stratus_getBlockWithChanges", [
-                blockHash,
-                { cursor: null, limit: PAGE_LIMIT },
-            ]);
+            const oneShot = await send("stratus_getBlockWithChanges", [blockHash, { cursor: null, limit: PAGE_LIMIT }]);
             expect(Array.isArray(oneShot), "one-shot response should be a tuple array").to.be.true;
             expect(oneShot).to.not.have.property("pagination");
             expect(oneShot[0], "first element should be the block").to.not.be.null;
