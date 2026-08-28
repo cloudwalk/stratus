@@ -200,10 +200,6 @@ impl Miner {
     pub fn save_execution(&self, tx_execution: TransactionExecution, state: State<Complete>) -> Result<(), StratusError> {
         let tx_hash = tx_execution.info.hash;
 
-        // track
-        #[cfg(feature = "tracing")]
-        let _span = info_span!("miner::save_execution", %tx_hash).entered();
-
         // Check if automine is enabled
         let is_automine = self.mode().is_automine();
 

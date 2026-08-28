@@ -3,7 +3,6 @@ use std::panic::catch_unwind;
 
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::anyhow;
-use tracing::Span;
 
 use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::Evm;
@@ -16,7 +15,6 @@ use crate::eth::executor::types::error::ExecutorError;
 use crate::eth::types::StratusError;
 
 pub struct EvmTask<T: Task + Send> {
-    pub span: Span,
     task: T,
 }
 
@@ -46,13 +44,12 @@ pub enum EvmRoute {
 
 impl<T: Task + Send> From<T> for EvmTask<T> {
     fn from(task: T) -> Self {
-        Self { span: Span::current(), task }
+        Self { task }
     }
 }
 
 impl<T: Task + Send> EvmTask<T> {
     pub fn execute(self, evm: &mut Evm<T::Input>) -> anyhow::Result<(), StratusError> {
-        let _enter = self.span.enter();
         catch_unwind(AssertUnwindSafe(|| self.task.execute(evm))).map_err(|err| ExecutorError::Panic { err: anyhow!("{err:?}") }.into())
     }
 }
@@ -67,9 +64,7 @@ impl<Input: EvmInput> Task for ExecutionTask<Input> {
     type Input = Input;
 
     fn execute(self, evm: &mut Evm<Self::Input>) {
-        if let Err(e) = self.response_tx.send(evm.execute(self.input)) {
-            tracing::error!(reason = ?e, "failed to send evm task execution result");
-        }
+        let _ = self.response_tx.send(evm.execute(self.input));
     }
 }
 

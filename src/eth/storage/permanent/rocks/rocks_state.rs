@@ -355,13 +355,10 @@ impl RocksStorageState {
         match point {
             MinedPointInTime::Latest(_, _) => {
                 let Some(inner_account) = self.accounts.get(&address.into())? else {
-                    tracing::trace!(%address, "account not found");
                     return Ok(None);
                 };
 
-                let account = inner_account.to_account(address);
-                tracing::trace!(%address, ?account, "account found");
-                Ok(Some(account))
+                Ok(Some(inner_account.to_account(address)))
             }
             MinedPointInTime::Past(_, block_number) => {
                 let block_number = *block_number;

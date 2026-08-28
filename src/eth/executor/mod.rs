@@ -21,7 +21,6 @@ pub use evm::types::TransactionExecutionOutput;
 pub use evm::types::TransactionExecutionResult;
 use parking_lot::Mutex;
 use tracing::Span;
-use tracing::debug_span;
 #[cfg(feature = "tracing")]
 use tracing::info_span;
 pub use types::ExecutionResult;
@@ -332,37 +331,11 @@ impl Executor {
         loop {
             attempt += 1;
 
-            // track
-            let _span = debug_span!(
-                "executor::local_transaction_attempt",
-                %attempt,
-                tx_hash = %tx_input.transaction_info.hash,
-                tx_from = %tx_input.signer(),
-                tx_to = tracing::field::Empty,
-                tx_nonce = %tx_input.execution_info.nonce
-            )
-            .entered();
-            Span::with(|s| {
-                s.rec_opt("tx_to", &tx_input.execution_info.to);
-            });
-
             // prepare evm input
             let pending_header = self.storage.read_pending_block_header();
             let evm_input = TransactionExecutionInput::from_eth_transaction(&tx_input, pending_header.number, *pending_header.timestamp);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
-            tracing::debug!(
-                %attempt,
-                tx_hash = %tx_input.transaction_info.hash,
-                tx_nonce = %tx_input.execution_info.nonce,
-                tx_signer = %tx_input.signer(),
-                tx_to = ?tx_input.execution_info.to,
-                tx_data_len = %tx_input.execution_info.input.len(),
-                tx_data = %tx_input.execution_info.input,
-                ?evm_input,
-                "executing local transaction attempt"
-            );
-
             let (evm_result, evm_metrics): (TransactionExecutionOutput, EvmExecutionMetrics) = self.evms.execute(EvmRoute::Transaction(evm_input.clone()))?;
 
             // save execution to temporary storage
@@ -377,7 +350,6 @@ impl Executor {
             let contract = codegen::contract_name(&tx_input.execution_info.to);
 
             if let ExecutionResult::Reverted { reason } = &tx_execution.output.result {
-                tracing::info!(?reason, "local transaction execution reverted");
                 #[cfg(feature = "metrics")]
                 metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());
             }
@@ -394,8 +366,7 @@ impl Executor {
                     return Ok(());
                 }
                 Err(e) => match e {
-                    StratusError::Storage(StorageError::EvmInputMismatch { ref expected, ref actual }) => {
-                        tracing::warn!(?expected, ?actual, "evm input and block header mismatch");
+                    StratusError::Storage(StorageError::EvmInputMismatch { .. }) => {
                         if attempt >= max_attempts {
                             return Err(e);
                         }

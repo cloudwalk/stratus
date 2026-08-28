@@ -294,15 +294,6 @@ impl TransactionExecutionOutput {
                 continue;
             }
 
-            tracing::debug!(
-                %address,
-                status = ?revm_account.status,
-                balance = %revm_account.info.balance,
-                nonce = %revm_account.info.nonce,
-                slots = %revm_account.storage.len(),
-                "evm account"
-            );
-
             if revm_account.is_created() && revm_account.info.code.is_some() {
                 deployed_contract_address = Some(address);
             }
@@ -323,7 +314,6 @@ impl TryFrom<RevmResultAndState> for TransactionExecutionOutput {
     fn try_from(value: RevmResultAndState) -> Result<Self, Self::Error> {
         let (result, tx_output, logs, gas) = Self::parse_revm_result(value.result);
         let (changes, deployed_contract_address) = Self::parse_revm_state(value.state)?;
-        tracing::debug!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
 
         Ok(TransactionExecutionOutput {
             outcome: TransactionExecutionResult {
