@@ -1,5 +1,4 @@
 use alloy_primitives::U256;
-use anyhow::anyhow;
 use display_json::DebugAsJson;
 use revm::Database;
 use revm::context::TransactTo;
@@ -9,12 +8,11 @@ use crate::eth::executor::evm::types::GAS_MAX_LIMIT;
 use crate::eth::executor::evm::types::GeneralRevm;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::types::Address;
-use crate::eth::types::Block;
+use crate::eth::types::BlockHeader;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::Bytes;
 use crate::eth::types::CallInput;
 use crate::eth::types::PointInTime;
-use crate::eth::types::StratusError;
 use crate::eth::types::UnixTime;
 use crate::eth::types::Wei;
 use crate::ext::OptionExt;
@@ -63,21 +61,20 @@ pub struct CallExecutionInput {
 
 impl CallExecutionInput {
     /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas` for a mined block.
-    pub fn try_from_mined_block(input: CallInput, block: Block, point_in_time: PointInTime) -> anyhow::Result<Self, StratusError> {
+    pub fn from_mined_block(input: CallInput, block: BlockHeader, point_in_time: PointInTime) -> Self {
         let kind = match point_in_time {
-            PointInTime::Latest => ExecutionKind::CallLatest(block.number()),
+            PointInTime::Latest | PointInTime::Pending => ExecutionKind::CallLatest(block.number),
             PointInTime::Past(number) => ExecutionKind::CallPast(number),
-            PointInTime::Pending => return Err(anyhow!("call execution cannot be created on mined block with PointInTime::Pending").into()),
         };
-        Ok(Self {
+        Self {
             from: input.from.unwrap_or(Address::ZERO),
             to: input.to.map_into(),
             value: input.value,
             data: input.data,
-            block_number: block.number(),
-            block_timestamp: block.header.timestamp,
+            block_number: block.number,
+            block_timestamp: block.timestamp,
             kind,
-        })
+        }
     }
 }
 
