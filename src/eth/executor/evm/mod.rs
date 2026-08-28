@@ -12,7 +12,6 @@ use alloy_rpc_types_trace::geth::GethDebugTracerType;
 use alloy_rpc_types_trace::geth::GethTrace;
 use alloy_rpc_types_trace::geth::NoopFrame;
 use anyhow::anyhow;
-use log::log_enabled;
 use revm::ExecuteCommitEvm;
 use revm::ExecuteEvm;
 use revm::InspectEvm;
@@ -58,8 +57,6 @@ pub struct Evm<Input: EvmInput> {
 impl<Input: EvmInput> Evm<Input> {
     /// Creates a new instance of the Evm.
     pub fn new(storage: Arc<StratusStorage>, config: &ExecutorConfig, kind: EvmKind) -> Self {
-        tracing::info!(?config, "creating revm");
-
         // configure revm
         let chain_id = config.executor_chain_id;
 
@@ -76,13 +73,6 @@ impl<Input: EvmInput> Evm<Input> {
         self.evm.journaled_state.database.reset(input.kind());
         input.fill_env(&mut self.evm);
 
-        if log_enabled!(log::Level::Debug) {
-            let block_env_log = self.evm.block.clone();
-            let tx_env_log = self.evm.tx.clone();
-            // execute transaction
-            tracing::debug!(block_env = ?block_env_log, tx_env = ?tx_env_log, "executing transaction in revm");
-        }
-
         let tx = std::mem::take(&mut self.evm.tx);
         let evm_result = self.evm.transact(tx);
 
@@ -90,17 +80,14 @@ impl<Input: EvmInput> Evm<Input> {
         let session = &mut self.evm.journaled_state.database;
         let slot_access_metrics = std::mem::take(&mut session.metrics);
 
-        evm_result
-            .inspect_err(|err| tracing::warn!(?err, "evm error"))
-            .map_err(|err| err.into())
-            .map(|execution| {
-                let gas_used = (*execution.result.gas()).into();
-                let metrics = EvmExecutionMetrics {
-                    slot_access: slot_access_metrics,
-                    gas_used,
-                };
-                (execution, metrics)
-            })
+        evm_result.map_err(|err| err.into()).map(|execution| {
+            let gas_used = (*execution.result.gas()).into();
+            let metrics = EvmExecutionMetrics {
+                slot_access: slot_access_metrics,
+                gas_used,
+            };
+            (execution, metrics)
+        })
     }
 }
 
@@ -128,7 +115,7 @@ impl Evm<TransactionExecutionInput> {
             .into();
 
         // CREATE transactions need to be traced for blockscout to work correctly
-        if tx.result.deployed_contract_address.is_none() && trace_unsuccessful_only && matches!(tx.result.result, ExecutionResult::Success) {
+        if tx.output.deployed_contract_address.is_none() && trace_unsuccessful_only && matches!(tx.output.result, ExecutionResult::Success) {
             return Ok(default_trace(tracer_type, tx));
         }
 
@@ -137,10 +124,10 @@ impl Evm<TransactionExecutionInput> {
             .journaled_state
             .database
             .storage
-            .read_block(BlockFilter::Number(tx.evm_input.block_number))?
+            .read_block(BlockFilter::Number(tx.input.block_number))?
             .ok_or_else(|| {
                 StratusError::Storage(StorageError::BlockNotFound {
-                    filter: BlockFilter::Number(tx.evm_input.block_number),
+                    filter: BlockFilter::Number(tx.input.block_number),
                 })
             })?;
 
@@ -152,7 +139,7 @@ impl Evm<TransactionExecutionInput> {
             block_number: Some(block.number().as_u64()),
             base_fee: None,
         };
-        let inspect_input: TransactionExecutionInput = tx.evm_input;
+        let inspect_input: TransactionExecutionInput = tx.input;
         let target = inspect_input.block_number.prev().unwrap_or_default();
         self.evm.journaled_state.database.reset(ExecutionKind::CallPast(target));
 
@@ -166,7 +153,7 @@ impl Evm<TransactionExecutionInput> {
             if tx.info.hash == tx_hash {
                 break;
             }
-            let tx_input: TransactionExecutionInput = tx.execution.evm_input;
+            let tx_input: TransactionExecutionInput = tx.execution.input;
 
             // Configure EVM state
             evm.fill_env(tx_input);

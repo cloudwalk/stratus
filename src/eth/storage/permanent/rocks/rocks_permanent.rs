@@ -10,7 +10,8 @@ use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_state::RocksStorageState;
 use super::types::BlockRocksdb;
 use crate::GlobalState;
-use crate::eth::executor::Changes;
+use crate::eth::executor::State;
+use crate::eth::executor::types::state::Final;
 use crate::eth::rpc::BlockFilter;
 use crate::eth::rpc::LogFilter;
 use crate::eth::storage::MinedPointInTime;
@@ -155,12 +156,7 @@ impl RocksPermanentStorage {
     // -------------------------------------------------------------------------
 
     pub fn read_account(&self, address: Address, point: &MinedPointInTime<'_>) -> anyhow::Result<Option<Account>, StorageError> {
-        self.state
-            .read_account(address, point)
-            .map_err(|err| StorageError::RocksError { err })
-            .inspect_err(|e| {
-                tracing::error!(reason = ?e, "failed to read account in RocksPermanent");
-            })
+        self.state.read_account(address, point).map_err(|err| StorageError::RocksError { err })
     }
 
     pub fn read_accounts(&self, addresses: Vec<Address>) -> anyhow::Result<Vec<(Address, Account)>, StorageError> {
@@ -168,12 +164,7 @@ impl RocksPermanentStorage {
     }
 
     pub fn read_slot(&self, address: Address, index: SlotIndex, point: &MinedPointInTime<'_>) -> anyhow::Result<Option<Slot>, StorageError> {
-        self.state
-            .read_slot(address, index, point)
-            .map_err(|err| StorageError::RocksError { err })
-            .inspect_err(|e| {
-                tracing::error!(reason = ?e, "failed to read slot in RocksPermanent");
-            })
+        self.state.read_slot(address, index, point).map_err(|err| StorageError::RocksError { err })
     }
 
     pub fn read_block(&self, selection: BlockFilter) -> anyhow::Result<Option<Block>, StorageError> {
@@ -211,7 +202,7 @@ impl RocksPermanentStorage {
         })
     }
 
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: Changes) -> anyhow::Result<(), StorageError> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: State<Final>) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
             self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
@@ -227,7 +218,7 @@ impl RocksPermanentStorage {
             })
     }
 
-    pub fn save_block(&self, block: Block, account_changes: Changes) -> anyhow::Result<(), StorageError> {
+    pub fn save_block(&self, block: Block, account_changes: State<Final>) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
             self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {

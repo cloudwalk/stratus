@@ -1,7 +1,7 @@
 mod config;
 mod evm;
 mod evm_worker_pool;
-mod types;
+pub mod types;
 
 use std::mem;
 use std::sync::Arc;
@@ -18,22 +18,15 @@ pub use evm::types::EvmExecutionMetrics;
 pub use evm::types::EvmKind;
 pub use evm::types::TransactionExecutionInput;
 pub use evm::types::TransactionExecutionOutput;
+pub use evm::types::TransactionExecutionResult;
 use parking_lot::Mutex;
 use tracing::Span;
-use tracing::debug_span;
 #[cfg(feature = "tracing")]
 use tracing::info_span;
-pub use types::AccountChanges;
-pub use types::AccountOriginalsReader;
-pub use types::Changes;
-pub use types::Complete;
-pub use types::CompleteValue;
 pub use types::ExecutionResult;
 pub use types::ExecutorError;
-pub use types::Incomplete;
-pub use types::IncompleteValue;
 pub use types::RevertReason;
-pub use types::Stage;
+pub use types::State;
 pub use types::TransactionExecution;
 
 #[cfg(feature = "metrics")]
@@ -178,11 +171,11 @@ impl Executor {
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
         let tx_input: TransactionInput = tx.try_into()?;
-        let (pending_block, _) = self.storage.read_pending_block_header();
+        let pending_block = self.storage.read_pending_block_header();
         let mut evm_input = TransactionExecutionInput::from_eth_transaction(&tx_input, pending_block.number, *pending_block.timestamp);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
-        let tx_execution = match receipt.is_success() {
+        let (tx_execution, state) = match receipt.is_success() {
             // successful external transaction, re-execute locally
             true => {
                 // re-execute transaction
@@ -222,7 +215,10 @@ impl Executor {
                     metrics::inc_executor_external_transaction_gas(evm_result.gas_used.as_u64() as usize, tx_contract, tx_function);
                 }
 
-                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result)
+                (
+                    TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result.outcome),
+                    evm_result.state,
+                )
             }
             //
             // failed external transaction, re-create from receipt without re-executing
@@ -241,12 +237,15 @@ impl Executor {
                 evm_input.gas_limit = tx_input.execution_info.gas_limit;
                 evm_input.gas_price = tx_input.execution_info.gas_price;
 
-                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result)
+                (
+                    TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result.outcome),
+                    evm_result.state,
+                )
             }
         };
 
         // persist state
-        self.miner.save_execution(tx_execution)?;
+        self.miner.save_execution(tx_execution, state)?;
         Ok(())
     }
 
@@ -255,7 +254,11 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Validates that the target account is a contract, reading it from storage at the given point in time.
-    pub fn validate_to_is_contract(&self, to_address: Address, kind: ExecutionKind) -> Result<(), StratusError> {
+    pub fn validate_to_is_contract(&self, to_address: Address, mut kind: ExecutionKind) -> Result<(), StratusError> {
+        // small warm up
+        if matches!(kind, ExecutionKind::Transaction) {
+            kind = ExecutionKind::RPC(PointInTime::Pending);
+        }
         let account = self.storage.read_account(to_address, kind)?;
         if account.bytecode.is_none() {
             if self.reject_not_contract {
@@ -328,70 +331,21 @@ impl Executor {
         loop {
             attempt += 1;
 
-            // track
-            let _span = debug_span!(
-                "executor::local_transaction_attempt",
-                %attempt,
-                tx_hash = %tx_input.transaction_info.hash,
-                tx_from = %tx_input.signer(),
-                tx_to = tracing::field::Empty,
-                tx_nonce = %tx_input.execution_info.nonce
-            )
-            .entered();
-            Span::with(|s| {
-                s.rec_opt("tx_to", &tx_input.execution_info.to);
-            });
-
             // prepare evm input
-            let (pending_header, _) = self.storage.read_pending_block_header();
+            let pending_header = self.storage.read_pending_block_header();
             let evm_input = TransactionExecutionInput::from_eth_transaction(&tx_input, pending_header.number, *pending_header.timestamp);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
-            tracing::debug!(
-                %attempt,
-                tx_hash = %tx_input.transaction_info.hash,
-                tx_nonce = %tx_input.execution_info.nonce,
-                tx_signer = %tx_input.signer(),
-                tx_to = ?tx_input.execution_info.to,
-                tx_data_len = %tx_input.execution_info.input.len(),
-                tx_data = %tx_input.execution_info.input,
-                ?evm_input,
-                "executing local transaction attempt"
-            );
-
-            let (evm_result, evm_metrics) = self.evms.execute(EvmRoute::Transaction(evm_input.clone()))?; // this clone can be avoided i think
+            let (evm_result, _): (TransactionExecutionOutput, EvmExecutionMetrics) = self.evms.execute(EvmRoute::Transaction(evm_input.clone()))?;
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
-            let tx_execution = TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result);
+            let tx_execution = TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result.outcome);
 
-            #[cfg(feature = "metrics")]
-            let gas_used = tx_execution.result.gas_used;
-            #[cfg(feature = "metrics")]
-            let function = codegen::function_sig(&tx_input.execution_info.input);
-            #[cfg(feature = "metrics")]
-            let contract = codegen::contract_name(&tx_input.execution_info.to);
-
-            if let ExecutionResult::Reverted { reason } = &tx_execution.result.result {
-                tracing::info!(?reason, "local transaction execution reverted");
-                #[cfg(feature = "metrics")]
-                metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());
-            }
-
-            match self.miner.save_execution(tx_execution) {
-                Ok(_) => {
-                    // track metrics
-                    #[cfg(feature = "metrics")]
-                    {
-                        metrics::inc_executor_local_transaction_account_reads(evm_metrics.slot_access.account_reads, contract, function);
-                        metrics::inc_executor_local_transaction_slot_reads(evm_metrics.slot_access.slot_reads, contract, function);
-                        metrics::inc_executor_local_transaction_gas(gas_used.as_u64() as usize, true, contract, function);
-                    }
-                    return Ok(());
-                }
+            match self.miner.save_execution(tx_execution, evm_result.state) {
+                Ok(_) => return Ok(()),
                 Err(e) => match e {
-                    StratusError::Storage(StorageError::EvmInputMismatch { ref expected, ref actual }) => {
-                        tracing::warn!(?expected, ?actual, "evm input and block header mismatch");
+                    StratusError::Storage(StorageError::EvmInputMismatch { .. }) => {
                         if attempt >= max_attempts {
                             return Err(e);
                         }
@@ -425,21 +379,15 @@ impl Executor {
             "executing read-only local transaction"
         );
 
-        // execute
-        let evm_input = match point_in_time {
-            PointInTime::Pending => {
-                let (pending_header, tx_count) = self.storage.read_pending_block_header();
-                CallExecutionInput::from_pending_block(call_input.clone(), pending_header, tx_count)
-            }
-            point_in_time => {
-                // NOTE: this read is way more expensive that what we theoretically need, we only need to get the timestamp
-                // and block number, however this is not possible in the current rocksdb configuration.
-                let Some(block) = self.storage.read_block(point_in_time.into())? else {
-                    return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
-                };
-                CallExecutionInput::try_from_mined_block(call_input.clone(), block, point_in_time)?
-            }
+        let Some(block) = self.storage.read_block(point_in_time.into())? else {
+            return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
         };
+
+        #[cfg(feature = "metrics")]
+        let (function, contract) = { (codegen::function_sig(&call_input.data), codegen::contract_name(&call_input.to)) };
+
+        // execute
+        let evm_input = CallExecutionInput::from_mined_block(call_input, block.header, point_in_time);
 
         let evm_route = match point_in_time {
             PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input),
@@ -450,9 +398,6 @@ impl Executor {
         // track metrics
         #[cfg(feature = "metrics")]
         {
-            let function = codegen::function_sig(&call_input.data);
-            let contract = codegen::contract_name(&call_input.to);
-
             match &evm_result {
                 Ok((_, evm_metrics)) => {
                     metrics::inc_executor_local_call(start.elapsed(), true, contract, function);

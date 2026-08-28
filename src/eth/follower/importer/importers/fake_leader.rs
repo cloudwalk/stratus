@@ -4,7 +4,6 @@ use anyhow::bail;
 use async_trait::async_trait;
 
 use crate::GlobalState;
-use crate::eth::executor::Changes;
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorError;
 use crate::eth::follower::importer::fetchers::DataFetcher;
@@ -13,9 +12,7 @@ use crate::eth::follower::importer::importers::ImportData;
 use crate::eth::follower::importer::importers::ImporterWorker;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::interval_miner::commit_retry;
-use crate::eth::miner::miner::interval_miner::mine_local_retry;
 use crate::eth::storage::StratusStorage;
-use crate::eth::types::Block;
 use crate::eth::types::StratusError;
 
 pub struct FakeLeaderWorker {
@@ -52,40 +49,23 @@ impl ImporterWorker for FakeLeaderWorker {
                 }
             }
         }
-        let (mined_block, changes, miner_guard) = mine_local_retry(&self.miner);
 
-        let completed_expected_changes = expected_changes.complete(self.storage.as_ref())?;
-        if changes != completed_expected_changes {
-            tracing::error!(
-                ?changes,
-                ?completed_expected_changes,
-                "execution changes result mismatch between leader and fake leader"
-            );
+        let miner_guard = self.miner.locks.mine_and_commit.lock();
+        let (mined_block, changes) = self.miner.mine_local();
+
+        let final_expected_changes = expected_changes.complete(self.storage.as_ref())?.finalize();
+        let final_changes = changes.clone().finalize();
+        if final_changes != final_expected_changes {
+            tracing::error!(?mined_block, "execution changes result mismatch between leader and fake leader");
             bail!("execution changes mismatch between leader and fake leader")
         }
 
-        // `expected_block` is built from `BlockRocksdb` (replicated), which drops per-tx
-        // `changes` and `metrics` (replaced with `Default::default()` on the way back). Build a
-        // normalized copy of the locally-mined block so the comparison checks fields that actually
-        // survive replication, leaving the original untouched for commit.
-        let normalized_mined_block = normalize_for_replication_compare(&mined_block);
-        if normalized_mined_block != expected_block {
-            tracing::error!(?normalized_mined_block, ?expected_block, "block mismatch between leader and fake leader");
+        if mined_block != expected_block {
+            tracing::error!(?mined_block, ?expected_block, "block mismatch between leader and fake leader");
             bail!("block mismatch between leader and fake leader")
         }
 
         commit_retry(&self.miner, mined_block, changes, miner_guard);
         Ok(block_tx_len)
     }
-}
-
-/// Builds a copy of `block` with per-tx fields that do not survive `Block -> BlockRocksdb -> Block`
-/// replication reset to their defaults, so it can be compared against the leader's replicated
-/// block for equivalence. Does not mutate the input.
-fn normalize_for_replication_compare(block: &Block) -> Block {
-    let mut normalized = block.clone();
-    for tx in &mut normalized.transactions {
-        tx.execution.result.changes = Changes::default();
-    }
-    normalized
 }
