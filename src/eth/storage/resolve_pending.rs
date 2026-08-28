@@ -2,7 +2,6 @@ use parking_lot::RwLockReadGuard;
 
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StratusStorage;
-use crate::eth::storage::TxCount;
 use crate::eth::storage::stratus_storage::EntityRead;
 use crate::eth::types::Account;
 use crate::eth::types::BlockNumber;
@@ -79,7 +78,7 @@ pub(super) enum Resolved<'a, T> {
 pub(super) trait Resolve: EntityRead {
     fn resolve(s: &StratusStorage, key: Self::Key, kind: ExecutionKind) -> Resolved<'_, Self> {
         if kind.point_in_time() == PointInTime::Pending
-            && let Some(value) = Self::read_temp(s, key, kind)
+            && let Some(value) = Self::read_temp(s, key)
         {
             return Resolved::Temp(value);
         }
@@ -92,18 +91,13 @@ impl Resolve for Account {}
 impl Resolve for Slot {}
 
 impl StratusStorage {
-    fn resolve_call_point(&self, block_number: BlockNumber, tx_count: TxCount) -> MinedPointInTime<'_> {
+    fn resolve_call_point(&self, block_number: BlockNumber) -> MinedPointInTime<'_> {
         let guard = self.transient_state_lock.read();
         let mined = self.read_mined_block_number();
-        if (block_number, tx_count) >= (mined, TxCount::Full) {
+        if block_number >= mined {
             MinedPointInTime::latest(Some(guard))
         } else {
-            drop(guard);
-            let target = match tx_count {
-                TxCount::Partial(_) => block_number.prev().unwrap_or_default(),
-                TxCount::Full => block_number,
-            };
-            MinedPointInTime::past(target)
+            MinedPointInTime::past(block_number)
         }
     }
 
@@ -111,8 +105,7 @@ impl StratusStorage {
     fn resolve_mined_point(&self, kind: ExecutionKind) -> MinedPointInTime<'_> {
         match kind {
             ExecutionKind::RPC(PointInTime::Past(number)) | ExecutionKind::CallPast(number) => MinedPointInTime::past(number),
-            ExecutionKind::CallPending(block_number, tx_count) => self.resolve_call_point(block_number, tx_count),
-            ExecutionKind::CallLatest(block_number) => self.resolve_call_point(block_number, TxCount::Full),
+            ExecutionKind::CallLatest(block_number) => self.resolve_call_point(block_number),
             ExecutionKind::Transaction | ExecutionKind::RPC(_) => MinedPointInTime::latest(None),
         }
     }
@@ -123,64 +116,10 @@ mod tests {
     use super::super::StratusStorage;
     use super::Resolve;
     use crate::eth::storage::ExecutionKind;
-    use crate::eth::storage::TxCount;
     use crate::eth::types::Address;
     use crate::eth::types::BlockNumber;
     use crate::eth::types::Slot;
     use crate::eth::types::SlotIndex;
-
-    #[test]
-    fn pending_partial_call_latest_becomes_stale_once_block_is_mined() {
-        let storage = StratusStorage::new_test().expect("failed to build test storage");
-
-        let address = Address::ZERO;
-        let index = SlotIndex::ZERO;
-
-        // Pending call: block_number is the pending block (mined + 1 = 6), pinned to tx 0.
-        let mined_at_start = 5u64;
-        let pending_block_number = BlockNumber::from(mined_at_start + 1);
-        storage.set_mined_block_number(BlockNumber::from(mined_at_start));
-
-        let kind = ExecutionKind::CallPending(pending_block_number, TxCount::Partial(0));
-
-        // At call start: block 6 is still pending (mined=5). Latest (block 5) is a safe base.
-        // resolve_slot should return Miss(Mined(Some(guard))).
-        let resolved = Slot::resolve(&storage, (address, index), kind);
-        match resolved {
-            super::Resolved::Miss(mut point) => {
-                assert!(
-                    matches!(point, super::MinedPointInTime::Latest(_, _)),
-                    "should read latest mined base while block is still pending"
-                );
-                assert!(point.take_guard().is_some(), "guard should be held for valid latest read");
-            }
-            other => panic!("expected Miss, got {other:?}"),
-        }
-
-        // The pending block is mined mid-call, advancing the mined tip to 6.
-        storage.set_mined_block_number(pending_block_number);
-
-        // The call is now stale: reading "latest" would observe block 6's aggregate state,
-        // not the tx-0 base. resolve_slot should downgrade to MinedPast(5) = b.prev() with no guard.
-        let resolved = Slot::resolve(&storage, (address, index), kind);
-        match resolved {
-            super::Resolved::Miss(mut point) => {
-                assert!(!matches!(point, super::MinedPointInTime::Latest(_, _)), "stale call should not read latest");
-                match &point {
-                    super::MinedPointInTime::Past(_, number) => {
-                        assert_eq!(
-                            *number,
-                            BlockNumber::from(mined_at_start),
-                            "stale Partial call should downgrade to MinedPast(b.prev())"
-                        );
-                    }
-                    other => panic!("expected Past, got {other:?}"),
-                }
-                assert!(point.take_guard().is_none(), "no guard for historical read");
-            }
-            other => panic!("expected Miss, got {other:?}"),
-        }
-    }
 
     #[test]
     fn mined_full_call_downgrades_to_minedpast_block_not_prev() {

@@ -1,4 +1,6 @@
 use alloy_primitives::B256;
+use derive_more::Deref;
+use derive_more::DerefMut;
 use display_json::DebugAsJson;
 use hex_literal::hex;
 use itertools::Itertools;
@@ -22,9 +24,22 @@ use crate::ext::not;
 use crate::log_and_err;
 
 /// Output of a transaction executed in the EVM.
-#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, Default)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, Default, Deref, DerefMut)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct TransactionExecutionOutput {
+    /// Status of the execution.
+    #[deref]
+    #[deref_mut]
+    pub outcome: TransactionExecutionResult,
+
+    /// Storage changes that happened during the transaction execution.
+    pub state: State<Complete>,
+}
+
+/// Output of a transaction executed in the EVM.
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, Default)]
+#[cfg_attr(test, derive(fake::Dummy))]
+pub struct TransactionExecutionResult {
     /// Status of the execution.
     pub result: ExecutionResult,
 
@@ -36,9 +51,6 @@ pub struct TransactionExecutionOutput {
 
     /// Consumed gas.
     pub gas_used: Gas,
-
-    /// Storage changes that happened during the transaction execution.
-    pub changes: State<Complete>,
 
     /// The contract address if the executed transaction deploys a contract.
     pub deployed_contract_address: Option<Address>,
@@ -66,12 +78,14 @@ impl TransactionExecutionOutput {
 
         // crete execution and apply costs
         let mut execution = Self {
-            result: ExecutionResult::new_reverted("reverted externally".into()), // assume it reverted
-            output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
-            logs: Vec::new(),
-            gas_used: Gas::from(receipt.gas_used),
-            changes,
-            deployed_contract_address: None,
+            outcome: TransactionExecutionResult {
+                result: ExecutionResult::new_reverted("reverted externally".into()), // assume it reverted
+                output: Bytes::default(), // we cannot really know without performing an eth_call to the external system
+                logs: Vec::new(),
+                gas_used: Gas::from(receipt.gas_used),
+                deployed_contract_address: None,
+            },
+            state: changes,
         };
         execution.apply_receipt(receipt)?;
         Ok(execution)
@@ -182,7 +196,7 @@ impl TransactionExecutionOutput {
         if execution_cost > Wei::ZERO {
             // find sender changes
             let sender_address: Address = receipt.0.from.into();
-            let Some(sender_changes) = self.changes.accounts.get_mut(&sender_address) else {
+            let Some(sender_changes) = self.state.accounts.get_mut(&sender_address) else {
                 return log_and_err!("sender changes not present in execution when applying execution costs");
             };
 
@@ -312,12 +326,14 @@ impl TryFrom<RevmResultAndState> for TransactionExecutionOutput {
         tracing::debug!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
 
         Ok(TransactionExecutionOutput {
-            result,
-            output: tx_output,
-            logs,
-            gas_used: gas,
-            changes,
-            deployed_contract_address,
+            outcome: TransactionExecutionResult {
+                result,
+                output: tx_output,
+                logs,
+                gas_used: gas,
+                deployed_contract_address,
+            },
+            state: changes,
         })
     }
 }
@@ -369,7 +385,7 @@ mod tests {
         assert_eq!(execution.gas_used, Gas::from(receipt.gas_used));
 
         // Verify sender changes
-        let sender_changes = execution.changes.accounts.get(&sender_address).unwrap();
+        let sender_changes = execution.state.accounts.get(&sender_address).unwrap();
 
         // Nonce should be incremented
         let modified_nonce = *sender_changes.nonce.value();
@@ -623,7 +639,7 @@ mod tests {
             accounts,
             ..Default::default()
         };
-        execution.changes = changes;
+        execution.state = changes;
         execution.gas_used = Gas::from(100u64);
 
         // Create a receipt with higher gas used and execution cost
@@ -639,7 +655,7 @@ mod tests {
         execution.apply_receipt(&receipt).unwrap();
 
         // Verify sender balance was reduced by execution cost
-        let sender_changes = execution.changes.accounts.get(&sender_address).unwrap();
+        let sender_changes = execution.state.accounts.get(&sender_address).unwrap();
         let modified_balance = *sender_changes.balance.value();
         assert_eq!(modified_balance, Wei::from(900u64)); // 1000 - 100
     }
