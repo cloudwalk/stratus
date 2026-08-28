@@ -139,7 +139,7 @@ impl State<Complete> {
         let accounts = self
             .accounts
             .iter()
-            .filter_map(|(address, account)| account.complete().map(|acc| ((*address), acc)))
+            .filter_map(|(address, account)| account.finalize().map(|acc| ((*address), acc)))
             .collect();
 
         let slots = self
@@ -340,7 +340,7 @@ impl AccountChanges<Complete> {
         self.nonce.is_changed() || self.balance.is_changed() || self.bytecode.is_changed()
     }
 
-    pub fn complete(&self) -> Option<AccountChanges<Final>> {
+    pub fn finalize(&self) -> Option<AccountChanges<Final>> {
         self.is_changed().then(|| AccountChanges {
             nonce: self.nonce.clone(),
             balance: self.balance.clone(),
