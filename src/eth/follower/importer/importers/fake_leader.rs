@@ -82,7 +82,7 @@ impl ImporterWorker for FakeLeaderWorker {
 fn normalize_for_replication_compare(block: &Block) -> Block {
     let mut normalized = block.clone();
     for tx in &mut normalized.transactions {
-        tx.execution.output.changes = State::default();
+        tx.execution.output.state = State::default();
     }
     normalized
 }

@@ -3,10 +3,7 @@
 use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::types::state::Complete;
-use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
-use crate::eth::storage::TxCount;
-use crate::eth::storage::temporary::inmemory::call::InMemoryCallTemporaryStorage;
 use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTemporaryStorage;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
@@ -24,24 +21,21 @@ use crate::eth::types::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
 
-mod call;
 mod transaction;
 
 #[derive(Debug)]
 pub struct InMemoryTemporaryStorage {
     pub transaction_storage: InmemoryTransactionTemporaryStorage,
-    pub call_storage: InMemoryCallTemporaryStorage,
 }
 
 impl InMemoryTemporaryStorage {
     pub fn new(block_number: BlockNumber) -> Self {
         Self {
             transaction_storage: InmemoryTransactionTemporaryStorage::new(block_number),
-            call_storage: InMemoryCallTemporaryStorage::new(),
         }
     }
 
-    pub fn read_pending_block_header(&self) -> (PendingBlockHeader, TxCount) {
+    pub fn read_pending_block_header(&self) -> PendingBlockHeader {
         self.transaction_storage.read_pending_block_header()
     }
 
@@ -55,7 +49,6 @@ impl InMemoryTemporaryStorage {
     }
 
     pub fn save_pending_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
-        self.call_storage.update_state_with_transaction(&tx);
         self.transaction_storage.save_pending_execution(tx)
     }
 
@@ -64,7 +57,6 @@ impl InMemoryTemporaryStorage {
     }
 
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {
-        self.call_storage.retain_recent_blocks();
         self.transaction_storage.finish_pending_block()
     }
 
@@ -72,22 +64,12 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.read_pending_execution(hash)
     }
 
-    pub fn read_account(&self, address: Address, kind: ExecutionKind) -> Option<Account> {
-        match kind {
-            ExecutionKind::CallPending(block_number, tx_count) => self.call_storage.read_account(block_number, tx_count, address),
-            ExecutionKind::CallLatest(block_number) => self.call_storage.read_account(block_number, TxCount::Full, address),
-            ExecutionKind::CallPast(block_number) => self.call_storage.read_account(block_number, TxCount::Full, address),
-            _ => self.transaction_storage.read_account(address),
-        }
+    pub fn read_account(&self, address: Address) -> Option<Account> {
+        self.transaction_storage.read_account(address)
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, kind: ExecutionKind) -> Option<Slot> {
-        match kind {
-            ExecutionKind::CallPending(block_number, tx_count) => self.call_storage.read_slot(block_number, tx_count, address, index),
-            ExecutionKind::CallLatest(block_number) => self.call_storage.read_slot(block_number, TxCount::Full, address, index),
-            ExecutionKind::CallPast(block_number) => self.call_storage.read_slot(block_number, TxCount::Full, address, index),
-            _ => self.transaction_storage.read_slot(address, index),
-        }
+    pub fn read_slot(&self, address: Address, index: SlotIndex) -> Option<Slot> {
+        self.transaction_storage.read_slot(address, index)
     }
 
     #[cfg(feature = "dev")]
@@ -111,7 +93,6 @@ impl InMemoryTemporaryStorage {
     }
 
     pub fn reset(&self) -> anyhow::Result<(), StorageError> {
-        self.call_storage.reset();
         self.transaction_storage.reset()
     }
 }

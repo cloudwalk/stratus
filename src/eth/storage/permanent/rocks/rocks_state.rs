@@ -785,6 +785,7 @@ mod tests {
     use crate::eth::executor::TransactionExecution;
     use crate::eth::executor::TransactionExecutionInput;
     use crate::eth::executor::TransactionExecutionOutput;
+    use crate::eth::executor::TransactionExecutionResult;
     use crate::eth::executor::types::state::Complete;
     use crate::eth::types::BlockHeader;
 
@@ -851,7 +852,10 @@ mod tests {
                             ..Faker.fake()
                         },
                         output: TransactionExecutionOutput {
-                            logs: vec![Faker.fake(), Faker.fake()],
+                            outcome: TransactionExecutionResult {
+                                logs: vec![Faker.fake(), Faker.fake()],
+                                ..Default::default()
+                            },
                             ..Faker.fake()
                         },
                         ..Faker.fake()
