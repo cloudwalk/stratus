@@ -437,7 +437,7 @@ impl Executor {
         let (function, contract) = { (codegen::function_sig(&call_input.data), codegen::contract_name(&call_input.to)) };
 
         // execute
-        let evm_input = CallExecutionInput::try_from_mined_block(call_input, block, point_in_time)?;
+        let evm_input = CallExecutionInput::from_mined_block(call_input, block.header, point_in_time);
 
         let evm_route = match point_in_time {
             PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input),
