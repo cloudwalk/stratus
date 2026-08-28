@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::ops::Range;
 
+use alloy_rpc_types_eth::BlockTransactions;
+use itertools::Itertools;
 use jsonrpsee::types::ParamsSequence;
 use serde_json::json;
 
@@ -10,6 +12,7 @@ use super::pagination::CursorCodec;
 use super::pagination::CursorPageInfo;
 use crate::alias::AlloyBlockAlloyTransaction;
 use crate::alias::AlloyReceipt;
+use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
@@ -76,7 +79,10 @@ enum PagePolicy {
     /// Page by item count (explicit `limit` override — a test/tooling knob, not a
     /// production control; see [`ImporterPageRequest::limit`]).
     Count(usize),
-    /// Page by an approximate serialized-bytes budget (production default).
+    /// Page by a serialized-bytes budget (production default). Measured on the
+    /// exact encoding each response endpoint emits, so a page is guaranteed to fit
+    /// the budget — except for a single item that alone exceeds the budget, which
+    /// is still emitted to guarantee stream progress.
     Bytes(usize),
 }
 
@@ -86,13 +92,15 @@ pub struct ImporterPagination {
 }
 
 impl ImporterPagination {
-    /// Fraction of the configured max response size used as the pagination budget.
-    ///
-    /// The remaining half is headroom: our budget accounting sums only the item
-    /// payloads, so this absorbs the JSON-RPC envelope, the `pagination` metadata,
-    /// re-serialization differences (alloy/hex encoding vs. internal serde), and
-    /// clients configured with a tighter response cap than this server.
-    const RESPONSE_BUDGET_DIVISOR: u32 = 2;
+    /// Reserved bytes of the response-cap budget for the JSON-RPC envelope
+    /// (`{"jsonrpc":"2.0","id":..,"result":<payload>}`) when comparing an
+    /// emitted response against the configured max response size.
+    const ENVELOPE_RESERVE: usize = 128;
+
+    /// Reserved bytes of a paginated page's cap budget for the `pagination`
+    /// metadata: `,"pagination":{"limit":<20 digits>,"returned":<20>,
+    /// "total":<20>,"nextCursor":"v1:0x<64 hex>:<20 digits>"}` ≈ 215 bytes.
+    const PAGINATION_RESERVE: usize = 256;
 
     /// Parses pagination parameters from the RPC params sequence.
     ///
@@ -109,10 +117,10 @@ impl ImporterPagination {
         let request = ImporterPageRequest::parse_optional(params)?;
         let (filter, start) = Self::resolve_filter(filter, request.as_ref().and_then(|r| r.cursor.as_deref()))?;
 
-        let budget = (max_response_bytes / Self::RESPONSE_BUDGET_DIVISOR) as usize;
+        let cap = (max_response_bytes as usize).saturating_sub(Self::ENVELOPE_RESERVE);
         let policy = match request.and_then(|request| request.explicit_limit()) {
             Some(limit) => PagePolicy::Count(limit),
-            None => PagePolicy::Bytes(budget),
+            None => PagePolicy::Bytes(cap),
         };
 
         Ok((filter, Self { start, policy }))
@@ -142,40 +150,53 @@ impl ImporterPagination {
     /// (a continuation always paginates, a first request only paginates when the
     /// total exceeds the policy budget). Otherwise returns the legacy one-shot
     /// `{block, receipts}` shape with no `pagination` field.
-    pub fn block_and_receipts_response(&self, mut block: Block) -> Result<JsonValue, RpcError> {
-        let total = block.transactions.len();
+    pub fn block_and_receipts_response(&self, block: Block) -> Result<JsonValue, RpcError> {
+        let Block { header, transactions } = block;
+        let total = transactions.len();
         self.validate_start(total)?;
 
-        let receipts = block
-            .transactions
-            .iter()
-            .cloned()
-            .map(AlloyReceipt::from)
-            .map(ExternalReceipt)
-            .collect::<Vec<_>>();
+        // Convert to the wire representation up front: the byte budget must be
+        // measured against the exact encoding the response carries (alloy
+        // JSON-RPC), not against the internal mined encoding. Each item is
+        // charged for its wire size plus the two commas that separate it from
+        // its neighbors (one in `block.transactions`, one in `receipts`).
+        let block_hash = header.hash;
+        let receipts: Vec<ExternalReceipt> = transactions.iter().cloned().map(AlloyReceipt::from).map(ExternalReceipt).collect();
+        let mut transactions: Vec<AlloyTransaction> = transactions.into_iter().map_into().collect();
+
+        // Frame: the emitted block with an empty transaction list (header and
+        // JSON structural bytes) plus the response keys and array brackets;
+        // PAGINATION_RESERVE is charged only when the page paginates.
+        let empty_block: AlloyBlockAlloyTransaction = header.clone().into();
+        let base_frame = json_len(&json!({ "block": empty_block.map_transactions(ExternalTransaction::from), "receipts": Vec::<ExternalReceipt>::new() }));
 
         let Some((end, limit_metric)) = self.page_window(
             || {
-                block
-                    .transactions
+                transactions
                     .iter()
                     .zip(&receipts)
-                    .map(|(tx, receipt)| json_len(tx).saturating_add(json_len(receipt)))
+                    .map(|(tx, receipt)| json_len(tx).saturating_add(json_len(receipt)).saturating_add(2))
                     .collect()
             },
+            base_frame,
             total,
         ) else {
-            return Ok(json!({ "block": block.to_json_rpc_with_full_transactions(), "receipts": receipts }));
+            let mut block: AlloyBlockAlloyTransaction = header.into();
+            block.transactions = BlockTransactions::Full(transactions);
+            return Ok(json!({
+                "block": block.map_transactions(ExternalTransaction::from),
+                "receipts": receipts,
+            }));
         };
 
         let tx_range = self.start..end;
-        let page_info = self.page_info(end, limit_metric, total, block.hash());
+        let page_info = self.page_info(end, limit_metric, total, block_hash);
+        let page_transactions: Vec<AlloyTransaction> = transactions.drain(tx_range.clone()).collect();
 
-        block.transactions = block.transactions[tx_range.clone()].to_vec();
-        let alloy_block: AlloyBlockAlloyTransaction = block.into();
-
+        let mut block: AlloyBlockAlloyTransaction = header.into();
+        block.transactions = BlockTransactions::Full(page_transactions);
         Ok(json!(BlockAndReceiptsPageResponse {
-            block: ExternalBlock(alloy_block.map_transactions(ExternalTransaction::from)),
+            block: ExternalBlock(block.map_transactions(ExternalTransaction::from)),
             receipts: receipts[tx_range].to_vec(),
             pagination: Some(page_info),
         }))
@@ -190,19 +211,31 @@ impl ImporterPagination {
         let total = transactions.len() + changes.account_changes.len() + changes.slot_changes.len();
         self.validate_start(total)?;
 
+        // Each item is charged for its wire size plus one comma separator.
         let account_entries = sorted_account_changes(&changes);
         let slot_entries = sorted_slot_changes(&changes);
         let section_lens = [transactions.len(), account_entries.len(), slot_entries.len()];
+
+        // Frame: serialized `[block, changes]` tuple with empty item sections
+        // (block header and JSON structural bytes).
+        let base_frame = json_len(&json!((
+            BlockRocksdb {
+                header: header.clone(),
+                transactions: Vec::new()
+            },
+            BlockChangesRocksdb::default()
+        )));
 
         let Some((end, limit_metric)) = self.page_window(
             || {
                 transactions
                     .iter()
-                    .map(json_len)
-                    .chain(account_entries.iter().map(json_len))
-                    .chain(slot_entries.iter().map(json_len))
+                    .map(|item| json_len(item).saturating_add(1))
+                    .chain(account_entries.iter().map(|entry| json_len(entry).saturating_add(1)))
+                    .chain(slot_entries.iter().map(|entry| json_len(entry).saturating_add(1)))
                     .collect()
             },
+            base_frame,
             total,
         ) else {
             return Ok(json!((BlockRocksdb { header, transactions }, changes)));
@@ -230,27 +263,38 @@ impl ImporterPagination {
     ///
     /// Continuations (`start > 0`) always paginate; first requests only paginate when
     /// the total exceeds the policy budget (count or bytes).
-    fn page_window(&self, byte_sizes: impl FnOnce() -> Vec<usize>, total: usize) -> Option<(usize, usize)> {
+    ///
+    /// `base_frame` is the serialized length of everything in the response that is
+    /// not an item payload (block header, JSON structural bytes). The one-shot check
+    /// compares `Σ items + base_frame` against the cap directly — no headroom
+    /// divisor: item sizes and the frame are now measured on the exact emitted
+    /// encoding, so the accounting is closed (only the JSON-RPC envelope remains
+    /// outside it, reserved up front in [`Self::ENVELOPE_RESERVE`]). Paginated pages
+    /// additionally reserve [`Self::PAGINATION_RESERVE`] for the pagination metadata.
+    fn page_window(&self, byte_sizes: impl FnOnce() -> Vec<usize>, base_frame: usize, total: usize) -> Option<(usize, usize)> {
+        let page_frame = base_frame.saturating_add(Self::PAGINATION_RESERVE);
         if self.start > 0 {
-            return Some(self.paginate_first_or_continue(byte_sizes, total));
+            return Some(self.paginate_first_or_continue(byte_sizes, page_frame, total));
         }
 
         match self.policy {
-            PagePolicy::Count(limit) => (total > limit).then(|| self.paginate_first_or_continue(byte_sizes, total)),
-            PagePolicy::Bytes(budget) => {
+            PagePolicy::Count(limit) => (total > limit).then(|| self.paginate_first_or_continue(byte_sizes, page_frame, total)),
+            PagePolicy::Bytes(cap) => {
                 let sizes = byte_sizes();
                 // sizing happens even on the one-shot path: it's how we know it fits.
                 // saturating: usize::MAX (serialization-failure marker) would overflow plain sum.
-                (sizes.iter().copied().fold(0usize, usize::saturating_add) > budget).then(|| self.paginate_first_or_continue(|| sizes, total))
+                let total_bytes: usize = sizes.iter().copied().fold(0usize, usize::saturating_add);
+                (total_bytes.saturating_add(base_frame) > cap).then(|| self.paginate_first_or_continue(|| sizes, page_frame, total))
             }
         }
     }
 
-    /// Computes `(end, limit_metric)` for any request that must paginate.
-    fn paginate_first_or_continue(&self, byte_sizes: impl FnOnce() -> Vec<usize>, total: usize) -> (usize, usize) {
+    /// Computes `(end, limit_metric)` for any request that must paginate. The item
+    /// budget is the cap minus the page frame.
+    fn paginate_first_or_continue(&self, byte_sizes: impl FnOnce() -> Vec<usize>, page_frame: usize, total: usize) -> (usize, usize) {
         match self.policy {
             PagePolicy::Count(limit) => (self.start.saturating_add(limit).min(total), limit),
-            PagePolicy::Bytes(budget) => (self.start + take_by_budget(&byte_sizes(), self.start, budget), budget),
+            PagePolicy::Bytes(cap) => (self.start + take_by_budget(&byte_sizes(), self.start, cap.saturating_sub(page_frame)), cap),
         }
     }
 
@@ -471,7 +515,9 @@ mod tests {
     use fake::Fake;
     use fake::Faker;
     use hash_hasher::HashBuildHasher;
+    use itertools::Itertools;
     use jsonrpsee::types::Params;
+    use serde_json::json;
 
     use super::BlockHashCursor;
     use super::CursorCodec;
@@ -483,7 +529,9 @@ mod tests {
     use super::PagePolicy;
     use super::RpcError;
     use super::json_len;
+    use super::take_by_budget;
     use crate::alias::AlloyReceipt;
+    use crate::alias::AlloyTransaction;
     use crate::eth::rpc::BlockFilter;
     use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
     use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
@@ -495,6 +543,7 @@ mod tests {
     use crate::eth::types::BlockNumber;
     use crate::eth::types::ExternalBlockWithReceipts;
     use crate::eth::types::ExternalReceipt;
+    use crate::eth::types::ExternalTransaction;
     use crate::eth::types::Hash;
     use crate::eth::types::SlotIndex;
     use crate::eth::types::SlotValue;
@@ -595,15 +644,15 @@ mod tests {
 
     // ImporterPagination::from_params
 
-    const TEST_MAX_RESPONSE_BYTES: u32 = 20_000_000; // budget = 10_000_000
+    const TEST_MAX_RESPONSE_BYTES: u32 = 20_000_000; // item budget = cap - envelope reserve
 
     #[test]
-    fn from_params_no_param_uses_byte_budget_from_response_cap() {
+    fn from_params_no_param_uses_response_cap_minus_envelope_reserve() {
         let params = Params::new(Some("[]"));
         let (filter, pagination) = ImporterPagination::from_params(params.sequence(), BlockFilter::Latest, TEST_MAX_RESPONSE_BYTES).expect("ok");
 
         assert_eq!(pagination.start, 0);
-        assert!(matches!(pagination.policy, PagePolicy::Bytes(10_000_000)));
+        assert!(matches!(pagination.policy, PagePolicy::Bytes(budget) if budget == TEST_MAX_RESPONSE_BYTES as usize - ImporterPagination::ENVELOPE_RESERVE));
         assert!(matches!(filter, BlockFilter::Latest));
     }
 
@@ -893,22 +942,31 @@ mod tests {
     }
 
     #[test]
-    fn receipts_byte_budget_exact_fit_is_one_shot_and_minus_one_paginates() {
+    fn receipts_byte_budget_above_actual_response_is_one_shot_and_below_paginates() {
         let block = block_with_txs(3);
-        let receipts: Vec<ExternalReceipt> = block.transactions.iter().cloned().map(AlloyReceipt::from).map(ExternalReceipt).collect();
 
-        // replicate the builder's byte accounting: per-item = tx json len + receipt json len
-        let total_bytes: usize = block
-            .transactions
-            .iter()
-            .zip(&receipts)
-            .map(|(tx, receipt)| json_len(tx) + json_len(receipt))
-            .sum();
+        // measure the actual one-shot response space: header + JSON structure
+        // (frame) + per-item wire sizes and separator commas
+        let empty_block: crate::alias::AlloyBlockAlloyTransaction = block.header.clone().into();
+        let frame: usize = json_len(&json!({
+            "block": empty_block.map_transactions(ExternalTransaction::from),
+            "receipts": Vec::<ExternalReceipt>::new(),
+        }));
+        let receipts: Vec<ExternalReceipt> = block.transactions.iter().cloned().map(AlloyReceipt::from).map(ExternalReceipt).collect();
+        let total_bytes: usize = frame
+            + block
+                .transactions
+                .iter()
+                .cloned()
+                .map_into()
+                .zip(&receipts)
+                .map(|(tx, receipt): (AlloyTransaction, &ExternalReceipt)| json_len(&tx) + json_len(receipt) + 2)
+                .sum::<usize>();
 
         let json = ImporterPagination::for_budget_test(0, total_bytes)
             .block_and_receipts_response(block.clone())
             .expect("ok");
-        assert!(json.get("pagination").is_none(), "exact budget must one-shot");
+        assert!(json.get("pagination").is_none(), "equal-to-emitted budget must one-shot");
 
         let json = ImporterPagination::for_budget_test(0, total_bytes.saturating_sub(1))
             .block_and_receipts_response(block)
@@ -932,6 +990,77 @@ mod tests {
         assert_eq!(info.returned, 1);
         assert_eq!(info.total, 1);
         assert!(info.next_cursor.is_none());
+    }
+
+    #[test]
+    fn take_by_budget_every_window_fits_unless_single_item() {
+        // reference implementation: greedy window pack, always at least one item.
+        fn expected_taken(sizes: &[usize], start: usize, budget: usize) -> usize {
+            let mut used = 0usize;
+            let mut taken = 0;
+            for &size in &sizes[start..] {
+                let new_used = used.saturating_add(size);
+                if taken > 0 && new_used > budget {
+                    break;
+                }
+                used = new_used;
+                taken += 1;
+            }
+            taken
+        }
+
+        let budget = 10_000usize;
+        let sizes: Vec<usize> = std::iter::repeat_with(|| (0..20_000usize).fake()).take(500).collect();
+
+        let mut start = 0;
+        while start < sizes.len() {
+            let taken = take_by_budget(&sizes, start, budget);
+            assert_eq!(taken, expected_taken(&sizes, start, budget));
+            assert!(taken >= 1, "stream must always make progress");
+
+            let window_sum: usize = sizes[start..start + taken].iter().copied().fold(0, usize::saturating_add);
+            assert!(
+                window_sum <= budget || taken == 1,
+                "window of {taken} items at {start} sums {window_sum} bytes, over budget {budget}"
+            );
+            start += taken;
+        }
+        assert_eq!(start, sizes.len(), "stream must cover every item");
+    }
+
+    #[test]
+    fn receipts_byte_budget_serialized_page_including_frame_fits_cap() {
+        // walk a full paginated stream and measure the entire emitted response —
+        // JSON structure, block header, items, commas, pagination metadata — against
+        // the budget. The only legal overshoot is a single item whose payload alone
+        // exceeds the item budget (guaranteed progress).
+        let block = block_with_txs(30);
+        let budget = serde_json::to_vec(&block.transactions[0]).unwrap().len()
+            + serde_json::to_vec(&ExternalReceipt(AlloyReceipt::from(block.transactions[0].clone())))
+                .unwrap()
+                .len()
+            + 2
+            + 512; // room for a couple of items per page
+
+        let mut start = 0;
+        let mut total = usize::MAX;
+        while start < total {
+            let json = ImporterPagination::for_budget_test(start, budget)
+                .block_and_receipts_response(block.clone())
+                .expect("ok");
+            let emitted_len = serde_json::to_vec(&json).unwrap().len();
+            let response: BlockAndReceiptsPageResponse = serde_json::from_value(json).expect("paginated shape");
+            let info = response.pagination.expect("pagination present");
+            total = info.total;
+
+            assert!(
+                emitted_len <= budget || info.returned == 1,
+                "page starting at {start} emitted {emitted_len} bytes ({} items), over budget {budget}",
+                info.returned
+            );
+            start += info.returned;
+        }
+        assert_eq!(start, 30, "whole block streamed");
     }
 
     #[test]

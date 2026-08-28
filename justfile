@@ -286,6 +286,19 @@ e2e-stratus block-mode="automine" test="":
         just e2e stratus {{block-mode}} "{{test}}"
     fi
 
+# E2E: Start Stratus with a small response size cap, run byte-budget pagination tests
+e2e-pagination-budget:
+    #!/bin/bash
+    if [ -d e2e ]; then
+        cd e2e
+    fi
+
+    just _log "Starting Stratus with MAX_RESPONSE_SIZE_BYTES=30000"
+    MAX_RESPONSE_SIZE_BYTES=30000 just stratus-test -a 0.0.0.0:3000 --block-mode external
+
+    just _log "Running byte-budget pagination tests"
+    BLOCK_MODE=external MAX_RESPONSE_SIZE_BYTES=30000 npx hardhat test test/external/e2e-pagination-budget.test.ts --network stratus
+
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
 e2e-clock-stratus:
     #!/bin/bash
