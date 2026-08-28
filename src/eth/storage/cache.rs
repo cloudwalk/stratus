@@ -58,8 +58,8 @@ impl StorageCache {
 
     fn _cache_account_and_slots_from_changes_impl(
         changes: State<Complete>,
-        account_cache: &Cache<Address, Account, UnitWeighter, FxBuildHasher>,
-        slot_cache: &Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
+        account_cache: &Cache<Address, Account, UnitWeighter>,
+        slot_cache: &Cache<(Address, SlotIndex), SlotValue, UnitWeighter>,
     ) {
         // cache accounts
         for (address, change) in changes.accounts.into_iter() {
