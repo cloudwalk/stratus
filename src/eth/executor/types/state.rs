@@ -3,7 +3,7 @@ use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 use std::ops::Deref;
 
-use foldhash::fast::FixedState;
+use foldhash::fast::RandomState;
 use revm_state::EvmStorageSlot;
 use serde_with::serde_as;
 
@@ -54,9 +54,9 @@ impl Stage for Complete {
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Default)]
 pub struct State<S: Stage> {
-    pub accounts: HashMap<Address, AccountChanges<S>, FixedState>,
+    pub accounts: HashMap<Address, AccountChanges<S>, RandomState>,
     #[serde_as(as = "Vec<(_, _)>")]
-    pub slots: HashMap<(Address, SlotIndex), S::SlotChangeField, FixedState>,
+    pub slots: HashMap<(Address, SlotIndex), S::SlotChangeField, RandomState>,
 }
 
 #[cfg(test)]
