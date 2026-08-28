@@ -11,8 +11,8 @@ use quick_cache::sync::GuardResult;
 use rustc_hash::FxBuildHasher;
 
 use crate::eth::executor::State;
+use crate::eth::executor::types::state::Change;
 use crate::eth::executor::types::state::Complete;
-use crate::eth::executor::types::state::values::Change;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::Slot;
@@ -73,7 +73,7 @@ impl StorageCache {
     ) {
         // cache accounts
         for (address, change) in changes.accounts.into_iter() {
-            let account = change.clone().to_account(address);
+            let account = change.to_account(address);
             account_cache.insert(address, account);
         }
 
