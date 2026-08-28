@@ -1037,6 +1037,12 @@ criteria = "safe-to-deploy"
 delta = "0.6.18 -> 0.6.22"
 notes = "Bug fixes for cache capacity edge-case and JoinFuture::poll race condition. New entry/try_* APIs and optional crossbeam-utils backend are additive. All unsafe usage is localized to existing internal performance paths with documented safety invariants. No advisories, no FFI, no build scripts, no proc-macros."
 
+[[audits.quick_cache]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with cloudwalk/glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.6.22 -> 0.7.0"
+notes = "Reviewed the complete 0.6.22->0.7.0 source diff. It fixes placeholder slab-slot leakage and reserve over-allocation, moves lifecycle cleanup outside locks, changes the default hasher from ahash to foldhash, and adds optional stats. No new unsafe, build script, proc macro, I/O, or advisories. Breaking Lifecycle APIs are unused by Stratus; MSRV 1.85 is below the project toolchain."
+
 [[audits.quote]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
