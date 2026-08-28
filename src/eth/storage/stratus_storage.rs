@@ -406,23 +406,21 @@ impl StratusStorage {
     // Blocks
     // -------------------------------------------------------------------------
 
-    pub fn save_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
-        let changes = tx.output.state.clone();
-
+    pub fn save_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.info.hash).entered();
-        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.info.hash, changes = ?tx.output.state, "saving execution");
+        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.info.hash, changes = ?state, "saving execution");
 
         // Log warning if a failed transaction has slot changes
         if !tx.output.result.is_success() {
-            let total_slot_changes: usize = changes.slots.len();
+            let total_slot_changes: usize = state.slots.len();
 
             if total_slot_changes > 0 {
                 tracing::warn!(?tx, "Failed transaction contains {} slot change(s)", total_slot_changes);
             }
         }
 
-        timed(|| self.temp.save_pending_execution(tx)).with(|m| {
+        timed(|| self.temp.save_pending_execution(tx, state)).with(|m| {
             metrics::inc_storage_save_execution(m.elapsed, label::TEMP, m.result.is_ok());
             match &m.result {
                 Err(StorageError::EvmInputMismatch { .. }) => {
@@ -797,7 +795,6 @@ mod tests {
     use super::*;
     use crate::eth::executor::ExecutionResult;
     use crate::eth::executor::TransactionExecutionInput;
-    use crate::eth::executor::TransactionExecutionOutput;
     use crate::eth::executor::TransactionExecutionResult;
     use crate::eth::executor::types::state::AccountChanges;
     use crate::eth::executor::types::state::CompleteValue;
@@ -812,16 +809,13 @@ mod tests {
         let header = storage.read_pending_block_header();
         let evm_input = TransactionExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
-        let result = TransactionExecutionOutput {
-            outcome: TransactionExecutionResult {
-                result: ExecutionResult::Success,
-                ..Default::default()
-            },
-            state: changes,
+        let result = TransactionExecutionResult {
+            result: ExecutionResult::Success,
+            ..Default::default()
         };
 
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
-        storage.save_execution(tx).expect("save execution");
+        storage.save_execution(tx, changes).expect("save execution");
 
         let (block, block_changes) = storage.finish_pending_block();
         storage.save_block(block.into(), block_changes).expect("save block");

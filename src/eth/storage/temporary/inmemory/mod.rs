@@ -48,8 +48,8 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.set_pending_header(number, timestamp);
     }
 
-    pub fn save_pending_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
-        self.transaction_storage.save_pending_execution(tx)
+    pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
+        self.transaction_storage.save_pending_execution(tx, state)
     }
 
     pub fn read_pending_executions(&self) -> Vec<TransactionExecution> {
