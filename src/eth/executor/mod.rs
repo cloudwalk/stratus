@@ -25,15 +25,16 @@ use tracing::debug_span;
 use tracing::info_span;
 pub use types::AccountChanges;
 pub use types::AccountOriginalsReader;
-pub use types::Changes;
 pub use types::Complete;
 pub use types::CompleteValue;
 pub use types::ExecutionResult;
 pub use types::ExecutorError;
+pub use types::Final;
 pub use types::Incomplete;
 pub use types::IncompleteValue;
 pub use types::RevertReason;
 pub use types::Stage;
+pub use types::State;
 pub use types::TransactionExecution;
 
 #[cfg(feature = "metrics")]
@@ -366,13 +367,13 @@ impl Executor {
             let tx_execution = TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result);
 
             #[cfg(feature = "metrics")]
-            let gas_used = tx_execution.result.gas_used;
+            let gas_used = tx_execution.output.gas_used;
             #[cfg(feature = "metrics")]
             let function = codegen::function_sig(&tx_input.execution_info.input);
             #[cfg(feature = "metrics")]
             let contract = codegen::contract_name(&tx_input.execution_info.to);
 
-            if let ExecutionResult::Reverted { reason } = &tx_execution.result.result {
+            if let ExecutionResult::Reverted { reason } = &tx_execution.output.result {
                 tracing::info!(?reason, "local transaction execution reverted");
                 #[cfg(feature = "metrics")]
                 metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());

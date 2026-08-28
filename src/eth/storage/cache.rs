@@ -10,7 +10,8 @@ use quick_cache::sync::DefaultLifecycle;
 use quick_cache::sync::GuardResult;
 use rustc_hash::FxBuildHasher;
 
-use crate::eth::executor::Changes;
+use crate::eth::executor::Complete;
+use crate::eth::executor::State;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::Slot;
@@ -18,22 +19,12 @@ use crate::eth::types::SlotIndex;
 use crate::eth::types::SlotValue;
 
 pub struct StorageCache {
-    slot_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
-    account_cache: Cache<Address, Account, UnitWeighter, FxBuildHasher>,
     account_latest_cache: Cache<Address, Account, UnitWeighter, FxBuildHasher>,
     slot_latest_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
 }
 
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct CacheConfig {
-    /// Capacity of slot cache
-    #[arg(long = "slot-cache-capacity", env = "SLOT_CACHE_CAPACITY", default_value = "100000")]
-    pub slot_cache_capacity: usize,
-
-    /// Capacity of account cache
-    #[arg(long = "account-cache-capacity", env = "ACCOUNT_CACHE_CAPACITY", default_value = "20000")]
-    pub account_cache_capacity: usize,
-
     /// Capacity of account history cache
     #[arg(long = "account-history-cache-capacity", env = "ACCOUNT_HISTORY_CACHE_CAPACITY", default_value = "20000")]
     pub account_history_cache_capacity: usize,
@@ -52,20 +43,6 @@ impl CacheConfig {
 impl StorageCache {
     pub fn new(config: &CacheConfig) -> Self {
         Self {
-            slot_cache: Cache::with(
-                config.slot_cache_capacity,
-                config.slot_cache_capacity as u64,
-                UnitWeighter,
-                FxBuildHasher,
-                DefaultLifecycle::default(),
-            ),
-            account_cache: Cache::with(
-                config.account_cache_capacity,
-                config.account_cache_capacity as u64,
-                UnitWeighter,
-                FxBuildHasher,
-                DefaultLifecycle::default(),
-            ),
             account_latest_cache: Cache::with(
                 config.account_history_cache_capacity,
                 config.account_history_cache_capacity as u64,
@@ -84,51 +61,29 @@ impl StorageCache {
     }
 
     pub fn clear(&self) {
-        self.slot_cache.clear();
-        self.account_cache.clear();
         self.account_latest_cache.clear();
         self.slot_latest_cache.clear();
     }
 
-    pub fn cache_slot_if_missing(&self, address: Address, slot: Slot) {
-        self.slot_cache.insert_if_missing((address, slot.index), slot.value);
-    }
-
-    pub fn cache_account_if_missing(&self, account: Account) {
-        self.account_cache.insert_if_missing(account.address, account);
-    }
-
     fn _cache_account_and_slots_from_changes_impl(
-        changes: Changes,
+        changes: State<Complete>,
         account_cache: &Cache<Address, Account, UnitWeighter, FxBuildHasher>,
         slot_cache: &Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
     ) {
         // cache accounts
-        for (address, change) in changes.accounts {
-            let account = (address, change).into();
+        for (address, change) in changes.accounts.into_iter() {
+            let account = change.clone().to_account(address);
             account_cache.insert(address, account);
         }
 
         // cache slots
-        for ((address, index), value) in changes.slots {
-            slot_cache.insert((address, index), value);
+        for ((address, index), value) in changes.slots.into_iter() {
+            slot_cache.insert((address, index), value.take_value());
         }
     }
 
-    pub fn cache_account_and_slots_from_changes(&self, changes: Changes) {
-        Self::_cache_account_and_slots_from_changes_impl(changes, &self.account_cache, &self.slot_cache);
-    }
-
-    pub fn cache_account_and_slots_latest_from_changes(&self, changes: Changes) {
+    pub fn cache_account_and_slots_latest_from_changes(&self, changes: State<Complete>) {
         Self::_cache_account_and_slots_from_changes_impl(changes, &self.account_latest_cache, &self.slot_latest_cache);
-    }
-
-    pub fn get_slot(&self, address: Address, index: SlotIndex) -> Option<Slot> {
-        self.slot_cache.get(&(address, index)).map(|value| Slot { value, index })
-    }
-
-    pub fn get_account(&self, address: Address) -> Option<Account> {
-        self.account_cache.get(&address)
     }
 
     pub fn cache_account_latest_if_missing(&self, address: Address, account: Account) {
