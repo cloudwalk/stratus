@@ -154,7 +154,7 @@ impl State<Complete> {
 
 impl State<Incomplete> {
     /// Reads the original account state from `storage` and resolves every unset field, advancing to
-    /// [`Full`]. The only way to turn an `Incomplete` into `Full`.
+    /// [`Complete`]. The only way to turn an `Incomplete` into `Complete`.
     ///
     /// Accounts not present in permanent storage (newly created by the block) resolve to
     /// `Account::default()`, which is their correct pre-state.
