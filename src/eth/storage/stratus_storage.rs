@@ -14,7 +14,6 @@ use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StorageCache;
 use crate::eth::storage::StorageError;
-use crate::eth::storage::TxCount;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::storage::resolve_pending;
@@ -61,6 +60,7 @@ pub struct StratusStorage {
     cache: StorageCache,
     pub perm: RocksPermanentStorage,
     // CONTRACT: Always acquire a lock when reading slots or accounts from latest (cache OR perm) and when saving a block
+    // TODO: store latest mined block header in this lock
     pub(super) transient_state_lock: parking_lot::RwLock<()>,
     #[cfg(feature = "dev")]
     perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
@@ -93,7 +93,7 @@ pub(super) trait EntityRead: Sized + Clone {
     /// Reads the latest (mined tip) value from the cache, if present.
     fn read_latest_cache(s: &StratusStorage, key: Self::Key) -> Option<Self>;
     /// Reads from temporary (pending) storage.
-    fn read_temp(s: &StratusStorage, key: Self::Key, kind: ExecutionKind) -> Option<Self>;
+    fn read_temp(s: &StratusStorage, key: Self::Key) -> Option<Self>;
     /// Reads from permanent storage at the resolved mined point.
     fn read_perm(s: &StratusStorage, key: Self::Key, point: MinedPointInTime<'_>) -> Result<Self, StorageError>;
     /// Caches the value as a latest (mined tip) entry, if not already cached.
@@ -103,9 +103,9 @@ pub(super) trait EntityRead: Sized + Clone {
 impl EntityRead for Account {
     type Key = Address;
 
-    fn read_temp(s: &StratusStorage, address: Address, kind: ExecutionKind) -> Option<Self> {
+    fn read_temp(s: &StratusStorage, address: Address) -> Option<Self> {
         tracing::debug!(storage = %label::TEMP, %address, "reading account");
-        timed(|| s.temp.read_account(address, kind)).with(|m| {
+        timed(|| s.temp.read_account(address)).with(|m| {
             if m.result.is_some() {
                 metrics::inc_storage_read_account(m.elapsed, label::TEMP, PointInTime::Pending, true);
             }
@@ -152,10 +152,10 @@ impl EntityRead for Account {
 impl EntityRead for Slot {
     type Key = (Address, SlotIndex);
 
-    fn read_temp(s: &StratusStorage, key: (Address, SlotIndex), kind: ExecutionKind) -> Option<Self> {
+    fn read_temp(s: &StratusStorage, key: (Address, SlotIndex)) -> Option<Self> {
         let (address, index) = key;
         tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
-        timed(|| s.temp.read_slot(address, index, kind)).with(|m| {
+        timed(|| s.temp.read_slot(address, index)).with(|m| {
             if m.result.is_some() {
                 metrics::inc_storage_read_slot(m.elapsed, label::TEMP, PointInTime::Pending, true);
             }
@@ -288,13 +288,13 @@ impl StratusStorage {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block_number_to_resume_import").entered();
 
-        let number = self.read_pending_block_header().0.number;
+        let number = self.read_pending_block_header().number;
         tracing::info!(?number, "got block number to resume import");
 
         Ok(number)
     }
 
-    pub fn read_pending_block_header(&self) -> (PendingBlockHeader, TxCount) {
+    pub fn read_pending_block_header(&self) -> PendingBlockHeader {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_pending_block_number").entered();
         tracing::debug!(storage = %label::TEMP, "reading pending block number");
@@ -407,23 +407,21 @@ impl StratusStorage {
     // Blocks
     // -------------------------------------------------------------------------
 
-    pub fn save_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
-        let changes = tx.output.changes.clone();
-
+    pub fn save_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.info.hash).entered();
-        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.info.hash, changes = ?tx.output.changes, "saving execution");
+        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.info.hash, changes = ?state, "saving execution");
 
         // Log warning if a failed transaction has slot changes
         if !tx.output.result.is_success() {
-            let total_slot_changes: usize = changes.slots.len();
+            let total_slot_changes: usize = state.slots.len();
 
             if total_slot_changes > 0 {
                 tracing::warn!(?tx, "Failed transaction contains {} slot change(s)", total_slot_changes);
             }
         }
 
-        timed(|| self.temp.save_pending_execution(tx)).with(|m| {
+        timed(|| self.temp.save_pending_execution(tx, state)).with(|m| {
             metrics::inc_storage_save_execution(m.elapsed, label::TEMP, m.result.is_ok());
             match &m.result {
                 Err(StorageError::EvmInputMismatch { .. }) => {
@@ -489,11 +487,11 @@ impl StratusStorage {
 
         // check pending number
         let pending_header = self.read_pending_block_header();
-        if block_number >= pending_header.0.number {
-            tracing::error!(%block_number, pending_number = %pending_header.0.number, "failed to save block because mismatch with pending block number");
+        if block_number >= pending_header.number {
+            tracing::error!(%block_number, pending_number = %pending_header.number, "failed to save block because mismatch with pending block number");
             return Err(StorageError::PendingNumberConflict {
                 new: block_number,
-                pending: pending_header.0.number,
+                pending: pending_header.number,
             });
         }
 
@@ -798,7 +796,7 @@ mod tests {
     use super::*;
     use crate::eth::executor::ExecutionResult;
     use crate::eth::executor::TransactionExecutionInput;
-    use crate::eth::executor::TransactionExecutionOutput;
+    use crate::eth::executor::TransactionExecutionResult;
     use crate::eth::executor::types::state::AccountChanges;
     use crate::eth::executor::types::state::CompleteValue;
     use crate::eth::types::Signature;
@@ -809,17 +807,16 @@ mod tests {
 
     /// Mines a block applying `changes`
     fn mine_block(storage: &StratusStorage, changes: State<Complete>) -> BlockNumber {
-        let (header, _) = storage.read_pending_block_header();
+        let header = storage.read_pending_block_header();
         let evm_input = TransactionExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
-        let result = TransactionExecutionOutput {
+        let result = TransactionExecutionResult {
             result: ExecutionResult::Success,
-            changes,
             ..Default::default()
         };
 
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
-        storage.save_execution(tx).expect("save execution");
+        storage.save_execution(tx, changes).expect("save execution");
 
         let (block, block_changes) = storage.finish_pending_block();
         storage.save_block(block.into(), block_changes).expect("save block");

@@ -18,6 +18,7 @@ pub use evm::types::EvmExecutionMetrics;
 pub use evm::types::EvmKind;
 pub use evm::types::TransactionExecutionInput;
 pub use evm::types::TransactionExecutionOutput;
+pub use evm::types::TransactionExecutionResult;
 use parking_lot::Mutex;
 use tracing::Span;
 use tracing::debug_span;
@@ -171,11 +172,11 @@ impl Executor {
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
         let tx_input: TransactionInput = tx.try_into()?;
-        let (pending_block, _) = self.storage.read_pending_block_header();
+        let pending_block = self.storage.read_pending_block_header();
         let mut evm_input = TransactionExecutionInput::from_eth_transaction(&tx_input, pending_block.number, *pending_block.timestamp);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
-        let tx_execution = match receipt.is_success() {
+        let (tx_execution, state) = match receipt.is_success() {
             // successful external transaction, re-execute locally
             true => {
                 // re-execute transaction
@@ -215,7 +216,10 @@ impl Executor {
                     metrics::inc_executor_external_transaction_gas(evm_result.gas_used.as_u64() as usize, tx_contract, tx_function);
                 }
 
-                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result)
+                (
+                    TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result.outcome),
+                    evm_result.state,
+                )
             }
             //
             // failed external transaction, re-create from receipt without re-executing
@@ -234,12 +238,15 @@ impl Executor {
                 evm_input.gas_limit = tx_input.execution_info.gas_limit;
                 evm_input.gas_price = tx_input.execution_info.gas_price;
 
-                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result)
+                (
+                    TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result.outcome),
+                    evm_result.state,
+                )
             }
         };
 
         // persist state
-        self.miner.save_execution(tx_execution)?;
+        self.miner.save_execution(tx_execution, state)?;
         Ok(())
     }
 
@@ -340,7 +347,7 @@ impl Executor {
             });
 
             // prepare evm input
-            let (pending_header, _) = self.storage.read_pending_block_header();
+            let pending_header = self.storage.read_pending_block_header();
             let evm_input = TransactionExecutionInput::from_eth_transaction(&tx_input, pending_header.number, *pending_header.timestamp);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
@@ -356,11 +363,11 @@ impl Executor {
                 "executing local transaction attempt"
             );
 
-            let (evm_result, evm_metrics) = self.evms.execute(EvmRoute::Transaction(evm_input.clone()))?; // this clone can be avoided i think
+            let (evm_result, evm_metrics): (TransactionExecutionOutput, EvmExecutionMetrics) = self.evms.execute(EvmRoute::Transaction(evm_input.clone()))?;
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
-            let tx_execution = TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result);
+            let tx_execution = TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result.outcome);
 
             #[cfg(feature = "metrics")]
             let gas_used = tx_execution.output.gas_used;
@@ -375,7 +382,7 @@ impl Executor {
                 metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());
             }
 
-            match self.miner.save_execution(tx_execution) {
+            match self.miner.save_execution(tx_execution, evm_result.state) {
                 Ok(_) => {
                     // track metrics
                     #[cfg(feature = "metrics")]
@@ -422,19 +429,20 @@ impl Executor {
             "executing read-only local transaction"
         );
 
+        #[cfg(feature = "metrics")]
+        let (function, contract) = { (codegen::function_sig(&call_input.data), codegen::contract_name(&call_input.to)) };
+
         // execute
         let evm_input = match point_in_time {
             PointInTime::Pending => {
-                let (pending_header, tx_count) = self.storage.read_pending_block_header();
-                CallExecutionInput::from_pending_block(call_input.clone(), pending_header, tx_count)
+                let pending_header = self.storage.read_pending_block_header();
+                CallExecutionInput::from_pending_block(call_input, pending_header)
             }
-            point_in_time => {
-                // NOTE: this read is way more expensive that what we theoretically need, we only need to get the timestamp
-                // and block number, however this is not possible in the current rocksdb configuration.
+            _ => {
                 let Some(block) = self.storage.read_block(point_in_time.into())? else {
                     return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
                 };
-                CallExecutionInput::try_from_mined_block(call_input.clone(), block, point_in_time)?
+                CallExecutionInput::from_mined_block(call_input, block.header, point_in_time)
             }
         };
 
@@ -447,9 +455,6 @@ impl Executor {
         // track metrics
         #[cfg(feature = "metrics")]
         {
-            let function = codegen::function_sig(&call_input.data);
-            let contract = codegen::contract_name(&call_input.to);
-
             match &evm_result {
                 Ok((_, evm_metrics)) => {
                     metrics::inc_executor_local_call(start.elapsed(), true, contract, function);
