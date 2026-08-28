@@ -43,7 +43,7 @@ impl InmemoryTransactionTemporaryStorage {
         Self {
             pending_block: RwLock::new(InMemoryTemporaryStorageState {
                 block: PendingBlock::new_at_now(block_number),
-                block_changes: State::default(),
+                state: State::default(),
             }),
             latest_block: RwLock::new(None),
         }
@@ -90,7 +90,7 @@ impl InmemoryTransactionTemporaryStorage {
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
-        pending_block.block_changes.merge(state);
+        pending_block.state.merge(state);
 
         // save execution
         pending_block.block.push_transaction(tx);
@@ -109,18 +109,17 @@ impl InmemoryTransactionTemporaryStorage {
 
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {
         let pending_block = self.pending_block.upgradable_read();
-        let changes = pending_block.block_changes.clone();
 
         // This has to happen BEFORE creating the new state, because UnixTimeNow::default() may change the offset.
         #[cfg(feature = "dev")]
-        let finished_block = {
+        let (finished_block, state) = {
             let mut finished_block = pending_block.block.clone();
             // Update block timestamp only if evm_setNextBlockTimestamp was called,
             // otherwise keep the original timestamp from pending block creation
             if UnixTime::evm_set_next_block_timestamp_was_called() {
                 finished_block.header.timestamp = UnixTimeNow::default();
             }
-            finished_block
+            (finished_block, pending_block.state.clone())
         };
 
         let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number());
@@ -133,14 +132,15 @@ impl InmemoryTransactionTemporaryStorage {
         drop(pending_block);
 
         #[cfg(not(feature = "dev"))]
-        let finished_block = {
+        let (finished_block, state) = {
             let latest = RwLockWriteGuard::<Option<InMemoryTemporaryStorageState>>::downgrade(latest);
 
             #[allow(clippy::expect_used)]
-            latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone()
+            let latest_state = latest.as_ref().expect("latest should be Some after finishing the pending block");
+            (latest_state.block.clone(), latest_state.state.clone())
         };
 
-        (finished_block, changes)
+        (finished_block, state)
     }
 
     pub fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
@@ -156,25 +156,25 @@ impl InmemoryTransactionTemporaryStorage {
     // -------------------------------------------------------------------------
 
     pub fn read_account(&self, address: Address) -> Option<Account> {
-        match self.pending_block.read().block_changes.accounts.get(&address) {
+        match self.pending_block.read().state.accounts.get(&address) {
             Some(pending_account) => Some(pending_account.clone().to_account(address)),
             None => self
                 .latest_block
                 .read()
                 .as_ref()
-                .and_then(|latest| latest.block_changes.accounts.get(&address))
+                .and_then(|latest| latest.state.accounts.get(&address))
                 .map(|account| account.clone().to_account(address)),
         }
     }
 
     pub fn read_slot(&self, address: Address, index: SlotIndex) -> Option<Slot> {
-        match self.pending_block.read().block_changes.slots.get(&(address, index)) {
+        match self.pending_block.read().state.slots.get(&(address, index)) {
             Some(pending_value) => Some(Slot::new(index, *pending_value.value())),
             None => self
                 .latest_block
                 .read()
                 .as_ref()
-                .and_then(|latest| latest.block_changes.slots.get(&(address, index)).map(|value| Slot::new(index, *value.value()))),
+                .and_then(|latest| latest.state.slots.get(&(address, index)).map(|value| Slot::new(index, *value.value()))),
         }
     }
 
