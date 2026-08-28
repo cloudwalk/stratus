@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use parking_lot::Mutex;
+use parking_lot::MutexGuard;
 use parking_lot::RwLock;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::broadcast;
@@ -86,6 +87,18 @@ pub struct MinerLocks {
 }
 
 impl Miner {
+    /// Acquires all locks that mutate the pending/mined state, so a storage reset can never interleave with a
+    /// transaction save, a block mine or a block commit. Otherwise, a concurrent mine can permanently desync the
+    /// pending and mined block numbers (e.g. mined number reset to zero while the pending block already advanced).
+    pub fn lock_state_for_reset(&self) -> (MutexGuard<'_, ()>, MutexGuard<'_, ()>, MutexGuard<'_, ()>, MutexGuard<'_, ()>) {
+        // acquire in the same order used by the mining paths to avoid deadlocks
+        let save_execution = self.locks.save_execution.lock();
+        let mine_and_commit = self.locks.mine_and_commit.lock();
+        let mine = self.locks.mine.lock();
+        let commit = self.locks.commit.lock();
+        (save_execution, mine_and_commit, mine, commit)
+    }
+
     pub fn new(storage: Arc<StratusStorage>, mode: MinerMode) -> Self {
         tracing::info!(?mode, "creating block miner");
         Self {

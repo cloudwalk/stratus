@@ -429,15 +429,22 @@ impl Executor {
             "executing read-only local transaction"
         );
 
-        let Some(block) = self.storage.read_block(point_in_time.into())? else {
-            return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
-        };
-
         #[cfg(feature = "metrics")]
         let (function, contract) = { (codegen::function_sig(&call_input.data), codegen::contract_name(&call_input.to)) };
 
         // execute
-        let evm_input = CallExecutionInput::from_mined_block(call_input, block.header, point_in_time);
+        let evm_input = match point_in_time {
+            PointInTime::Pending => {
+                let pending_header = self.storage.read_pending_block_header();
+                CallExecutionInput::from_pending_block(call_input, pending_header)
+            }
+            _ => {
+                let Some(block) = self.storage.read_block(point_in_time.into())? else {
+                    return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
+                };
+                CallExecutionInput::from_mined_block(call_input, block.header, point_in_time)
+            }
+        };
 
         let evm_route = match point_in_time {
             PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input),

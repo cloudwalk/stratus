@@ -428,6 +428,9 @@ async fn stratus_health(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> R
 
 #[cfg(feature = "dev")]
 fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    // make the reset exclusive with transaction execution, mining and commit, otherwise a concurrent mine can
+    // permanently desync the pending and mined block numbers
+    let _mining_locks = ctx.server.miner.lock_state_for_reset();
     ctx.server.storage.reset_to_genesis()?;
     Ok(to_json_value(true))
 }
