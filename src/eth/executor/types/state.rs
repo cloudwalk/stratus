@@ -317,7 +317,7 @@ pub struct AccountChanges<S: Stage> {
 }
 
 impl AccountChanges<Incomplete> {
-    /// Fills every unset field with its real original value, advancing to [`Full`].
+    /// Fills every unset field with its real original value, advancing to [`Complete`].
     pub fn complete(self, original: Account) -> AccountChanges<Complete> {
         AccountChanges {
             nonce: self.nonce.complete(original.nonce),
