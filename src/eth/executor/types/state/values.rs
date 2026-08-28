@@ -67,33 +67,8 @@ impl<T: Clone + Debug + PartialEq + Eq + Default + serde::Serialize> Change for 
         }
     }
 
-<<<<<<< HEAD:src/eth/executor/types/state.rs
-    pub fn merge(&mut self, other: State<Complete>) {
-        other.accounts.into_iter().for_each(|(address, changes)| self.insert_account(address, changes));
-        other
-            .slots
-            .into_iter()
-            .for_each(|((address, index), changes)| self.insert_slot(address, index, changes));
-    }
-
-    pub fn finalize(&self) -> State<Final> {
-        let accounts = self
-            .accounts
-            .iter()
-            .filter_map(|(address, account)| account.complete().map(|acc| ((*address), acc)))
-            .collect();
-
-        let slots = self
-            .slots
-            .iter()
-            .filter(|(_, change)| change.is_changed())
-            .map(|(slot_key, slot_value)| (*(slot_key), slot_value.clone().take_value()))
-            .collect();
-        State { accounts, slots }
-=======
     fn is_changed(&self) -> bool {
         matches!(self, Self::Changed(_))
->>>>>>> 96818912 (small state refac):src/eth/executor/types/state/values.rs
     }
 }
 
@@ -276,16 +251,7 @@ impl AccountChanges<Incomplete> {
 }
 
 impl AccountChanges<Complete> {
-    /// Checks if account nonce, balance or bytecode were modified.
-<<<<<<< HEAD:src/eth/executor/types/state.rs
-    pub fn is_changed(&self) -> bool {
-        self.nonce.is_changed() || self.balance.is_changed() || self.bytecode.is_changed()
-    }
-
     pub fn complete(&self) -> Option<AccountChanges<Final>> {
-=======
-    pub fn complete(self) -> Option<AccountChanges<Final>> {
->>>>>>> 96818912 (small state refac):src/eth/executor/types/state/values.rs
         self.is_changed().then(|| AccountChanges {
             nonce: self.nonce.clone(),
             balance: self.balance.clone(),

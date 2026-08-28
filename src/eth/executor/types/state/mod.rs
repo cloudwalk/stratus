@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 
-use foldhash::fast::FixedState;
+use foldhash::fast::RandomState;
 use serde_with::serde_as;
 pub use values::AccountChanges;
 pub use values::Change;
@@ -54,9 +54,9 @@ impl Stage for Complete {
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Default)]
 pub struct State<S: Stage> {
-    pub accounts: HashMap<Address, AccountChanges<S>, FixedState>,
+    pub accounts: HashMap<Address, AccountChanges<S>, RandomState>,
     #[serde_as(as = "Vec<(_, _)>")]
-    pub slots: HashMap<(Address, SlotIndex), S::SlotChangeField, FixedState>,
+    pub slots: HashMap<(Address, SlotIndex), S::SlotChangeField, RandomState>,
 }
 
 #[cfg(test)]
@@ -136,27 +136,27 @@ impl State<Complete> {
             .for_each(|((address, index), changes)| self.insert_slot(address, index, changes));
     }
 
-    pub fn finalize(self) -> State<Final> {
+    pub fn finalize(&self) -> State<Final> {
         let accounts = self
             .accounts
-            .into_iter()
+            .iter()
             .filter_map(|(address, account)| {
                 if address.is_ignored() {
                     None
                 } else {
-                    account.complete().map(|acc| (address, acc))
+                    account.complete().map(|acc| (*address, acc))
                 }
             })
             .collect();
 
         let slots = self
             .slots
-            .into_iter()
+            .iter()
             .filter_map(|((address, index), slot_value)| {
                 if address.is_ignored() {
                     None
                 } else {
-                    slot_value.changed().map(|value| ((address, index), value))
+                    slot_value.changed_ref().copied().map(|value| ((*address, *index), value))
                 }
             })
             .collect();
