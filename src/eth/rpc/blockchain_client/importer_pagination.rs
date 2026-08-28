@@ -50,13 +50,7 @@ impl<'a> ImporterPaginationClient<'a> {
         // first request is a plain request: the leader decides whether the response
         // needs pagination (by size). Continuations carry only the returned cursor.
         let params = match cursor {
-            Some(cursor) => vec![
-                to_json_value(block_number),
-                to_json_value(ImporterPageRequest {
-                    cursor: Some(cursor),
-                    limit: None,
-                }),
-            ],
+            Some(cursor) => vec![to_json_value(block_number), to_json_value(ImporterPageRequest::with_cursor(cursor))],
             None => vec![to_json_value(block_number)],
         };
 

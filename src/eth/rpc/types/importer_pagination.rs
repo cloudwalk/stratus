@@ -26,10 +26,14 @@ use crate::eth::types::ExternalReceipt;
 use crate::eth::types::ExternalTransaction;
 use crate::eth::types::Hash;
 
+/// Default page limit for the dev-only explicit `limit` knob.
+#[cfg(any(test, feature = "dev"))]
 pub const IMPORTER_PAGE_LIMIT_DEFAULT: usize = 256;
 /// Floor for an explicit `limit`: prevents pathological page counts (e.g. `limit: 1`
 /// against a big block would emit thousands of pages).
+#[cfg(any(test, feature = "dev"))]
 pub const IMPORTER_PAGE_LIMIT_MIN: usize = 32;
+#[cfg(any(test, feature = "dev"))]
 pub const IMPORTER_PAGE_LIMIT_MAX: usize = 5_000;
 
 const IMPORTER_CURSOR_VERSION: &str = "v1";
@@ -45,10 +49,24 @@ pub struct ImporterPageRequest {
     /// exercise multi-page flows cheaply (hundreds of items instead of multi-MB
     /// blocks). Values are clamped to [`IMPORTER_PAGE_LIMIT_MIN`]..=
     /// [`IMPORTER_PAGE_LIMIT_MAX`].
+    ///
+    /// Only honored by servers built with the `dev` feature: production builds
+    /// strip the field and silently ignore the knob.
+    #[cfg(any(test, feature = "dev"))]
     pub limit: Option<usize>,
 }
 
 impl ImporterPageRequest {
+    /// Builds a continuation request carrying only the cursor. The dev-only
+    /// `limit` field defaults to `None` under the byte-budget policy.
+    pub fn with_cursor(cursor: String) -> Self {
+        Self {
+            cursor: Some(cursor),
+            #[cfg(any(test, feature = "dev"))]
+            limit: None,
+        }
+    }
+
     fn parse_optional(mut params: ParamsSequence<'_>) -> Result<Option<Self>, RpcError> {
         match params.optional_next::<Self>() {
             Ok(page_request) => Ok(page_request),
@@ -63,6 +81,7 @@ impl ImporterPageRequest {
     ///
     /// Only invoked by [`ImporterPagination::from_params`] on the explicit-override
     /// path — a plain request resolves to the byte-budget policy instead.
+    #[cfg(any(test, feature = "dev"))]
     fn explicit_limit(&self) -> Option<usize> {
         let limit = match self.limit {
             None => return None,
@@ -77,7 +96,9 @@ impl ImporterPageRequest {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PagePolicy {
     /// Page by item count (explicit `limit` override — a test/tooling knob, not a
-    /// production control; see [`ImporterPageRequest::limit`]).
+    /// production control; see [`ImporterPageRequest::limit`]). Only available in
+    /// `dev` builds.
+    #[cfg(any(test, feature = "dev"))]
     Count(usize),
     /// Page by a serialized-bytes budget (production default). Measured on the
     /// exact encoding each response endpoint emits, so a page is guaranteed to fit
@@ -117,10 +138,11 @@ impl ImporterPagination {
         let request = ImporterPageRequest::parse_optional(params)?;
         let (filter, start) = Self::resolve_filter(filter, request.as_ref().and_then(|r| r.cursor.as_deref()))?;
 
-        let cap = (max_response_bytes as usize).saturating_sub(Self::ENVELOPE_RESERVE);
-        let policy = match request.and_then(|request| request.explicit_limit()) {
+        let policy = PagePolicy::Bytes((max_response_bytes as usize).saturating_sub(Self::ENVELOPE_RESERVE));
+        #[cfg(any(test, feature = "dev"))]
+        let policy = match request.as_ref().and_then(ImporterPageRequest::explicit_limit) {
             Some(limit) => PagePolicy::Count(limit),
-            None => PagePolicy::Bytes(cap),
+            None => policy,
         };
 
         Ok((filter, Self { start, policy }))
@@ -278,7 +300,6 @@ impl ImporterPagination {
         }
 
         match self.policy {
-            PagePolicy::Count(limit) => (total > limit).then(|| self.paginate_first_or_continue(byte_sizes, page_frame, total)),
             PagePolicy::Bytes(cap) => {
                 let sizes = byte_sizes();
                 // sizing happens even on the one-shot path: it's how we know it fits.
@@ -286,15 +307,21 @@ impl ImporterPagination {
                 let total_bytes: usize = sizes.iter().copied().fold(0usize, usize::saturating_add);
                 (total_bytes.saturating_add(base_frame) > cap).then(|| self.paginate_first_or_continue(|| sizes, page_frame, total))
             }
+            #[cfg(any(test, feature = "dev"))]
+            PagePolicy::Count(limit) => (total > limit).then(|| self.paginate_first_or_continue(byte_sizes, page_frame, total)),
         }
     }
 
     /// Computes `(end, limit_metric)` for any request that must paginate. The item
     /// budget is the cap minus the page frame.
     fn paginate_first_or_continue(&self, byte_sizes: impl FnOnce() -> Vec<usize>, page_frame: usize, total: usize) -> (usize, usize) {
+        // `total` is only used by the dev-only count-based arm.
+        #[cfg(not(any(test, feature = "dev")))]
+        let _ = total;
         match self.policy {
-            PagePolicy::Count(limit) => (self.start.saturating_add(limit).min(total), limit),
             PagePolicy::Bytes(cap) => (self.start + take_by_budget(&byte_sizes(), self.start, cap.saturating_sub(page_frame)), cap),
+            #[cfg(any(test, feature = "dev"))]
+            PagePolicy::Count(limit) => (self.start.saturating_add(limit).min(total), limit),
         }
     }
 

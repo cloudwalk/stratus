@@ -12,6 +12,7 @@ pub use error::MulticallError;
 pub use error::RpcError;
 pub use importer_pagination::BlockAndReceiptsPageResponse;
 pub use importer_pagination::BlockWithChangesPageResponse;
+#[cfg(any(test, feature = "dev"))]
 pub use importer_pagination::IMPORTER_PAGE_LIMIT_DEFAULT;
 pub use importer_pagination::ImporterPageRequest;
 pub use importer_pagination::ImporterPagination;
