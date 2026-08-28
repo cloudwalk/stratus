@@ -18,6 +18,7 @@ pub use evm::types::EvmExecutionMetrics;
 pub use evm::types::EvmKind;
 pub use evm::types::TransactionExecutionInput;
 pub use evm::types::TransactionExecutionOutput;
+pub use evm::types::TransactionExecutionResult;
 use parking_lot::Mutex;
 use tracing::Span;
 use tracing::debug_span;
@@ -171,7 +172,7 @@ impl Executor {
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
         let tx_input: TransactionInput = tx.try_into()?;
-        let (pending_block, _) = self.storage.read_pending_block_header();
+        let pending_block = self.storage.read_pending_block_header();
         let mut evm_input = TransactionExecutionInput::from_eth_transaction(&tx_input, pending_block.number, *pending_block.timestamp);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
@@ -340,7 +341,7 @@ impl Executor {
             });
 
             // prepare evm input
-            let (pending_header, _) = self.storage.read_pending_block_header();
+            let pending_header = self.storage.read_pending_block_header();
             let evm_input = TransactionExecutionInput::from_eth_transaction(&tx_input, pending_header.number, *pending_header.timestamp);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
@@ -422,21 +423,12 @@ impl Executor {
             "executing read-only local transaction"
         );
 
-        // execute
-        let evm_input = match point_in_time {
-            PointInTime::Pending => {
-                let (pending_header, tx_count) = self.storage.read_pending_block_header();
-                CallExecutionInput::from_pending_block(call_input.clone(), pending_header, tx_count)
-            }
-            point_in_time => {
-                // NOTE: this read is way more expensive that what we theoretically need, we only need to get the timestamp
-                // and block number, however this is not possible in the current rocksdb configuration.
-                let Some(block) = self.storage.read_block(point_in_time.into())? else {
-                    return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
-                };
-                CallExecutionInput::try_from_mined_block(call_input.clone(), block, point_in_time)?
-            }
+        let Some(block) = self.storage.read_block(point_in_time.into())? else {
+            return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
         };
+
+        // execute
+        let evm_input = CallExecutionInput::try_from_mined_block(call_input.clone(), block, point_in_time)?;
 
         let evm_route = match point_in_time {
             PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input),

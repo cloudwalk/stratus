@@ -50,7 +50,6 @@ use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::CallExecutionOutput;
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorError;
-use crate::eth::executor::TransactionExecutionOutput;
 use crate::eth::follower::ConsensusError;
 use crate::eth::follower::ImporterError;
 use crate::eth::follower::consensus::Consensus;
@@ -1112,7 +1111,7 @@ fn stratus_get_transaction_result(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     match rpc_get_transaction_receipt(params, ctx)? {
         Some(tx) => {
             tracing::info!("transaction receipt found");
-            Ok(to_json_value(tx.to_result().result))
+            Ok(to_json_value(tx.to_result().outcome.result))
         }
         None => {
             tracing::info!("transaction receipt not found");
@@ -1166,7 +1165,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     }
 }
 
-fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<TransactionExecutionOutput, StratusError> {
+fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<CallExecutionOutput, StratusError> {
     // parse params
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
     let (_, filter) = next_rpc_param_or_default::<BlockFilter>(params)?;

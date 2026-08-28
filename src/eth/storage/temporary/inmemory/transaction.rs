@@ -12,7 +12,6 @@ use crate::eth::executor::types::state::Complete;
 #[cfg(feature = "dev")]
 use crate::eth::executor::types::state::CompleteValue;
 use crate::eth::storage::StorageError;
-use crate::eth::storage::TxCount;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
@@ -61,9 +60,9 @@ impl InmemoryTransactionTemporaryStorage {
     // -------------------------------------------------------------------------
 
     // Uneeded clone here, return Cow
-    pub fn read_pending_block_header(&self) -> (PendingBlockHeader, TxCount) {
+    pub fn read_pending_block_header(&self) -> PendingBlockHeader {
         let pending_block = self.pending_block.read();
-        (pending_block.block.header.clone(), (pending_block.block.transactions.len() as u64).into())
+        pending_block.block.header.clone()
     }
 
     #[cfg(feature = "dev")]
@@ -92,7 +91,7 @@ impl InmemoryTransactionTemporaryStorage {
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
-        pending_block.block_changes.merge(tx.output.changes.clone()); // TODO: This clone can be removed by reworking the primitives
+        pending_block.block_changes.merge(tx.output.state.clone()); // TODO: This clone can be removed by reworking the primitives
 
         // save execution
         pending_block.block.push_transaction(tx);
