@@ -8,13 +8,11 @@ use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::GAS_MAX_LIMIT;
 use crate::eth::executor::evm::types::GeneralRevm;
 use crate::eth::storage::ExecutionKind;
-use crate::eth::storage::TxCount;
 use crate::eth::types::Address;
 use crate::eth::types::Block;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::Bytes;
 use crate::eth::types::CallInput;
-use crate::eth::types::PendingBlockHeader;
 use crate::eth::types::PointInTime;
 use crate::eth::types::StratusError;
 use crate::eth::types::UnixTime;
@@ -64,19 +62,6 @@ pub struct CallExecutionInput {
 }
 
 impl CallExecutionInput {
-    /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas` for a pending block.
-    pub fn from_pending_block(input: CallInput, pending_header: PendingBlockHeader, tx_count: TxCount) -> Self {
-        Self {
-            from: input.from.unwrap_or(Address::ZERO),
-            to: input.to.map_into(),
-            value: input.value,
-            data: input.data,
-            block_number: pending_header.number,
-            block_timestamp: *pending_header.timestamp,
-            kind: ExecutionKind::CallPending(pending_header.number, tx_count),
-        }
-    }
-
     /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas` for a mined block.
     pub fn try_from_mined_block(input: CallInput, block: Block, point_in_time: PointInTime) -> anyhow::Result<Self, StratusError> {
         let kind = match point_in_time {

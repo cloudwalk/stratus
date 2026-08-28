@@ -40,13 +40,13 @@ use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
 use super::types::UnixTimeRocksdb;
-use crate::eth::executor::Changes;
+use crate::eth::executor::State;
+use crate::eth::executor::types::state::Final;
 use crate::eth::rpc::BlockFilter;
 use crate::eth::rpc::LogFilter;
 use crate::eth::storage::MinedPointInTime;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::cf_versions::CfBlockChangesValue;
-use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
@@ -63,7 +63,6 @@ use crate::eth::types::SlotIndex;
 use crate::eth::types::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
-use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::log_and_err;
@@ -217,37 +216,22 @@ impl RocksStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    fn prepare_batch_with_execution_changes(&self, changes: Changes, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()> {
+    fn prepare_batch_with_execution_changes(&self, changes: State<Final>, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()> {
         let mut block_changes = BlockChangesRocksdb::with_capacity(changes.accounts.len());
         let block_number = block_number.into();
 
         for (address, change) in changes.accounts {
-            let address: AddressRocksdb = address.into();
-            if change.is_modified() {
-                let mut account_change_entry = AccountChangesRocksdb::default();
-                let mut account_info_entry = self.accounts.get(&address)?.unwrap_or(AccountRocksdb::default().into());
+            let address_rocks: AddressRocksdb = address.into();
+            let account_change_entry = (&change).into();
+            let account_info_entry: CfAccountsValue = match self.accounts.get(&address_rocks)? {
+                Some(existing_account) => existing_account.into_inner().update(change).into(),
+                None => change.to_account(address).into(),
+            };
 
-                if change.nonce.is_changed() {
-                    let nonce = (*change.nonce.value()).into();
-                    account_info_entry.nonce = nonce;
-                    account_change_entry.nonce = Some(nonce);
-                }
-                if change.balance.is_changed() {
-                    let balance = (*change.balance.value()).into();
-                    account_info_entry.balance = balance;
-                    account_change_entry.balance = Some(balance);
-                }
-                if change.bytecode.is_changed() {
-                    let bytecode = change.bytecode.value().clone().map_into();
-                    account_info_entry.bytecode = bytecode.clone();
-                    account_change_entry.bytecode = Some(bytecode);
-                }
-
-                self.accounts.prepare_batch_insertion([(address, account_info_entry.clone())], batch)?;
-                self.accounts_history
-                    .prepare_batch_insertion([((address, block_number), account_info_entry.into_inner().into())], batch)?;
-                block_changes.account_changes.insert(address, account_change_entry);
-            }
+            self.accounts.prepare_batch_insertion([(address_rocks, account_info_entry.clone())], batch)?;
+            self.accounts_history
+                .prepare_batch_insertion([((address_rocks, block_number), account_info_entry.into_inner().into())], batch)?;
+            block_changes.account_changes.insert(address_rocks, account_change_entry);
         }
 
         for ((address, slot_index), slot_value) in changes.slots {
@@ -458,12 +442,12 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(write_batch)
     }
 
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: Changes) -> Result<()> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: State<Final>) -> Result<()> {
         let mut batch = WriteBatch::default();
 
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
-            txs_batch.push((transaction.info.hash.into(), transaction.evm_input.block_number.into()));
+            txs_batch.push((transaction.info.hash.into(), transaction.input.block_number.into()));
         }
         self.transactions.prepare_batch_insertion(txs_batch, &mut batch)?;
 
@@ -501,16 +485,16 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
-    pub fn save_block(&self, block: Block, account_changes: Changes) -> Result<()> {
+    pub fn save_block(&self, block: Block, account_changes: State<Final>) -> Result<()> {
         let mut batch = WriteBatch::default();
         self.prepare_block_insertion(block, account_changes, &mut batch)?;
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
-    pub fn prepare_block_insertion(&self, block: Block, account_changes: Changes, batch: &mut WriteBatch) -> Result<()> {
+    pub fn prepare_block_insertion(&self, block: Block, account_changes: State<Final>, batch: &mut WriteBatch) -> Result<()> {
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
-            txs_batch.push((transaction.info.hash.into(), transaction.evm_input.block_number.into()));
+            txs_batch.push((transaction.info.hash.into(), transaction.input.block_number.into()));
         }
 
         self.transactions.prepare_batch_insertion(txs_batch, batch)?;
@@ -596,6 +580,7 @@ impl RocksStorageState {
     #[cfg(feature = "dev")]
     pub fn save_account_code(&self, address: Address, code: Bytes) -> Result<()> {
         use crate::alias::RevmBytecode;
+        use crate::ext::OptionExt;
 
         let mut batch = WriteBatch::default();
 
@@ -799,7 +784,8 @@ mod tests {
     use super::*;
     use crate::eth::executor::TransactionExecution;
     use crate::eth::executor::TransactionExecutionInput;
-    use crate::eth::executor::TransactionExecutionOutput;
+    use crate::eth::executor::TransactionExecutionResult;
+    use crate::eth::executor::types::state::Complete;
     use crate::eth::types::BlockHeader;
 
     #[test]
@@ -860,13 +846,13 @@ mod tests {
                 },
                 transactions: vec![TransactionMined {
                     execution: TransactionExecution {
-                        evm_input: TransactionExecutionInput {
+                        input: TransactionExecutionInput {
                             block_number: number.into(),
                             ..Faker.fake()
                         },
-                        result: TransactionExecutionOutput {
+                        output: TransactionExecutionResult {
                             logs: vec![Faker.fake(), Faker.fake()],
-                            ..Faker.fake()
+                            ..Default::default()
                         },
                         ..Faker.fake()
                     },
@@ -874,7 +860,7 @@ mod tests {
                 }],
             };
 
-            state.save_block(block, Changes::default()).unwrap();
+            state.save_block(block, State::<Complete>::default().finalize()).unwrap();
         }
 
         let filter = LogFilter {
