@@ -733,6 +733,50 @@ describe("JSON-RPC", () => {
                 expect(logEntry.topics.length).to.equal(2);
             });
         });
+
+        // Minimal coverage for the endpoint's own logic (state loading + never-sent semantics).
+        // The tracer engine itself is exercised exhaustively by the debug_traceTransaction block
+        // above, since both endpoints share it, so tracers are not re-tested per-variant here.
+        describe("debug_traceCall", () => {
+            it("callTracer traces a contract call that was never sent (latest)", async () => {
+                const contract = await deployTestRevertReason();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const data = contract.interface.encodeFunctionData("revertWithKnownError", []);
+                const call = { from: ALICE.address, to: await contract.getAddress(), data };
+
+                const trace = await sendAndGetFullResponse("debug_traceCall", [call, "latest", { tracer: "callTracer" }]);
+
+                expect(trace.data.result.from).to.eq("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266");
+                expect(trace.data.result.to).to.eq((await contract.getAddress()).toLowerCase());
+                expect(trace.data.result.input).to.eq("0x2b3d7bd2");
+                expect(trace.data.result.output).to.eq("0x22aa4404");
+                expect(trace.data.result.error).to.eq("execution reverted");
+                expect(trace.data.result.type).to.eq("CALL");
+            });
+
+            it("traces against pending state without mutating it", async () => {
+                const contract = await deployTestContractBalances();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                // trace a state-changing call against pending — exercises the from_pending_block branch
+                const data = contract.interface.encodeFunctionData("add", [ALICE.address, 10]);
+                const call = { from: ALICE.address, to: await contract.getAddress(), data };
+
+                const trace = await sendAndGetFullResponse("debug_traceCall", [call, "pending", { tracer: "callTracer" }]);
+
+                expect(trace.data.result.to).to.eq((await contract.getAddress()).toLowerCase());
+                expect(trace.data.result.type).to.eq("CALL");
+                expect(trace.data.result.error).to.be.undefined;
+
+                // the traced call must NOT have persisted: ALICE's balance is still zero
+                const getData = contract.interface.encodeFunctionData("get", [ALICE.address]);
+                const balance = await send("eth_call", [{ to: await contract.getAddress(), data: getData }, "latest"]);
+                expect(balance).to.eq(toPaddedHex(0, 32));
+            });
+        });
     });
 
     describe("Call", () => {
