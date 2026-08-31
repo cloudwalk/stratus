@@ -92,29 +92,33 @@ describe("Pagination", function () {
             const slotChangesCount = legacyChanges.slot_changes.length;
             const expectedTotal = TX_COUNT + accountChangesCount + slotChangesCount;
 
-            // Fetch page 1
-            const page1 = await send("stratus_getBlockWithChanges", [blockHash, { cursor: null, limit: PAGE_LIMIT }]);
-            expect(page1.pagination.returned).to.equal(PAGE_LIMIT);
-            expect(page1.pagination.total).to.equal(expectedTotal);
-            expect(page1.pagination.nextCursor).to.be.a("string");
-            expect(page1.block.transactions).to.have.length(PAGE_LIMIT);
-            expect(page1.changes).to.not.be.null;
+            // Walk every page until nextCursor is null. A 300-transfer block touches
+            // 301 accounts (300 recipients + the sender), so the 3-section total
+            // exceeds two pages at PAGE_LIMIT=256; the page count must not be hardcoded.
+            const pages: any[] = [];
+            let cursor: string | null = null;
+            do {
+                const params =
+                    cursor === null
+                        ? [blockHash, { cursor: null, limit: PAGE_LIMIT }]
+                        : [blockHash, { cursor, limit: PAGE_LIMIT }];
+                const page = await send("stratus_getBlockWithChanges", params);
+                pages.push(page);
+                expect(page.pagination.total, "every page reports the stable total").to.equal(expectedTotal);
+                expect(page.pagination.returned, "every page makes progress").to.be.greaterThan(0);
+                expect(page.changes, "every page carries changes").to.not.be.null;
+                cursor = page.pagination.nextCursor;
+            } while (cursor !== null);
 
-            // Fetch page 2 using the cursor
-            const page2 = await send("stratus_getBlockWithChanges", [
-                blockHash,
-                { cursor: page1.pagination.nextCursor, limit: PAGE_LIMIT },
-            ]);
-            expect(page2.pagination.total).to.equal(expectedTotal);
-            expect(page2.pagination.nextCursor).to.be.null;
-            expect(page2.changes).to.not.be.null;
+            expect(pages.length, "block must span multiple pages").to.be.greaterThan(1);
+            expect(pages[pages.length - 1].pagination.nextCursor).to.be.null;
 
             // Sum of returned across all pages should equal total
-            const totalReturned = page1.pagination.returned + page2.pagination.returned;
+            const totalReturned = pages.reduce((acc, p) => acc + p.pagination.returned, 0);
             expect(totalReturned).to.equal(expectedTotal);
 
-            // Reassemble transactions from both pages and compare against legacy (same BlockRocksdb format)
-            const reassembledTxs = [...page1.block.transactions, ...page2.block.transactions];
+            // Reassemble transactions from all pages and compare against legacy (same BlockRocksdb format)
+            const reassembledTxs = pages.flatMap((p: any) => p.block.transactions);
             expect(reassembledTxs).to.deep.equal(legacyBlock.transactions);
         });
 
