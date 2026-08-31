@@ -243,6 +243,11 @@ fn escaped_len_of_char(ch: char) -> usize {
 // Follower side
 // -----------------------------------------------------------------------------
 
+/// Builds pagination request params for the follower side.
+pub fn request_params(offset: u64, chunk_budget: u64) -> JsonValue {
+    to_json_value(PaginationParams { offset, chunk_budget })
+}
+
 /// Progressive reassembly of a paginated response, with validation against a malicious peer.
 #[derive(Debug)]
 pub struct Reassembler {
@@ -292,11 +297,6 @@ impl Reassembler {
 // -----------------------------------------------------------------------------
 // Tests
 // -----------------------------------------------------------------------------
-
-/// Builds pagination request params for the follower side.
-pub fn request_params(offset: u64, chunk_budget: u64) -> JsonValue {
-    to_json_value(PaginationParams { offset, chunk_budget })
-}
 
 #[cfg(test)]
 mod tests {
