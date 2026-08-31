@@ -1315,8 +1315,8 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
     .entered();
 
     // get the pre-decoded transaction from extensions
-    let (tx, tx_data) = match (ext.get::<TransactionInput>(), ext.get::<Bytes>()) {
-        (Some(tx), Some(data)) => (tx.clone(), data.clone()),
+    let (tx, tx_data, access_list) = match (ext.get::<TransactionInput>(), ext.get::<Bytes>(), ext.get::<Option<AccessListOutput>>()) {
+        (Some(tx), Some(data), access_list) => (tx.clone(), data.clone(), access_list.cloned().flatten()),
         _ => {
             tracing::error!("failed to execute eth_sendRawTransaction because transaction input is not available");
             return Err(RpcError::TransactionInvalid {
@@ -1350,7 +1350,7 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
 
     // execute locally or forward to leader
     match GlobalState::get_node_mode() {
-        NodeMode::Leader | NodeMode::FakeLeader => match ctx.server.executor.execute_local_transaction(tx) {
+        NodeMode::Leader | NodeMode::FakeLeader => match ctx.server.executor.execute_local_transaction(tx, access_list) {
             Ok(_) => Ok(hex_data(tx_hash)),
             Err(e) => {
                 tracing::warn!(reason = ?e, ?tx_hash, "failed to execute eth_sendRawTransaction");
@@ -1358,7 +1358,7 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
             }
         },
         NodeMode::Follower => match &ctx.server.read_importer() {
-            Some(importer) => match Handle::current().block_on(importer.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
+            Some(importer) => match Handle::current().block_on(importer.forward_to_leader(tx, tx_hash, tx_data, ext.rpc_client())) {
                 Ok(hash) => Ok(hex_data(hash)),
                 Err(e) => Err(e),
             },

@@ -269,7 +269,7 @@ impl Executor {
 
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to, tx_nonce))]
-    pub fn execute_local_transaction(&self, tx: TransactionInput) -> Result<(), StratusError> {
+    pub fn execute_local_transaction(&self, tx: TransactionInput, access_list: Option<AccessListOutput>) -> Result<(), StratusError> {
         #[cfg(feature = "metrics")]
         let function = codegen::function_sig(&tx.execution_info.input);
         #[cfg(feature = "metrics")]
@@ -284,6 +284,10 @@ impl Executor {
             s.rec_opt("tx_to", &tx.execution_info.to);
             s.rec_str("tx_nonce", &tx.execution_info.nonce);
         });
+
+        if let Some(access_list) = access_list {
+            self.storage.load_access_list(access_list);
+        }
 
         // execute according to the strategy
         const INFINITE_ATTEMPTS: usize = usize::MAX;

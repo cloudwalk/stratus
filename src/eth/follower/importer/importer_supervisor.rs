@@ -151,6 +151,7 @@ pub async fn start_importer(
 pub struct ImporterConsensus {
     pub storage: Arc<StratusStorage>,
     pub chain: Arc<BlockchainClient>,
+    pub executor: Arc<Executor>,
 }
 
 impl Consensus for ImporterConsensus {
@@ -183,7 +184,11 @@ impl Consensus for ImporterConsensus {
         }
     }
 
-    fn get_chain(&self) -> anyhow::Result<&Arc<BlockchainClient>> {
-        Ok(&self.chain)
+    fn get_client(&self) -> &Arc<BlockchainClient> {
+        &self.chain
+    }
+
+    fn get_executor(&self) -> &Arc<Executor> {
+        &self.executor
     }
 }

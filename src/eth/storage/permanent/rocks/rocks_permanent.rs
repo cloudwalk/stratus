@@ -28,6 +28,7 @@ use crate::eth::types::LogMessage;
 use crate::eth::types::Nonce;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
+use crate::eth::types::SlotValue;
 use crate::eth::types::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
@@ -174,6 +175,10 @@ impl RocksPermanentStorage {
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to read slot in RocksPermanent");
             })
+    }
+
+    pub fn read_slots(&self, slot_keys: Vec<(Address, SlotIndex)>) -> anyhow::Result<Vec<((Address, SlotIndex), SlotValue)>, StorageError> {
+        self.state.read_slots(slot_keys).map_err(|err| StorageError::RocksError { err })
     }
 
     pub fn read_block(&self, selection: BlockFilter) -> anyhow::Result<Option<Block>, StorageError> {

@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+
 use tracing::Span;
 
+use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::AccountOriginalsReader;
 use crate::eth::executor::Changes;
 use crate::eth::executor::TransactionExecution;
@@ -32,7 +35,6 @@ use crate::eth::types::PendingBlockHeader;
 use crate::eth::types::PointInTime;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
-#[cfg(feature = "dev")]
 use crate::eth::types::SlotValue;
 use crate::eth::types::TransactionStage;
 use crate::eth::types::UnixTime;
@@ -375,6 +377,7 @@ impl StratusStorage {
     // Accounts and slots
     // -------------------------------------------------------------------------
 
+    #[cfg(feature = "dev")]
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<(), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_accounts").entered();
@@ -843,6 +846,35 @@ impl StratusStorage {
                 None => Err(StorageError::BlockNotFound { filter: block_filter }),
             },
         }
+    }
+
+    fn load_slots_to_cache(&self, slots: Vec<(Address, SlotIndex)>) {
+        let existing_slots: HashMap<(Address, SlotIndex), SlotValue> = self.perm.read_slots(slots.clone()).unwrap().into_iter().collect();
+        for (address, index) in slots {
+            let value = existing_slots.get(&(address, index)).copied().unwrap_or_default();
+            Slot::cache_latest_if_missing(self, (address, index), Slot { index, value });
+        }
+    }
+
+    fn load_accounts_to_cache(&self, addresses: Vec<Address>) {
+        let existing_accounts: HashMap<Address, Account> = self.perm.read_accounts(addresses.clone()).unwrap().into_iter().collect();
+        for address in addresses {
+            let account = existing_accounts.get(&address).cloned().unwrap_or_default();
+            Account::cache_latest_if_missing(self, address, account);
+        }
+    }
+
+    pub fn load_access_list(&self, access_list: AccessListOutput) {
+        let mut account_addresses = vec![];
+        let mut slot_keys = vec![];
+        for (address, slots) in access_list {
+            account_addresses.push(address);
+            for slot_index in slots {
+                slot_keys.push((address, slot_index));
+            }
+        }
+        self.load_accounts_to_cache(account_addresses);
+        self.load_slots_to_cache(slot_keys);
     }
 }
 

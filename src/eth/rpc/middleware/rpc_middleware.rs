@@ -29,6 +29,7 @@ use crate::alias::JsonValue;
 use crate::eth::codegen;
 use crate::eth::codegen::ContractName;
 use crate::eth::codegen::SoliditySignature;
+use crate::eth::executor::AccessListOutput;
 use crate::eth::rpc::RpcClientApp;
 use crate::eth::rpc::RpcError;
 use crate::eth::rpc::middleware::multicall::MulticallInfo;
@@ -189,7 +190,13 @@ impl RpcServiceT for RpcMiddleware {
 
         if method == "eth_sendRawTransaction" {
             let tx_data_result = next_rpc_param::<Bytes>(params_clone.sequence());
-            if let Ok((_, tx_data)) = tx_data_result {
+
+            if let Ok((next_param, tx_data)) = tx_data_result {
+                let access_list = next_rpc_param::<Option<AccessListOutput>>(next_param)
+                    .map(|(_params, access_list)| access_list)
+                    .inspect_err(|err| tracing::warn!(?err, "failed to deserialize access list"))
+                    .ok()
+                    .flatten();
                 let decoded_tx_result = parse_rpc_rlp::<TransactionInput>(&tx_data);
 
                 if let Ok(decoded_tx) = decoded_tx_result {
@@ -197,6 +204,7 @@ impl RpcServiceT for RpcMiddleware {
 
                     request.extensions_mut().insert(tx_data);
                     request.extensions_mut().insert(decoded_tx);
+                    request.extensions_mut().insert(access_list);
                 }
             }
         } else {

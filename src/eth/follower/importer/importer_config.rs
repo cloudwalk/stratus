@@ -110,6 +110,7 @@ impl ImporterConfig {
         let consensus = Arc::new(ImporterConsensus {
             storage: Arc::clone(&storage),
             chain: Arc::clone(&chain),
+            executor: Arc::clone(&executor),
         });
 
         spawn(

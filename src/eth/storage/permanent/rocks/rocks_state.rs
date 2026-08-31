@@ -60,6 +60,7 @@ use crate::eth::types::LogMessage;
 use crate::eth::types::Nonce;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
+use crate::eth::types::SlotValue;
 use crate::eth::types::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
@@ -361,6 +362,16 @@ impl RocksStorageState {
                 Ok(None)
             }
         }
+    }
+
+    pub fn read_slots(&self, slot_keys: Vec<(Address, SlotIndex)>) -> Result<Vec<((Address, SlotIndex), SlotValue)>> {
+        self.account_slots
+            .multi_get(slot_keys.into_iter().map(|(address, index)| (address.into(), index.into())))
+            .map(|vec| {
+                vec.into_iter()
+                    .map(|((address, index), slot_value)| ((address.into(), index.into()), slot_value.into_inner().into()))
+                    .collect_vec()
+            })
     }
 
     pub fn read_account(&self, address: Address, point: &MinedPointInTime<'_>) -> Result<Option<Account>> {

@@ -1,4 +1,5 @@
 use std::hash::Hash;
+use std::time::Duration;
 
 use clap::Parser;
 use display_json::DebugAsJson;
@@ -160,13 +161,12 @@ where
     L: quick_cache::Lifecycle<Key, Val> + Clone,
 {
     fn insert_if_missing(&self, key: Key, val: Val) {
-        match self.get_value_or_guard(&key, None) {
-            GuardResult::Value(_) => (),
+        match self.get_value_or_guard(&key, Some(Duration::ZERO)) {
+            GuardResult::Value(_) | GuardResult::Timeout => (),
             GuardResult::Guard(g) => {
                 // this fails if an unguarded insert already inserted to this key
                 let _ = g.insert(val);
             }
-            GuardResult::Timeout => unreachable!(),
         }
     }
 }
