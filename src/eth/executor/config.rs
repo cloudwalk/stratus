@@ -38,7 +38,7 @@ pub struct ExecutorConfig {
 
     /// Wether to execute the transaction as a call before acquiring the transaction lock to warm up the cache.
     /// Increases throughput at the cost of added latency.
-    #[arg(long = "executor-warmup-cache", env = "EXECUTOR_WARMUP_CACHE", default_value_t = false)]
+    #[arg(long = "executor-warmup-cache", env = "EXECUTOR_WARMUP_CACHE", default_value_t = true)]
     pub warmup_cache: bool,
 }
 
