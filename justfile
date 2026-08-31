@@ -407,7 +407,6 @@ e2e-leader-follower-up test="brlc" use_block_changes_replication="false":
 # E2E: Leader & Follower with small response size limits, to exercise importer response pagination
 e2e-leader-follower-pagination:
     #!/bin/bash
-    mkdir -p e2e_logs
 
     # leader with a small response limit, forcing oversized importer responses to be paginated
     MAX_RESPONSE_SIZE_BYTES=8192 just e2e-leader

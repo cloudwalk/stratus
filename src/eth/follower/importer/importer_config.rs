@@ -16,6 +16,7 @@ use crate::eth::follower::importer::importer_supervisor::start_importer;
 use crate::eth::miner::Miner;
 use crate::eth::rpc::BlockchainClient;
 use crate::eth::rpc::RpcContext;
+use crate::eth::rpc::pagination::validate_response_size_limit;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::StateError;
@@ -97,6 +98,7 @@ impl ImporterConfig {
     ) -> anyhow::Result<Option<Arc<ImporterConsensus>>> {
         const TASK_NAME: &str = "importer::init";
         tracing::info!("creating importer for follower node");
+        validate_response_size_limit(self.external_rpc_max_response_size_bytes)?;
         let chain = Arc::new(
             BlockchainClient::new_http_ws(
                 &self.external_rpc,

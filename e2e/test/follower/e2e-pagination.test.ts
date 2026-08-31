@@ -100,7 +100,7 @@ async function waitForReceipt(txHash: string): Promise<any> {
     const deadline = Date.now() + 60_000;
     while (Date.now() < deadline) {
         const receipt = await send("eth_getTransactionReceipt", [txHash]);
-        if (receipt !== null && receipt !== undefined) {
+        if (receipt) {
             return receipt;
         }
         await sleep(POLL_INTERVAL_MS);

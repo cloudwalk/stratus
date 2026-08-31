@@ -52,8 +52,29 @@ pub const MARGIN: u32 = 512;
 /// Minimum accepted `chunk_budget`; smaller values could stall reassembly to a crawl.
 pub const MIN_CHUNK_BUDGET: u64 = 64;
 
+/// Minimum response size limit for pagination to make progress on either side of the connection:
+/// the envelope margin, one minimum chunk, and headroom for the envelope and JSON-RPC wrappers.
+///
+/// Limits below this floor are rejected at startup ([`validate_response_size_limit`]): the leader
+/// would clamp the effective chunk budget below [`MIN_CHUNK_BUDGET`] (stalling reassembly with
+/// empty chunks), and the follower would request a budget the leader rejects as invalid.
+pub const MIN_RESPONSE_SIZE_BYTES: u32 = MARGIN + MIN_CHUNK_BUDGET as u32 + 128;
+
+/// Validates a response size limit (leader `max_response_size` or follower
+/// `max_response_size_bytes`) is large enough for pagination to make progress.
+pub fn validate_response_size_limit(limit: u32) -> anyhow::Result<()> {
+    if limit < MIN_RESPONSE_SIZE_BYTES {
+        anyhow::bail!("response size limit of {limit} bytes is too small for pagination: must be at least {MIN_RESPONSE_SIZE_BYTES} bytes");
+    }
+    Ok(())
+}
+
 /// Maximum bytes preallocated for reassembly, to avoid OOM on a bogus `total` from a malicious peer.
 const MAX_REASSEMBLY_PREALLOC: usize = 1024 * 1024;
+
+/// Hard cap on the total size of a reassembled paginated response, as defense against a
+/// malicious or buggy leader advertising an arbitrarily large `total`.
+pub const MAX_REASSEMBLY_TOTAL: u64 = 512 * 1024 * 1024;
 
 // -----------------------------------------------------------------------------
 // Request params
@@ -147,13 +168,17 @@ pub fn respond(value: JsonValue, pagination: Option<PaginationParams>, max_respo
     }
 
     let offset = usize::try_from(pagination.offset).unwrap_or(usize::MAX);
-    if offset > full.len() {
-        tracing::error!(offset, total = full.len(), "pagination offset is beyond the response size");
+    if offset > full.len() || !full.is_char_boundary(offset) {
+        tracing::error!(
+            offset,
+            total = full.len(),
+            "pagination offset is beyond the response size or not a char boundary"
+        );
         return Err(RpcError::ParameterInvalid.into());
     }
 
     let chunk = take_escaped_chunk(full, offset, budget);
-    tracing::info!(
+    tracing::debug!(
         total = full.len(),
         offset,
         chunk_bytes = chunk.len(),
@@ -178,9 +203,11 @@ fn effective_chunk_budget(requested: u64, max_response_bytes: u32) -> usize {
 
 /// Returns the raw fragment of `full` starting at `offset` whose JSON-escaped form fits in `budget`.
 ///
-/// The cut is always at a char boundary, and each fragment is independently escapable, so
-/// concatenating the unescaped fragments reassembles `full` exactly. Guaranteed to be non-empty
-/// when `offset < full.len()` and `budget >= 6` (the largest escape expansion of a single char).
+/// `offset` must be a char boundary of `full` (the caller is responsible for validating
+/// untrusted offsets before slicing); the returned cut is also always at a char boundary, and
+/// each fragment is independently escapable, so concatenating the unescaped fragments reassembles
+/// `full` exactly. Guaranteed to be non-empty when `offset < full.len()` and `budget >= 6` (the
+/// largest escape expansion of a single char).
 fn take_escaped_chunk(full: &str, offset: usize, budget: usize) -> &str {
     debug_assert!(full.is_char_boundary(offset));
 
@@ -387,6 +414,30 @@ mod tests {
     fn respond_with_offset_beyond_response_fails() {
         let value = json!({"block": "abc"});
         let error = respond(value, Some(PaginationParams { offset: 100, chunk_budget: 2 }), 10_000).expect_err("should fail");
+        assert!(matches!(error, StratusError::RPC(RpcError::ParameterInvalid)));
+    }
+
+    #[test]
+    fn respond_with_misaligned_offset_fails_instead_of_panicking() {
+        let value = json!({"block": "\u{65e5}\u{672c}\u{8a9e} unicode content that will not fit", "receipts": [1, 2, 3]});
+        let full = serde_json::to_string(&value).expect_infallible();
+
+        // first byte strictly inside a multi-byte char: a valid index that is not a boundary
+        let misaligned = full
+            .char_indices()
+            .find_map(|(i, ch)| (ch.len_utf8() > 1).then_some(i + 1))
+            .expect("multi-byte char");
+        assert!(!full.is_char_boundary(misaligned));
+
+        let error = respond(
+            value,
+            Some(PaginationParams {
+                offset: misaligned as u64,
+                chunk_budget: 8,
+            }),
+            10_000,
+        )
+        .expect_err("should fail");
         assert!(matches!(error, StratusError::RPC(RpcError::ParameterInvalid)));
     }
 
@@ -621,5 +672,35 @@ mod wire_tests {
 
         let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
         assert!(error.to_string().contains("failed to fetch block with receipts"));
+    }
+
+    #[tokio::test]
+    async fn null_response_means_block_not_available() {
+        let storage = Arc::new(RwLock::new(JsonValue::Null));
+
+        // leader answering null: the block is not available yet
+        let server_config = jsonrpsee::server::ServerConfig::builder().max_response_body_size(MAX_RESPONSE_BYTES).build();
+        let server = Server::builder().set_config(server_config).build("127.0.0.1:0").await.expect("build server");
+        let addr = server.local_addr().expect("server addr");
+
+        let mut module = RpcModule::new(Arc::clone(&storage));
+        module
+            .register_method("net_listening", |_, _, _| Ok::<_, StratusError>(true))
+            .expect("register net_listening");
+        module
+            .register_method("stratus_getBlockAndReceipts", |_, storage, _| {
+                let value = storage.read().expect("read storage").clone();
+                Ok(value) as Result<JsonValue, StratusError>
+            })
+            .expect("register stratus_getBlockAndReceipts");
+        let _server_handle = server.start(module);
+
+        let url = format!("http://{addr}");
+        let client = BlockchainClient::new_http(&url, Duration::from_secs(10), MAX_RESPONSE_BYTES)
+            .await
+            .expect("build client");
+
+        let fetched = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect("fetch block");
+        assert!(fetched.is_none(), "null response must deserialize to Ok(None)");
     }
 }

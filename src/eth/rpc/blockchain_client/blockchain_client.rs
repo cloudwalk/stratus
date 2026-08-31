@@ -194,6 +194,15 @@ impl BlockchainClient {
     /// responses that do not fit in a single message (see `eth::rpc::pagination`). Old leaders
     /// ignore the extra parameter and answer normally, which is handled transparently.
     async fn request_importer_data<T: serde::de::DeserializeOwned>(&self, method: &'static str, block_number: BlockNumber) -> anyhow::Result<Option<T>> {
+        let Some(full) = self.fetch_serialized_response(method, block_number).await? else {
+            return Ok(None); // block not available yet
+        };
+        let value = serde_json::from_str(&full).with_context(|| format!("failed to deserialize importer data from {method}"))?;
+        Ok(Some(value))
+    }
+
+    /// Fetches the full serialized response for an importer method, reassembling pagination chunks.
+    async fn fetch_serialized_response(&self, method: &'static str, block_number: BlockNumber) -> anyhow::Result<Option<String>> {
         tracing::debug!(%block_number, method, "fetching importer data");
 
         let budget = self.max_response_size_bytes.saturating_sub(pagination::MARGIN) as u64;
@@ -208,14 +217,26 @@ impl BlockchainClient {
             Err(e) => return log_and_err!(reason = e, "failed to fetch importer data"),
         };
 
-        // normal response: deserialize directly
+        // normal response: return the serialized value directly
         if !pagination::is_envelope(raw.get()) {
-            let value = serde_json::from_str::<T>(raw.get()).context("failed to deserialize importer data")?;
-            return Ok(Some(value));
+            return Ok(Some(raw.get().to_owned()));
         }
 
         // paginated response: fetch and reassemble chunks
         let first_envelope = pagination::parse_envelope(raw.get())?;
+        if first_envelope.total > pagination::MAX_REASSEMBLY_TOTAL {
+            tracing::error!(
+                total = first_envelope.total,
+                cap = pagination::MAX_REASSEMBLY_TOTAL,
+                method,
+                "paginated response total exceeds the reassembly cap"
+            );
+            anyhow::bail!(
+                "paginated response total of {} bytes exceeds the reassembly cap of {} bytes",
+                first_envelope.total,
+                pagination::MAX_REASSEMBLY_TOTAL
+            );
+        }
         let mut reassembler = pagination::Reassembler::new(first_envelope.total);
         tracing::info!(%block_number, method, total = first_envelope.total, budget, "fetching paginated importer data");
         let mut envelope = first_envelope;
@@ -238,9 +259,7 @@ impl BlockchainClient {
             envelope = pagination::parse_envelope(raw.get())?;
         }
 
-        let full = reassembler.finish()?;
-        let value = serde_json::from_str::<T>(&full).context("failed to deserialize reassembled importer data")?;
-        Ok(Some(value))
+        Ok(Some(reassembler.finish()?))
     }
 
     /// Fetches a block by number with receipts.

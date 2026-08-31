@@ -126,6 +126,9 @@ pub struct Server {
 
 impl Server {
     pub async fn serve(self) -> Result<()> {
+        // fail fast on response size limits that would break importer pagination
+        pagination::validate_response_size_limit(self.rpc_config.rpc_max_response_size_bytes)?;
+
         let this = Arc::new(self);
         this.update_health().await;
 
