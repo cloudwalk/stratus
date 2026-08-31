@@ -14,7 +14,6 @@ pub use error::StateError;
 pub use error::StratusError;
 pub use error::UnexpectedError;
 pub use execution_kind::ExecutionKind;
-pub use execution_kind::TxCount;
 pub use external::ExternalBlock;
 pub use external::ExternalBlockWithReceipts;
 pub use external::ExternalReceipt;

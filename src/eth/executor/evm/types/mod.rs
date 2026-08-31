@@ -23,6 +23,7 @@ pub use output::access_list::AccessListOutput;
 pub use output::call_execution::CallExecutionOutput;
 pub use output::noop::NoopOutput;
 pub use output::transaction_execution::TransactionExecutionOutput;
+pub use output::transaction_execution::TransactionExecutionResult;
 
 /// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
 #[cfg(feature = "dev")]

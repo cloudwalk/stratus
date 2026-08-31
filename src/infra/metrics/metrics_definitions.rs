@@ -72,7 +72,7 @@ metrics! {
     histogram_duration storage_set_pending_external_block{storage, success},
 
     "Time executing storage finish_pending_block operation."
-    histogram_duration storage_finish_pending_block{storage, success},
+    histogram_duration storage_finish_pending_block{},
 
     "Time executing storage save_block operation."
     histogram_duration storage_save_block{storage, tens_of_millions_gas_used, success},

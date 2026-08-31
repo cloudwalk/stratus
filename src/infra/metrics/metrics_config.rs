@@ -1,5 +1,4 @@
 use std::net::SocketAddr;
-use std::stringify;
 
 use clap::Parser;
 use display_json::DebugAsJson;
