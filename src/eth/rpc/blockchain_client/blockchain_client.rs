@@ -6,6 +6,8 @@ use jsonrpsee::core::ClientError;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::client::Subscription;
 use jsonrpsee::core::client::SubscriptionClientT;
+use jsonrpsee::http_client::HeaderMap as HttpHeaderMap;
+use jsonrpsee::http_client::HeaderValue as HttpHeaderValue;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::http_client::HttpClientBuilder;
 use jsonrpsee::ws_client::WsClient;
@@ -19,7 +21,6 @@ use crate::alias::AlloyBytes;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::executor::ExecutorError;
-use crate::eth::rpc::RpcClientApp;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::types::Address;
@@ -44,6 +45,30 @@ pub struct BlockchainClient {
     timeout: Duration,
     #[allow(dead_code)]
     max_response_size_bytes: u32,
+}
+
+/// Builds the HTTP headers sent on every outbound request to the leader.
+///
+/// The `x-client` header carries the current machine name, so the leader attributes every
+/// request (transaction forwarding and reads) to this node.
+fn client_headers() -> HttpHeaderMap {
+    let machine_name = machine_name();
+    let mut headers = HttpHeaderMap::new();
+    if let Ok(value) = HttpHeaderValue::from_str(&machine_name) {
+        headers.insert("x-client", value);
+    }
+    headers
+}
+
+/// Returns the current machine name, falling back to "unknown" when it cannot be resolved.
+fn machine_name() -> String {
+    match hostname::get() {
+        Ok(name) => name.to_string_lossy().into_owned(),
+        Err(e) => {
+            tracing::warn!(reason = ?e, "failed to get machine name, using \"stratus\"");
+            "stratus".to_string()
+        }
+    }
 }
 
 impl BlockchainClient {
@@ -86,6 +111,7 @@ impl BlockchainClient {
         match HttpClientBuilder::default()
             .request_timeout(timeout)
             .max_response_size(max_response_size_bytes)
+            .set_headers(client_headers())
             .build(url)
         {
             Ok(http) => {
@@ -101,7 +127,12 @@ impl BlockchainClient {
 
     async fn build_ws_client(url: &str, timeout: Duration) -> anyhow::Result<WsClient> {
         tracing::info!(%url, timeout = %timeout.to_string_ext(), "creating blockchain websocket client");
-        match WsClientBuilder::new().connection_timeout(timeout).build(url).await {
+        match WsClientBuilder::new()
+            .connection_timeout(timeout)
+            .set_headers(client_headers())
+            .build(url)
+            .await
+        {
             Ok(ws) => {
                 tracing::info!(%url, timeout = %timeout.to_string_ext(), "created blockchain websocket client");
                 Ok(ws)
@@ -230,12 +261,14 @@ impl BlockchainClient {
     // -------------------------------------------------------------------------
 
     /// Forwards a transaction to leader.
-    pub async fn send_raw_transaction_to_leader(&self, tx: AlloyBytes, rpc_client: &RpcClientApp) -> Result<Hash, StratusError> {
+    ///
+    /// The current machine name is sent as the `x-client` header on every request (see `client_headers`),
+    /// so the leader attributes the transaction to this node automatically.
+    pub async fn send_raw_transaction_to_leader(&self, tx: AlloyBytes) -> Result<Hash, StratusError> {
         tracing::debug!("sending raw transaction to leader");
 
         let tx = to_json_value(tx);
-        let rpc_client = to_json_value(rpc_client);
-        let result = self.http.request::<Hash, _>("eth_sendRawTransaction", [tx, rpc_client]).await;
+        let result = self.http.request::<Hash, _>("eth_sendRawTransaction", [tx]).await;
 
         match result {
             Ok(hash) => Ok(hash),

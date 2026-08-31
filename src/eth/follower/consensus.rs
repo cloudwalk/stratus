@@ -3,7 +3,6 @@ use std::sync::Arc;
 use strum::AsRefStr;
 
 use crate::eth::rpc::BlockchainClient;
-use crate::eth::rpc::RpcClientApp;
 use crate::eth::types::Bytes;
 use crate::eth::types::Hash;
 use crate::eth::types::StratusError;
@@ -59,13 +58,16 @@ pub trait Consensus: Send + Sync {
     }
 
     /// Forwards a transaction to leader.
-    async fn forward_to_leader(&self, tx_hash: Hash, tx_data: Bytes, rpc_client: &RpcClientApp) -> Result<Hash, StratusError> {
+    ///
+    /// The current machine name is sent as the `x-client` header by `BlockchainClient`, so the leader
+    /// attributes the transaction to this node automatically.
+    async fn forward_to_leader(&self, tx_hash: Hash, tx_data: Bytes) -> Result<Hash, StratusError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        tracing::info!(%tx_hash, %rpc_client, "forwarding transaction to leader");
+        tracing::info!(%tx_hash, "forwarding transaction to leader");
 
-        let hash = self.get_chain()?.send_raw_transaction_to_leader(tx_data.into(), rpc_client).await?;
+        let hash = self.get_chain()?.send_raw_transaction_to_leader(tx_data.into()).await?;
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_forward(start.elapsed());
