@@ -21,6 +21,10 @@ pub struct CallExecutionOutput {
 }
 
 impl CallExecutionOutput {
+    pub fn is_success(&self) -> bool {
+        self.success
+    }
+
     fn parse_revm_result(result: RevmExecutionResult) -> (Bytes, Gas, bool) {
         match result {
             RevmExecutionResult::Success { output, gas, .. } => {

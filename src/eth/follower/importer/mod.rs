@@ -270,13 +270,14 @@ mod tests {
 
     use hash_hasher::HashBuildHasher;
 
-    use crate::eth::executor::AccountChanges;
-    use crate::eth::executor::Changes;
-    use crate::eth::executor::CompleteValue;
     use crate::eth::executor::ExecutionResult;
+    use crate::eth::executor::State;
     use crate::eth::executor::TransactionExecution;
     use crate::eth::executor::TransactionExecutionInput;
-    use crate::eth::executor::TransactionExecutionOutput;
+    use crate::eth::executor::TransactionExecutionResult;
+    use crate::eth::executor::types::state::AccountChanges;
+    use crate::eth::executor::types::state::Complete;
+    use crate::eth::executor::types::state::CompleteValue;
     use crate::eth::follower::importer::fetchers::DataFetcher;
     use crate::eth::follower::importer::fetchers::block_with_changes::BlockWithChangesFetcher;
     use crate::eth::follower::importer::importers::ImporterWorker;
@@ -301,7 +302,7 @@ mod tests {
     use crate::eth::types::UnixTime;
     use crate::eth::types::Wei;
 
-    impl AccountChanges {
+    impl AccountChanges<Complete> {
         pub fn from_changed(account: Account) -> Self {
             Self {
                 nonce: CompleteValue::Changed(account.nonce),
@@ -312,26 +313,25 @@ mod tests {
     }
 
     /// Mines a block applying `changes` (mirrors the helper in `stratus_storage` tests).
-    fn mine_block(storage: &StratusStorage, changes: Changes) {
-        let (header, _) = storage.read_pending_block_header();
+    fn mine_block(storage: &StratusStorage, state: State<Complete>) {
+        let header = storage.read_pending_block_header();
         let evm_input = TransactionExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
-        let result = TransactionExecutionOutput {
+        let result = TransactionExecutionResult {
             result: ExecutionResult::Success,
-            changes,
             ..Default::default()
         };
 
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
-        storage.save_execution(tx).expect("save execution");
+        storage.save_execution(tx, state).expect("save execution");
 
-        let (block, block_changes) = storage.finish_pending_block().expect("finish pending block");
+        let (block, block_changes) = storage.finish_pending_block();
         storage.save_block(block.into(), block_changes).expect("save block");
     }
 
     /// Builds `ExecutionChanges` that set `address`'s balance to `balance` (nonce/bytecode untouched).
-    fn balance_changes(address: Address, balance: Wei) -> Changes {
-        let mut changes = Changes::default();
+    fn balance_changes(address: Address, balance: Wei) -> State<Complete> {
+        let mut changes = State::default();
         changes
             .accounts
             .insert(address, AccountChanges::from_changed(Account::new_with_balance(address, balance)));
