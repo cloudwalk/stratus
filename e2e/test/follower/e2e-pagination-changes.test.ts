@@ -4,20 +4,19 @@ import { expect } from "chai";
 import { ALICE } from "../helpers/account";
 import { CHAIN_ID_DEC, send, sendAndGetFullResponse } from "../helpers/rpc";
 
-// This test only makes sense with a leader and a follower running with small response size limits:
-// the leader with MAX_RESPONSE_SIZE_BYTES and the follower with EXTERNAL_RPC_MAX_RESPONSE_SIZE_BYTES.
-// It is executed by the `just e2e-leader-follower-pagination` recipe.
+// This test only makes sense with a leader and a follower running with small response size
+// limits AND the follower in block-changes replication mode (ENABLE_BLOCK_CHANGES_REPLICATION=true),
+// so the importer syncs through `stratus_getBlockWithChanges` instead of block + receipts.
+// It is executed by the `just e2e-leader-follower-pagination-changes` recipe.
 //
 // What it covers, in order:
-// 1. Confirms a response that fits the limits is served normally, with no pagination
-//    envelope — this is what old followers receive (byte-identical legacy path).
-// 2. Mines a block whose serialized `stratus_getBlockAndReceipts` response exceeds the limits.
-// 3. Confirms the old single-parameter call fails with the oversized response error (-32008),
-//    which is what would stall an importer before pagination existed.
-// 4. Reassembles the response from the paginated envelope chunks and validates the content.
-// 5. Waits for the follower importer to sync the fat block, proving the importer paginated it.
+// 1. Confirms a small block-with-changes response is served normally, with no pagination envelope.
+// 2. Mines a fat block whose serialized `stratus_getBlockWithChanges` response exceeds the limits.
+// 3. Confirms the old single-parameter call fails with the oversized response error (-32008).
+// 4. Reassembles the with-changes response from the paginated envelope chunks and validates content.
+// 5. Waits for the follower to sync the fat block and checks its content matches the leader.
 
-// Fat transaction payload: enough data for the block + receipts response to exceed the limits.
+// Fat transaction payload: enough data for the block + changes response to exceed the limits.
 const FAT_TX_DATA_BYTES = 50_000;
 
 // Small chunk budget to force several round trips during reassembly.
@@ -28,15 +27,17 @@ const LEADER_MAX_RESPONSE_BYTES = parseInt(process.env.MAX_RESPONSE_SIZE_BYTES |
 const FOLLOWER_SYNC_TIMEOUT_MS = 120_000;
 const POLL_INTERVAL_MS = 500;
 
-describe("Pagination", () => {
-    it("paginates oversized importer responses and keeps the follower syncing", async () => {
-        // compatibility: a small early block is served normally, without any pagination envelope,
-        // so an old follower (or any client) keeps receiving the exact same responses as before
+describe("Pagination (block changes replication)", () => {
+    it("paginates oversized stratus_getBlockWithChanges responses and keeps the follower syncing", async () => {
+        // compatibility: a small early block is served normally, with no pagination envelope,
+        // so an old follower keeps receiving the exact same responses as before;
+        // the RocksDB-flavored block serializes hashes as byte arrays and numbers in
+        // big-endian form, so content is asserted through the hash
         const earlyBlock = await send("eth_getBlockByNumber", ["0x1", false]);
         expect(earlyBlock).to.not.be.null;
-        const small = await send("stratus_getBlockAndReceipts", [earlyBlock.hash]);
+        const small = await send("stratus_getBlockWithChanges", [earlyBlock.hash]);
         expect(small.__stratus_paginated__).to.be.undefined;
-        expect(small.block.number).to.equal("0x1");
+        expect(Buffer.from(small[0].header.hash).toString("hex")).to.equal(earlyBlock.hash.slice(2));
 
         // send a fat contract-deployment transaction and wait for it to be mined;
         // the deployed code always fails, but the fat transaction data still makes the block heavy
@@ -52,14 +53,12 @@ describe("Pagination", () => {
 
         const receipt = await waitForReceipt(txHash);
         const fatBlockNumber = parseInt(receipt.blockNumber, 16);
-
-        // the block hash fits in one response (hashes only), but the full response does not
         const fatBlock = await send("eth_getBlockByNumber", [toHexNumber(fatBlockNumber), false]);
         const fatBlockHash = fatBlock.hash;
 
         // old-style single-parameter call: the oversized response is rejected by the server,
         // which is exactly what would get an old importer stuck retrying forever
-        const legacy = await sendAndGetFullResponse("stratus_getBlockAndReceipts", [fatBlockHash]);
+        const legacy = await sendAndGetFullResponse("stratus_getBlockWithChanges", [fatBlockHash]);
         expect(legacy.data.error).to.not.be.undefined;
         expect(legacy.data.error.code).to.equal(-32008);
 
@@ -67,7 +66,7 @@ describe("Pagination", () => {
         let assembled = "";
         let total = 0;
         for (let offset = 0; total === 0 || assembled.length < total; offset = assembled.length) {
-            const envelope = await send("stratus_getBlockAndReceipts", [
+            const envelope = await send("stratus_getBlockWithChanges", [
                 fatBlockHash,
                 { offset: offset, chunk_budget: CHUNK_BUDGET },
             ]);
@@ -77,21 +76,22 @@ describe("Pagination", () => {
             assembled += envelope.__stratus_paginated__.chunk;
         }
         expect(assembled.length).to.equal(total);
-        expect(total).to.be.greaterThan(LEADER_MAX_RESPONSE_BYTES, "the block response should be oversized");
+        expect(total).to.be.greaterThan(LEADER_MAX_RESPONSE_BYTES, "the with-changes response should be oversized");
 
-        // reassembled content matches the actual block
-        const response = JSON.parse(assembled);
-        expect(response.block.hash).to.equal(fatBlockHash);
-        expect(parseInt(response.block.number, 16)).to.equal(fatBlockNumber);
-        expect(response.block.transactions).to.have.length(1);
-        expect(response.receipts).to.have.length(1);
-        expect(response.receipts[0].transactionHash).to.equal(txHash);
+        // the serialized form is the (block, changes) pair the follower importer deserializes;
+        // the RocksDB-flavored block serializes hashes as byte arrays and numbers in
+        // big-endian form, so content is asserted through the hash
+        const parsed = JSON.parse(assembled);
+        expect(parsed).to.be.an("array").with.length(2);
+        expect(Buffer.from(parsed[0].header.hash).toString("hex")).to.equal(fatBlockHash.slice(2));
+        expect(parsed[0].transactions).to.have.length(1);
 
-        // the follower imports the fat block through the paginated importer
+        // the follower imports the fat block through the paginated with-changes importer
         await waitForFollowerBlock(fatBlockNumber);
-        const followerReceipt = await rpcCall(FOLLOWER_URL, "eth_getTransactionReceipt", [txHash]);
-        expect(followerReceipt.result).to.not.be.null;
-        expect(followerReceipt.result.blockNumber).to.equal(receipt.blockNumber);
+        const followerBlock = await rpcCall(FOLLOWER_URL, "eth_getBlockByNumber", [toHexNumber(fatBlockNumber), true]);
+        expect(followerBlock.result.hash).to.equal(fatBlockHash);
+        expect(followerBlock.result.transactions).to.have.length(1);
+        expect(followerBlock.result.transactions[0].hash).to.equal(txHash);
     });
 });
 

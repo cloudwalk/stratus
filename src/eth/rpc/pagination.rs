@@ -411,6 +411,27 @@ mod tests {
     }
 
     #[test]
+    fn respond_with_response_exactly_at_budget_returns_full() {
+        // a response whose serialized length is exactly the effective budget is not paginated
+        let value = json!({"block": "some content"});
+        let full = serde_json::to_string(&value).expect("serialize");
+        let requested = full.len() as u64;
+
+        // leader limit chosen so both sides of the effective budget resolve to the response size
+        let result = respond(
+            value,
+            Some(PaginationParams {
+                offset: 0,
+                chunk_budget: requested,
+            }),
+            full.len() as u32 + MARGIN,
+        )
+        .expect("should respond");
+        assert_eq!(result.get(), full);
+        assert!(!is_envelope(result.get()));
+    }
+
+    #[test]
     fn respond_with_offset_beyond_response_fails() {
         let value = json!({"block": "abc"});
         let error = respond(value, Some(PaginationParams { offset: 100, chunk_budget: 2 }), 10_000).expect_err("should fail");
@@ -439,6 +460,14 @@ mod tests {
         )
         .expect_err("should fail");
         assert!(matches!(error, StratusError::RPC(RpcError::ParameterInvalid)));
+    }
+
+    #[test]
+    fn validate_response_size_limit_accepts_floor_and_rejects_below() {
+        validate_response_size_limit(MIN_RESPONSE_SIZE_BYTES).expect("floor should be accepted");
+        validate_response_size_limit(MIN_RESPONSE_SIZE_BYTES + 1).expect("above floor should be accepted");
+        let error = validate_response_size_limit(MIN_RESPONSE_SIZE_BYTES - 1).expect_err("below floor should be rejected");
+        assert!(error.to_string().contains("too small for pagination"));
     }
 
     #[test]
@@ -572,7 +601,9 @@ mod wire_tests {
 
     use jsonrpsee::server::RpcModule;
     use jsonrpsee::server::Server;
+    use serde_json::json;
 
+    use super::MAX_REASSEMBLY_TOTAL;
     use super::parse_request;
     use super::respond;
     use crate::alias::JsonValue;
@@ -702,5 +733,74 @@ mod wire_tests {
 
         let fetched = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect("fetch block");
         assert!(fetched.is_none(), "null response must deserialize to Ok(None)");
+    }
+
+    #[tokio::test]
+    async fn envelope_total_above_reassembly_cap_is_rejected() {
+        // malicious or buggy leader advertising a total beyond the reassembly cap
+        let storage = Arc::new(RwLock::new(json!({
+            "__stratus_paginated__": { "total": MAX_REASSEMBLY_TOTAL + 1, "chunk": "a" }
+        })));
+
+        let server_config = jsonrpsee::server::ServerConfig::builder().max_response_body_size(MAX_RESPONSE_BYTES).build();
+        let server = Server::builder().set_config(server_config).build("127.0.0.1:0").await.expect("build server");
+        let addr = server.local_addr().expect("server addr");
+
+        let mut module = RpcModule::new(Arc::clone(&storage));
+        module
+            .register_method("net_listening", |_, _, _| Ok::<_, StratusError>(true))
+            .expect("register net_listening");
+        module
+            .register_method("stratus_getBlockAndReceipts", |_, storage, _| {
+                let value = storage.read().expect("read storage").clone();
+                Ok(value) as Result<JsonValue, StratusError>
+            })
+            .expect("register stratus_getBlockAndReceipts");
+        let _server_handle = server.start(module);
+
+        let url = format!("http://{addr}");
+        let client = BlockchainClient::new_http(&url, Duration::from_secs(10), MAX_RESPONSE_BYTES)
+            .await
+            .expect("build client");
+
+        let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
+        assert!(format!("{error:?}").contains("exceeds the reassembly cap"));
+    }
+
+    #[tokio::test]
+    async fn paginated_stream_switching_to_normal_response_fails() {
+        // leader that answers the first chunk and then a normal response mid-stream
+        use std::sync::atomic::AtomicUsize;
+        use std::sync::atomic::Ordering;
+
+        let calls = Arc::new(AtomicUsize::new(0));
+
+        let server_config = jsonrpsee::server::ServerConfig::builder().max_response_body_size(MAX_RESPONSE_BYTES).build();
+        let server = Server::builder().set_config(server_config).build("127.0.0.1:0").await.expect("build server");
+        let addr = server.local_addr().expect("server addr");
+
+        let mut module = RpcModule::new(Arc::clone(&calls));
+        module
+            .register_method("net_listening", |_, _, _| Ok::<_, StratusError>(true))
+            .expect("register net_listening");
+        module
+            .register_method("stratus_getBlockAndReceipts", |_, calls, _| {
+                let n = calls.fetch_add(1, Ordering::SeqCst);
+                if n == 0 {
+                    Ok(json!({ "__stratus_paginated__": { "total": 100, "chunk": "a".repeat(50) } })) as Result<JsonValue, StratusError>
+                } else {
+                    Ok(json!({ "block": "abc" })) as Result<JsonValue, StratusError>
+                }
+            })
+            .expect("register stratus_getBlockAndReceipts");
+        let _server_handle = server.start(module);
+
+        let url = format!("http://{addr}");
+        let client = BlockchainClient::new_http(&url, Duration::from_secs(10), MAX_RESPONSE_BYTES)
+            .await
+            .expect("build client");
+
+        let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
+        assert!(format!("{error:?}").contains("expected paginated chunk but got normal response"));
     }
 }

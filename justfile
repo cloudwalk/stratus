@@ -423,6 +423,86 @@ e2e-leader-follower-pagination:
     just e2e-leader-follower-down
     exit $exit_code
 
+# E2E: Leader & Follower pagination in block changes replication mode (stratus_getBlockWithChanges)
+e2e-leader-follower-pagination-changes:
+    #!/bin/bash
+
+    # leader with a small response limit, forcing oversized with-changes responses to be paginated
+    MAX_RESPONSE_SIZE_BYTES=8192 just e2e-leader
+
+    # follower in block changes replication mode, with a small response limit as well
+    EXTERNAL_RPC_MAX_RESPONSE_SIZE_BYTES=8192 just e2e-follower test/follower/e2e-pagination-changes.test.ts true
+
+    cd e2e
+    if [ ! -d node_modules ]; then npm install; fi
+    npx hardhat test test/follower/e2e-pagination-changes.test.ts --network stratus --bail
+    exit_code=$?
+    cd ..
+
+    just e2e-leader-follower-down
+    exit $exit_code
+
+# E2E: Leader & Follower pagination catch-up: the follower starts several fat blocks behind
+e2e-leader-follower-pagination-catchup:
+    #!/bin/bash
+
+    rm -f e2e/pagination-catchup.json
+
+    # leader with a small response limit; the follower is still down
+    MAX_RESPONSE_SIZE_BYTES=8192 just e2e-leader
+
+    # mine several fat blocks while the follower is down, persisting them for verification
+    cd e2e
+    if [ ! -d node_modules ]; then npm install; fi
+    npx hardhat test test/follower/e2e-pagination-catchup-setup.test.ts --network stratus --bail
+    exit_code=$?
+    cd ..
+    if [ "$exit_code" -ne 0 ]; then
+        just e2e-leader-follower-down
+        rm -f e2e/pagination-catchup.json
+        exit $exit_code
+    fi
+
+    # follower starts several fat blocks behind, with a small response limit
+    EXTERNAL_RPC_MAX_RESPONSE_SIZE_BYTES=8192 just e2e-follower
+
+    cd e2e
+    npx hardhat test test/follower/e2e-pagination-catchup-verify.test.ts --network stratus --bail
+    exit_code=$?
+    cd ..
+
+    just e2e-leader-follower-down
+    rm -f e2e/pagination-catchup.json
+    exit $exit_code
+
+# E2E: Leader & Follower pagination with asymmetric response size limits
+e2e-leader-follower-pagination-asymmetric:
+    #!/bin/bash
+
+    cd e2e
+    if [ ! -d node_modules ]; then npm install; fi
+    cd ..
+
+    # run 1: the leader limit is smaller, so the leader clamps the follower's larger chunk budget
+    MAX_RESPONSE_SIZE_BYTES=8192 just e2e-leader
+    EXTERNAL_RPC_MAX_RESPONSE_SIZE_BYTES=32768 just e2e-follower
+    cd e2e
+    npx hardhat test test/follower/e2e-pagination.test.ts --network stratus --bail
+    exit_code=$?
+    cd ..
+    just e2e-leader-follower-down
+    if [ "$exit_code" -ne 0 ]; then exit $exit_code; fi
+
+    # run 2: the follower limit is smaller, so the follower's smaller budget drives the chunk size
+    MAX_RESPONSE_SIZE_BYTES=32768 just e2e-leader
+    EXTERNAL_RPC_MAX_RESPONSE_SIZE_BYTES=8192 just e2e-follower
+    cd e2e
+    npx hardhat test test/follower/e2e-pagination.test.ts --network stratus --bail
+    exit_code=$?
+    cd ..
+    just e2e-leader-follower-down
+    exit $exit_code
+
 # E2E: Leader & Follower Down
 e2e-leader-follower-down:
     #!/bin/bash
