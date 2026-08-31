@@ -25,7 +25,6 @@ pub use temporary::compute_pending_block_number;
 
 pub use crate::eth::types::ExecutionKind;
 use crate::eth::types::StratusError;
-pub use crate::eth::types::TxCount;
 
 // -----------------------------------------------------------------------------
 // Config

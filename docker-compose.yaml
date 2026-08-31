@@ -42,7 +42,7 @@ services:
   # OpenTelemetry
   # ----------------------------------------------------------------------------
   jaeger:
-    image: jaegertracing/all-in-one:1.57
+    image: jaegertracing/all-in-one:1.57@sha256:8f165334f418ca53691ce358c19b4244226ed35c5d18408c5acf305af2065fb9
     ports:
       - 4317:4317
       - 16686:16686
@@ -102,7 +102,7 @@ services:
       - grafana-stack
 
   promtail:
-    image: grafana/promtail:main-bc418c4
+    image: grafana/promtail:3.6.11@sha256:a761cb834cfaeee29745440d4884d6748f0a08d8f68928db1d707018c1dcfbe9
     volumes:
       - ./static/promtail/config.yaml:/etc/promtail/config.yaml
       - .:/var/log/host  # Mount host logs to a specific directory
