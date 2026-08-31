@@ -4,6 +4,9 @@ use super::address::AddressRocksdb;
 use super::bytecode::BytecodeRocksdb;
 use super::nonce::NonceRocksdb;
 use super::wei::WeiRocksdb;
+use crate::eth::executor::types::state::AccountChanges;
+use crate::eth::executor::types::state::Change;
+use crate::eth::executor::types::state::Final;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
@@ -25,6 +28,22 @@ impl AccountRocksdb {
             balance: self.balance.into(),
             bytecode: self.bytecode.clone().map_into(),
         }
+    }
+
+    pub fn update(mut self, other: AccountChanges<Final>) -> Self {
+        if other.balance.is_changed() {
+            self.balance = other.balance.take_value().into();
+        }
+
+        if other.nonce.is_changed() {
+            self.nonce = other.nonce.take_value().into();
+        }
+
+        if other.bytecode.is_changed() {
+            self.bytecode = other.bytecode.take_value().map_into();
+        }
+
+        self
     }
 }
 
