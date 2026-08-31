@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use alloy_primitives::Uint;
 use anyhow::anyhow;
 use revm::Database;
 use revm::DatabaseRef;
@@ -73,6 +74,11 @@ impl DatabaseRef for RevmSession {
     fn basic_ref(&self, address: revm::primitives::Address) -> Result<Option<AccountInfo>, Self::Error> {
         // retrieve account
         let address: Address = address.into();
+
+        if address.is_ignored() {
+            return Ok(None);
+        }
+
         let account = self.storage.read_account(address, self.kind)?;
         Ok(Some(account.into()))
     }
@@ -80,6 +86,11 @@ impl DatabaseRef for RevmSession {
     fn storage_ref(&self, address: revm::primitives::Address, index: U256) -> Result<U256, Self::Error> {
         // convert slot
         let address: Address = address.into();
+
+        if address.is_ignored() {
+            return Ok(Uint::default());
+        }
+
         let index: SlotIndex = index.into();
 
         // load slot from storage
