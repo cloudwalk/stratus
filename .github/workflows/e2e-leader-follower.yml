@@ -46,7 +46,7 @@ jobs:
       fail-fast: false
       matrix:
         test:
-          [brlc, importer, miner, change, deploy, kafka, health, tx-types]
+          [brlc, importer, miner, change, deploy, kafka, health, tx-types, pagination]
         use_block_changes_replication: [false, true]
     name: "E2E Leader & Follower on ${{ matrix.test }} (Replication: ${{ matrix.use_block_changes_replication }})"
     runs-on: stratus-runner

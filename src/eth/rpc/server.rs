@@ -41,7 +41,6 @@ use tracing::info_span;
 
 use crate::GlobalState;
 use crate::NodeMode;
-use crate::alias::AlloyReceipt;
 use crate::alias::JsonValue;
 use crate::config::StratusConfig;
 use crate::eth::codegen;
@@ -71,6 +70,7 @@ use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parser::RpcExtensionsExt;
 use crate::eth::rpc::subscriptions::RpcSubscriptionsHandles;
+use crate::eth::rpc::types::ImporterPagination;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
@@ -899,9 +899,14 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     let _method_enter = info_span!("rpc::stratus_getBlockAndReceipts").entered();
 
     // parse params
-    let (_, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let (filter, pagination) = ImporterPagination::from_params(
+        params,
+        filter,
+        ctx.server.rpc_config.rpc_max_response_size_bytes,
+        ctx.server.rpc_config.pagination_enabled,
+    )?;
 
-    // track
     tracing::info!(%filter, "reading block and receipts");
 
     let Some(block) = ctx.server.storage.read_block(filter)? else {
@@ -909,13 +914,11 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
         return Ok(JsonValue::Null);
     };
 
-    tracing::info!(%filter, "block with transactions found");
-    let receipts = block.transactions.iter().cloned().map(AlloyReceipt::from).collect::<Vec<_>>();
+    let (response, paginated) = pagination.block_and_receipts_response(block)?;
 
-    Ok(json!({
-        "block": block.to_json_rpc_with_full_transactions(),
-        "receipts": receipts,
-    }))
+    tracing::info!(%filter, paginated, "block with transactions found");
+
+    Ok(response)
 }
 
 fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
@@ -924,19 +927,26 @@ fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     let _method_enter = info_span!("rpc::stratus_getBlockWithChanges").entered();
 
     // parse params
-    let (_, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let (filter, pagination) = ImporterPagination::from_params(
+        params,
+        filter,
+        ctx.server.rpc_config.rpc_max_response_size_bytes,
+        ctx.server.rpc_config.pagination_enabled,
+    )?;
 
-    // track
     tracing::info!(%filter, "reading block and changes");
 
-    let Some(block) = ctx.server.storage.read_block_with_changes(filter)? else {
+    let Some((block, changes)) = ctx.server.storage.read_block_with_changes(filter)? else {
         tracing::info!(%filter, "block not found");
         return Ok(JsonValue::Null);
     };
 
-    tracing::info!(%filter, "block with changes found");
+    let (response, paginated) = pagination.block_with_changes_response(block, changes)?;
 
-    Ok(json!(block))
+    tracing::info!(%filter, paginated, "block with changes found");
+
+    Ok(response)
 }
 
 fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {

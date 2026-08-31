@@ -86,3 +86,12 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-genesis-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true
+
+  e2e-pagination-budget:
+    name: E2E Pagination Budget
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-pagination-budget"
+    concurrency:
+      group: ${{ github.workflow }}-pagination-budget-${{ github.ref || github.run_id }}
+      cancel-in-progress: true

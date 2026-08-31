@@ -15,6 +15,7 @@ use jsonrpsee::ws_client::WsClientBuilder;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 
+use super::importer_pagination::ImporterPaginationClient;
 use crate::GlobalState;
 use crate::alias::AlloyBytes;
 use crate::alias::AlloyTransaction;
@@ -190,33 +191,13 @@ impl BlockchainClient {
     /// Fetches a block by number with receipts.
     pub async fn fetch_block_and_receipts(&self, block_number: BlockNumber) -> anyhow::Result<Option<ExternalBlockWithReceipts>> {
         tracing::debug!(%block_number, "fetching block");
-
-        let number = to_json_value(block_number);
-        let result = self
-            .http
-            .request::<Option<ExternalBlockWithReceipts>, _>("stratus_getBlockAndReceipts", [number])
-            .await;
-
-        match result {
-            Ok(block) => Ok(block),
-            Err(e) => log_and_err!(reason = e, "failed to fetch block with receipts"),
-        }
+        ImporterPaginationClient::new(&self.http).fetch_block_and_receipts(block_number).await
     }
 
     /// Fetches a block by number with changes.
     pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<(BlockRocksdb, BlockChangesRocksdb)>> {
         tracing::debug!(%block_number, "fetching block with changes");
-
-        let number = to_json_value(block_number);
-        let result = self
-            .http
-            .request::<Option<(BlockRocksdb, BlockChangesRocksdb)>, _>("stratus_getBlockWithChanges", [number])
-            .await;
-
-        match result {
-            Ok(block) => Ok(block),
-            Err(e) => log_and_err!(reason = e, "failed to fetch block with changes"),
-        }
+        ImporterPaginationClient::new(&self.http).fetch_block_with_changes(block_number).await
     }
 
     /// Fetches a block by number.

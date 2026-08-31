@@ -49,6 +49,12 @@ pub enum RpcError {
     #[error("parameter is invalid")]
     #[error_code = 10]
     ParameterInvalid,
+
+    #[error(
+        "paginated response cannot be delivered: single item of {item_bytes} bytes exceeds the {budget} bytes page budget allowed by the max response size."
+    )]
+    #[error_code = 12]
+    PaginationItemTooLarge { item_bytes: usize, budget: usize },
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
