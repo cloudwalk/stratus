@@ -54,7 +54,9 @@ describe("Leader & Follower pagination round-trip with stratus_getBlockWithChang
 
         // Wait for the block with 300 transactions to be mined (header-only poll)
         const targetBlock = await waitForBlockWithTxCount(TX_COUNT, 30);
-        expect(Number(targetBlock.gasUsed), "Block should contain all sent transactions").to.be.at.least(TX_COUNT * 21000);
+        expect(Number(targetBlock.gasUsed), "Block should contain all sent transactions").to.be.at.least(
+            TX_COUNT * 21000,
+        );
         blockHash = targetBlock.hash;
         console.log(`Created block ${blockHash} with gasUsed ${targetBlock.gasUsed}`);
     });
