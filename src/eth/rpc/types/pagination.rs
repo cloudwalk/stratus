@@ -14,7 +14,8 @@ pub trait CursorCodec: Sized {
 #[serde(rename_all = "camelCase")]
 pub struct CursorPageInfo {
     /// Page budget applied by the server: item count for an explicit `limit`
-    /// request, approximate serialized bytes otherwise.
+    /// request, serialized-bytes budget for item payloads (response frame
+    /// excluded) otherwise.
     pub limit: usize,
     pub returned: usize,
     pub total: usize,

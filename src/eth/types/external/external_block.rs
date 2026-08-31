@@ -75,12 +75,12 @@ impl ExternalBlock {
     }
 
     /// Returns the number of full transactions in the block.
-    pub fn try_full_transactions_len(&self) -> anyhow::Result<usize> {
+    pub(crate) fn try_full_transactions_len(&self) -> anyhow::Result<usize> {
         Ok(self.full_transactions()?.len())
     }
 
     /// Appends full transactions from another page of the same block.
-    pub fn extend_full_transactions_from(&mut self, other: Self) -> anyhow::Result<()> {
+    pub(crate) fn extend_full_transactions_from(&mut self, other: Self) -> anyhow::Result<()> {
         if self.hash() != other.hash() {
             bail!(
                 "cannot extend external block transactions from block {} into block {}",

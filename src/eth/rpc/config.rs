@@ -20,6 +20,17 @@ pub struct RpcServerConfig {
     #[arg(long = "max-response-size-bytes", env = "MAX_RESPONSE_SIZE_BYTES", default_value = "10485760")]
     pub rpc_max_response_size_bytes: u32,
 
+    /// Enable cursor pagination for the importer RPC methods
+    /// (`stratus_getBlockAndReceipts`, `stratus_getBlockWithChanges`).
+    ///
+    /// When disabled, those methods always answer with the complete legacy
+    /// one-shot response, restoring the exact pre-pagination behavior for
+    /// mixed-version rollouts and incidents. Note that JSON-RPC batch responses
+    /// are not bounded by the per-response pagination budget; the importer issues
+    /// single, non-batch requests.
+    #[arg(long = "pagination-enabled", env = "RPC_PAGINATION_ENABLED", default_value = "true")]
+    pub pagination_enabled: bool,
+
     /// JSON-RPC server max active subscriptions per client.
     #[arg(long = "max-subscriptions", env = "MAX_SUBSCRIPTIONS", default_value = "30")]
     pub rpc_max_subscriptions: u32,

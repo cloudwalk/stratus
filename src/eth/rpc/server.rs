@@ -898,7 +898,12 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
 
     // parse params
     let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
-    let (filter, pagination) = ImporterPagination::from_params(params, filter, ctx.server.rpc_config.rpc_max_response_size_bytes)?;
+    let (filter, pagination) = ImporterPagination::from_params(
+        params,
+        filter,
+        ctx.server.rpc_config.rpc_max_response_size_bytes,
+        ctx.server.rpc_config.pagination_enabled,
+    )?;
 
     tracing::info!(%filter, "reading block and receipts");
 
@@ -907,9 +912,9 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
         return Ok(JsonValue::Null);
     };
 
-    let response = pagination.block_and_receipts_response(block)?;
+    let (response, paginated) = pagination.block_and_receipts_response(block)?;
 
-    tracing::info!(%filter, paginated = response.get("pagination").is_some(), "block with transactions found");
+    tracing::info!(%filter, paginated, "block with transactions found");
 
     Ok(response)
 }
@@ -921,7 +926,12 @@ fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext:
 
     // parse params
     let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
-    let (filter, pagination) = ImporterPagination::from_params(params, filter, ctx.server.rpc_config.rpc_max_response_size_bytes)?;
+    let (filter, pagination) = ImporterPagination::from_params(
+        params,
+        filter,
+        ctx.server.rpc_config.rpc_max_response_size_bytes,
+        ctx.server.rpc_config.pagination_enabled,
+    )?;
 
     tracing::info!(%filter, "reading block and changes");
 
@@ -930,9 +940,9 @@ fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext:
         return Ok(JsonValue::Null);
     };
 
-    let response = pagination.block_with_changes_response(block, changes)?;
+    let (response, paginated) = pagination.block_with_changes_response(block, changes)?;
 
-    tracing::info!(%filter, paginated = response.get("pagination").is_some(), "block with changes found");
+    tracing::info!(%filter, paginated, "block with changes found");
 
     Ok(response)
 }

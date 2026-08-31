@@ -287,10 +287,14 @@ e2e-stratus block-mode="automine" test="":
     fi
 
 # E2E: Start Stratus with a small response size cap, run byte-budget pagination tests
+# (wrap with `just run-test e2e-pagination-budget` to kill Stratus afterwards)
 e2e-pagination-budget:
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
+    fi
+    if [ ! -d node_modules ]; then
+        npm install
     fi
 
     just _log "Starting Stratus with MAX_RESPONSE_SIZE_BYTES=30000"
@@ -357,6 +361,12 @@ _e2e-leader-follower-up-impl test="brlc" use_block_changes_replication="false":
 
     if [ "{{test}}" = "tx-types" ]; then
         export EXECUTOR_REJECT_NOT_CONTRACT=false
+    fi
+
+    if [ "{{test}}" = "pagination" ]; then
+        # Force the follower's importer through the paginated fetch path: the leader
+        # response cap is small enough that the 300-tx test block spans multiple pages.
+        export MAX_RESPONSE_SIZE_BYTES=30000
     fi
 
     # Start Stratus with leader flag

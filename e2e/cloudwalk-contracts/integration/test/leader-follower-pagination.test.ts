@@ -10,7 +10,10 @@ import {
     waitForFollowerToSyncWithLeader,
 } from "./helpers/rpc";
 
-const PAGE_LIMIT = 256;
+// Page limit must keep every page under the leader response cap used by the
+// pagination run (see just recipe `_e2e-leader-follower-up-impl`): 32 items is
+// comfortably below 30 KB.
+const PAGE_LIMIT = 32;
 const TX_COUNT = 300;
 
 describe("Leader & Follower pagination round-trip with stratus_getBlockWithChanges", function () {
@@ -49,11 +52,11 @@ describe("Leader & Follower pagination round-trip with stratus_getBlockWithChang
         // Resume mining — all 300 pending transactions should be committed in one block
         await sendWithRetry("stratus_enableMiner", []);
 
-        // Wait for the block with 300 transactions to be mined
+        // Wait for the block with 300 transactions to be mined (header-only poll)
         const targetBlock = await waitForBlockWithTxCount(TX_COUNT, 30);
-        expect(targetBlock.transactions, "Block should contain all sent transactions").to.have.length(TX_COUNT);
+        expect(Number(targetBlock.gasUsed), "Block should contain all sent transactions").to.be.at.least(TX_COUNT * 21000);
         blockHash = targetBlock.hash;
-        console.log(`Created block ${blockHash} with ${TX_COUNT} transactions`);
+        console.log(`Created block ${blockHash} with gasUsed ${targetBlock.gasUsed}`);
     });
 
     it("Wait for Follower to sync with Leader", async function () {
@@ -144,13 +147,19 @@ async function fetchAllPages(blockHash: string): Promise<PaginatedResult> {
     return { total, pageCount, cursors, blockData, changesData };
 }
 
-/// Polls until a block with at least `txCount` transactions is mined, with a `maxAttempts` timeout.
+/// Polls until a block carrying at least `txCount` simple transfers is mined,
+/// with a `maxAttempts` timeout.
+///
+/// Polls headers only (`eth_getBlockByNumber` with full transactions would exceed
+/// the small leader response cap used by the pagination run): a transfer burns
+/// exactly 21000 gas, so `gasUsed` identifies the block.
 async function waitForBlockWithTxCount(txCount: number, maxAttempts: number): Promise<any> {
+    const expectedGas = txCount * 21000;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
         const blockNumber = await sendWithRetry("eth_blockNumber", []);
-        const block = await send("eth_getBlockByNumber", [blockNumber, true]);
-        if (block && block.transactions && block.transactions.length >= txCount) {
+        const block = await send("eth_getBlockByNumber", [blockNumber, false]);
+        if (block && Number(block.gasUsed) >= expectedGas) {
             return block;
         }
     }

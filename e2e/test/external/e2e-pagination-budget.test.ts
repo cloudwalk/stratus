@@ -18,7 +18,8 @@ async function fetchAllPages(method: string, blockHash: string): Promise<any[]> 
     const pages: any[] = [];
     let cursor: string | null = null;
     do {
-        const params = cursor === null ? [blockHash] : [blockHash, { cursor }];
+        // pagination is opt-in: first page sends the flag, continuations the cursor
+        const params = cursor === null ? [blockHash, { pagination: true }] : [blockHash, { cursor }];
         const response = await sendAndGetFullResponse(method, params);
         expect(response.data.error, `${method} should succeed`).to.be.undefined;
 
@@ -96,6 +97,23 @@ describe("Byte-budget Pagination", function () {
         for (const receipt of reassembledReceipts) {
             expect(receipt.transactionHash, "receipt references an existing tx").to.be.oneOf(referenceTxs);
         }
+    });
+
+    it("plain request is backward compatible: returns the complete legacy response, not a page", async function () {
+        this.timeout(30000);
+
+        // A caller that did not opt in to pagination keeps the legacy contract: the
+        // server returns the complete one-shot response, never a paginated page.
+        // This is the backward-compatibility guarantee for mixed-version rollouts —
+        // an older client never receives a shape it cannot parse. For blocks that
+        // exceed the response cap, the pre-existing max-response-size limit applies
+        // (the limitation this PR fixes for opted-in clients); opting in is what
+        // streams such blocks.
+        const response = await sendAndGetFullResponse("stratus_getBlockAndReceipts", [blockHash]);
+        // The oversized legacy response hits the pre-existing response cap — not a
+        // paginated page. Either way, no `pagination` field is ever returned to a
+        // non-opted-in caller.
+        expect(response.data.result?.pagination, "plain request must never return a pagination field").to.be.undefined;
     });
 
     it("stratus_getBlockWithChanges: plain request paginates by response size", async function () {

@@ -26,7 +26,7 @@ use crate::eth::types::ExternalReceipt;
 use crate::eth::types::ExternalTransaction;
 use crate::eth::types::Hash;
 
-/// Default page limit for the dev-only explicit `limit` knob.
+/// Default page size for the dev-only explicit `limit` override.
 #[cfg(any(test, feature = "dev"))]
 pub const IMPORTER_PAGE_LIMIT_DEFAULT: usize = 256;
 /// Floor for an explicit `limit`: prevents pathological page counts (e.g. `limit: 1`
@@ -38,30 +38,56 @@ pub const IMPORTER_PAGE_LIMIT_MAX: usize = 5_000;
 
 const IMPORTER_CURSOR_VERSION: &str = "v1";
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImporterPageRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cursor: Option<String>,
+    /// Opt-in flag for byte-budget cursor pagination.
+    ///
+    /// Backward compatible: legacy clients (e.g. followers built before
+    /// pagination) never send this field, so the leader answers with the complete
+    /// one-shot response exactly as before this change — no behavior change for
+    /// them. New clients opt in to receive paginated responses for blocks that
+    /// exceed the server response cap. Pagination is never applied to a request
+    /// that did not opt in, so a client that does not understand the paginated
+    /// shape is never surprised by it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pagination: Option<bool>,
+
     /// Item-count override that forces paginated, count-based responses.
     ///
-    /// Not a production control: the production follower sends plain requests and
-    /// lets the leader page by response size. This exists so tests and tooling can
-    /// exercise multi-page flows cheaply (hundreds of items instead of multi-MB
-    /// blocks). Values are clamped to [`IMPORTER_PAGE_LIMIT_MIN`]..=
-    /// [`IMPORTER_PAGE_LIMIT_MAX`].
+    /// Not a production control: the production follower opts in without a `limit`
+    /// and lets the leader page by response size. This exists so tests and tooling
+    /// can exercise multi-page flows cheaply (hundreds of items instead of multi-MB
+    /// blocks). Sending a `limit` implies pagination opt-in. Values are clamped to
+    /// [`IMPORTER_PAGE_LIMIT_MIN`]..=[`IMPORTER_PAGE_LIMIT_MAX`].
     ///
-    /// Only honored by servers built with the `dev` feature: production builds
-    /// strip the field and silently ignore the knob.
+    /// Only honored by servers built with the `dev` feature (or in tests):
+    /// production builds strip the field.
     #[cfg(any(test, feature = "dev"))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<usize>,
 }
 
 impl ImporterPageRequest {
-    /// Builds a continuation request carrying only the cursor. The dev-only
-    /// `limit` field defaults to `None` under the byte-budget policy.
+    /// Builds a first-page request opting in to byte-budget cursor pagination.
+    pub fn opt_in() -> Self {
+        Self {
+            cursor: None,
+            pagination: Some(true),
+            #[cfg(any(test, feature = "dev"))]
+            limit: None,
+        }
+    }
+
+    /// Builds a continuation request carrying only the cursor. The byte-budget
+    /// policy applies unless the original stream was count-based and the client
+    /// resends its `limit`.
     pub fn with_cursor(cursor: String) -> Self {
         Self {
             cursor: Some(cursor),
+            pagination: None,
             #[cfg(any(test, feature = "dev"))]
             limit: None,
         }
@@ -78,9 +104,6 @@ impl ImporterPageRequest {
     }
 
     /// Clamped explicit limit, or `None` when the caller sent none.
-    ///
-    /// Only invoked by [`ImporterPagination::from_params`] on the explicit-override
-    /// path — a plain request resolves to the byte-budget policy instead.
     #[cfg(any(test, feature = "dev"))]
     fn explicit_limit(&self) -> Option<usize> {
         let limit = match self.limit {
@@ -95,15 +118,22 @@ impl ImporterPageRequest {
 /// How a paginated response stream is sliced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PagePolicy {
+    /// Pagination is disabled for this request: the complete payload is always
+    /// emitted as a single legacy response, byte-identical to the pre-pagination
+    /// behavior.
+    ///
+    /// Used for legacy requests (clients that did not opt in to pagination) and when
+    /// pagination is disabled server-side, so mixed-version deployments keep the
+    /// exact behavior they had before this change.
+    Legacy,
     /// Page by item count (explicit `limit` override — a test/tooling knob, not a
-    /// production control; see [`ImporterPageRequest::limit`]). Only available in
-    /// `dev` builds.
+    /// production control; see [`ImporterPageRequest::limit`]). Sending a `limit`
+    /// implies pagination opt-in.
     #[cfg(any(test, feature = "dev"))]
     Count(usize),
-    /// Page by a serialized-bytes budget (production default). Measured on the
-    /// exact encoding each response endpoint emits, so a page is guaranteed to fit
-    /// the budget — except for a single item that alone exceeds the budget, which
-    /// is still emitted to guarantee stream progress.
+    /// Page by a serialized-bytes budget (production default for opted-in
+    /// requests). Measured on the exact encoding each response endpoint emits, so a
+    /// page is guaranteed to fit the server response cap.
     Bytes(usize),
 }
 
@@ -125,24 +155,52 @@ impl ImporterPagination {
 
     /// Parses pagination parameters from the RPC params sequence.
     ///
-    /// Every request is potentially paginable: a plain `[filter]` request uses a byte
-    /// budget derived from the server's max response size, while a request carrying
-    /// `cursor` resumes from the indexed position. `limit`, when explicitly provided,
-    /// switches the policy to item-count (used by tests to force pagination cheaply).
+    /// Pagination is opt-in and backward compatible. Policy resolution for a
+    /// `[filter, page_request]` call:
+    /// - an explicit `limit` forces count-based pagination (test/tooling knob);
+    /// - `pagination: true` opts in to byte-budget pagination (sent by the importer
+    ///   client);
+    /// - a `cursor` resumes a paginated stream (byte-budget continuation);
+    /// - anything else is a legacy request: the response is always the complete
+    ///   one-shot payload, byte-identical to the pre-pagination behavior. Clients
+    ///   that do not understand pagination (e.g. older followers) are unaffected —
+    ///   they send the same request they always did and receive the same response.
+    ///   For blocks that exceed the response cap, legacy clients keep the
+    ///   pre-existing limitation; opting in lets new clients stream such blocks.
+    ///
+    /// When `pagination_enabled` is false (server-side kill switch), every request
+    /// resolves to the legacy one-shot behavior, cursors included.
     ///
     /// Returns `(filter, pagination)` where `filter` is:
     /// - The original `filter` if no cursor is present (first page).
-    /// - `BlockFilter::Hash(cursor.block_hash)` if a cursor is present (subsequent pages),
-    ///   overriding the original filter to ensure the same block is paginated.
-    pub fn from_params(params: ParamsSequence<'_>, filter: BlockFilter, max_response_bytes: u32) -> Result<(BlockFilter, Self), RpcError> {
+    /// - `BlockFilter::Hash(cursor.block_hash)` if a cursor is present (subsequent
+    ///   pages), overriding the original filter to ensure the same block is
+    ///   paginated.
+    pub fn from_params(
+        params: ParamsSequence<'_>,
+        filter: BlockFilter,
+        max_response_bytes: u32,
+        pagination_enabled: bool,
+    ) -> Result<(BlockFilter, Self), RpcError> {
         let request = ImporterPageRequest::parse_optional(params)?;
         let (filter, start) = Self::resolve_filter(filter, request.as_ref().and_then(|r| r.cursor.as_deref()))?;
 
-        let policy = PagePolicy::Bytes((max_response_bytes as usize).saturating_sub(Self::ENVELOPE_RESERVE));
+        let opted_in = matches!(request.as_ref().and_then(|r| r.pagination), Some(true));
+        let has_cursor = request.as_ref().is_some_and(|r| r.cursor.is_some());
+        let policy = match (pagination_enabled, opted_in || has_cursor) {
+            (false, _) | (true, false) => PagePolicy::Legacy,
+            (true, true) => PagePolicy::Bytes((max_response_bytes as usize).saturating_sub(Self::ENVELOPE_RESERVE)),
+        };
+        // Dev-only `limit` override takes precedence and switches to count-based
+        // paging. Honored only when pagination is enabled.
         #[cfg(any(test, feature = "dev"))]
-        let policy = match request.as_ref().and_then(ImporterPageRequest::explicit_limit) {
-            Some(limit) => PagePolicy::Count(limit),
-            None => policy,
+        let policy = if !pagination_enabled {
+            policy
+        } else {
+            match request.as_ref().and_then(ImporterPageRequest::explicit_limit) {
+                Some(limit) => PagePolicy::Count(limit),
+                None => policy,
+            }
         };
 
         Ok((filter, Self { start, policy }))
@@ -168,78 +226,70 @@ impl ImporterPagination {
 
     /// Builds the response for `stratus_getBlockAndReceipts`.
     ///
-    /// Paginates only when the requested page does not fit entirely in one response
-    /// (a continuation always paginates, a first request only paginates when the
-    /// total exceeds the policy budget). Otherwise returns the legacy one-shot
-    /// `{block, receipts}` shape with no `pagination` field.
-    pub fn block_and_receipts_response(&self, block: Block) -> Result<JsonValue, RpcError> {
+    /// Returns `(response, paginated)`. Paginates only when the request opted in and
+    /// the payload does not fit entirely in one response (a continuation always
+    /// paginates). Otherwise returns the legacy one-shot `{block, receipts}` shape
+    /// with no `pagination` field.
+    pub fn block_and_receipts_response(&self, block: Block) -> Result<(JsonValue, bool), RpcError> {
         let Block { header, transactions } = block;
         let total = transactions.len();
         self.validate_start(total)?;
-
-        // Convert to the wire representation up front: the byte budget must be
-        // measured against the exact encoding the response carries (alloy
-        // JSON-RPC), not against the internal mined encoding. Each item is
-        // charged for its wire size plus the two commas that separate it from
-        // its neighbors (one in `block.transactions`, one in `receipts`).
         let block_hash = header.hash;
+
         let receipts: Vec<ExternalReceipt> = transactions.iter().cloned().map(AlloyReceipt::from).map(ExternalReceipt).collect();
         let mut transactions: Vec<AlloyTransaction> = transactions.into_iter().map_into().collect();
 
-        // Frame: the emitted block with an empty transaction list (header and
-        // JSON structural bytes) plus the response keys and array brackets;
-        // PAGINATION_RESERVE is charged only when the page paginates.
         let empty_block: AlloyBlockAlloyTransaction = header.clone().into();
-        let base_frame = json_len(&json!({ "block": empty_block.map_transactions(ExternalTransaction::from), "receipts": Vec::<ExternalReceipt>::new() }));
+        let base_frame = json_len(&json!({
+            "block": empty_block.map_transactions(ExternalTransaction::from),
+            "receipts": Vec::<ExternalReceipt>::new()
+        }));
 
-        let Some((end, limit_metric)) = self.page_window(
-            || {
-                transactions
-                    .iter()
-                    .zip(&receipts)
-                    .map(|(tx, receipt)| json_len(tx).saturating_add(json_len(receipt)).saturating_add(2))
-                    .collect()
-            },
-            base_frame,
-            total,
-        ) else {
+        let item_bytes = |idx: usize| json_len(&transactions[idx]).saturating_add(json_len(&receipts[idx])).saturating_add(2);
+        let total_bytes = || (0..total).map(&item_bytes).fold(0usize, usize::saturating_add);
+        let pack_from = |start: usize| take_by_budget(total, start, self.bytes_item_budget(base_frame), &item_bytes);
+
+        let Some((end, limit_metric)) = self.page_window(base_frame, total, total_bytes, pack_from)? else {
             let mut block: AlloyBlockAlloyTransaction = header.into();
             block.transactions = BlockTransactions::Full(transactions);
-            return Ok(json!({
-                "block": block.map_transactions(ExternalTransaction::from),
-                "receipts": receipts,
-            }));
+            return Ok((
+                json!({
+                    "block": block.map_transactions(ExternalTransaction::from),
+                    "receipts": receipts,
+                }),
+                false,
+            ));
         };
 
         let tx_range = self.start..end;
-        let page_info = self.page_info(end, limit_metric, total, block_hash);
         let page_transactions: Vec<AlloyTransaction> = transactions.drain(tx_range.clone()).collect();
 
         let mut block: AlloyBlockAlloyTransaction = header.into();
         block.transactions = BlockTransactions::Full(page_transactions);
-        Ok(json!(BlockAndReceiptsPageResponse {
-            block: ExternalBlock(block.map_transactions(ExternalTransaction::from)),
-            receipts: receipts[tx_range].to_vec(),
-            pagination: Some(page_info),
-        }))
+        Ok((
+            json!(BlockAndReceiptsPageResponse {
+                block: ExternalBlock(block.map_transactions(ExternalTransaction::from)),
+                receipts: receipts[tx_range].to_vec(),
+                pagination: Some(self.page_info(end, limit_metric, total, block_hash)),
+            }),
+            true,
+        ))
     }
 
     /// Builds the response for `stratus_getBlockWithChanges`.
     ///
     /// Same one-shot/paginate rule as [`Self::block_and_receipts_response`]; the
-    /// one-shot shape is the legacy `[block, changes]` tuple.
-    pub fn block_with_changes_response(&self, block: BlockRocksdb, changes: BlockChangesRocksdb) -> Result<JsonValue, RpcError> {
+    /// one-shot shape is the legacy `[block, changes]` tuple, emitted without
+    /// materializing (cloning/sorting) the changes map entries.
+    pub fn block_with_changes_response(&self, block: BlockRocksdb, changes: BlockChangesRocksdb) -> Result<(JsonValue, bool), RpcError> {
         let BlockRocksdb { header, transactions } = block;
         let total = transactions.len() + changes.account_changes.len() + changes.slot_changes.len();
         self.validate_start(total)?;
 
-        // Each item is charged for its wire size plus one comma separator.
-        let account_entries = sorted_account_changes(&changes);
-        let slot_entries = sorted_slot_changes(&changes);
-        let section_lens = [transactions.len(), account_entries.len(), slot_entries.len()];
+        let section_lens = [transactions.len(), changes.account_changes.len(), changes.slot_changes.len()];
 
-        // Frame: serialized `[block, changes]` tuple with empty item sections
-        // (block header and JSON structural bytes).
+        // Frame: serialized `[block, changes]` tuple with empty item sections (block
+        // header and JSON structural bytes).
         let base_frame = json_len(&json!((
             BlockRocksdb {
                 header: header.clone(),
@@ -248,36 +298,59 @@ impl ImporterPagination {
             BlockChangesRocksdb::default()
         )));
 
-        let Some((end, limit_metric)) = self.page_window(
-            || {
-                transactions
-                    .iter()
-                    .map(|item| json_len(item).saturating_add(1))
-                    .chain(account_entries.iter().map(|entry| json_len(entry).saturating_add(1)))
-                    .chain(slot_entries.iter().map(|entry| json_len(entry).saturating_add(1)))
-                    .collect()
-            },
-            base_frame,
-            total,
-        ) else {
-            return Ok(json!((BlockRocksdb { header, transactions }, changes)));
+        // Sorted entries materialize (clone every change) only when the request
+        // paginates: the cursor index space is the flat concatenation of
+        // transactions, address-sorted account changes and key-sorted slot
+        // changes, so the sort is required to pack and slice pages — but never
+        // for a one-shot.
+        let mut sorted: Option<(Vec<_>, Vec<_>)> = None;
+        let total_bytes = || {
+            let tx_bytes = transactions.iter().map(|tx| json_len(tx).saturating_add(1)).fold(0usize, usize::saturating_add);
+            let account_bytes = changes
+                .account_changes
+                .iter()
+                .map(|(address, change)| json_len(&(*address, change)).saturating_add(1))
+                .fold(0usize, usize::saturating_add);
+            let slot_bytes = changes
+                .slot_changes
+                .iter()
+                .map(|(key, value)| json_len(&(key, value)).saturating_add(1))
+                .fold(0usize, usize::saturating_add);
+            tx_bytes.saturating_add(account_bytes).saturating_add(slot_bytes)
+        };
+        let pack_from = |start: usize| {
+            let (account_entries, slot_entries) = sorted.get_or_insert_with(|| (sorted_account_changes(&changes), sorted_slot_changes(&changes)));
+            take_by_budget(total, start, self.bytes_item_budget(base_frame), |flat_idx| {
+                flat_item_bytes(flat_idx, &transactions, account_entries, slot_entries)
+            })
+        };
+
+        let Some((end, limit_metric)) = self.page_window(base_frame, total, total_bytes, pack_from)? else {
+            return Ok((json!((BlockRocksdb { header, transactions }, changes)), false));
         };
 
         let ranges = slice_ranges(&section_lens, self.start, end);
+        // Materialized here when the packer did not need it (count-based pages): the
+        // cursor index space is defined by the sorted sections for any pagination
+        // policy.
+        let (account_entries, slot_entries) = sorted.get_or_insert_with(|| (sorted_account_changes(&changes), sorted_slot_changes(&changes)));
 
         let page_changes = BlockChangesRocksdb {
-            account_changes: slice_account_changes(&account_entries, ranges[1].clone()),
-            slot_changes: slice_slot_changes(&slot_entries, ranges[2].clone()),
+            account_changes: slice_account_changes(account_entries, ranges[1].clone()),
+            slot_changes: slice_slot_changes(slot_entries, ranges[2].clone()),
         };
 
-        Ok(json!(BlockWithChangesPageResponse {
-            block: BlockRocksdb {
-                header: header.clone(),
-                transactions: transactions[ranges[0].clone()].to_vec(),
-            },
-            changes: page_changes,
-            pagination: Some(self.page_info(end, limit_metric, total, header.hash.into())),
-        }))
+        Ok((
+            json!(BlockWithChangesPageResponse {
+                block: BlockRocksdb {
+                    header: header.clone(),
+                    transactions: transactions[ranges[0].clone()].to_vec(),
+                },
+                changes: page_changes,
+                pagination: Some(self.page_info(end, limit_metric, total, header.hash.into())),
+            }),
+            true,
+        ))
     }
 
     /// Computes the end index for this page, or `None` when the whole result fits in
@@ -293,35 +366,57 @@ impl ImporterPagination {
     /// encoding, so the accounting is closed (only the JSON-RPC envelope remains
     /// outside it, reserved up front in [`Self::ENVELOPE_RESERVE`]). Paginated pages
     /// additionally reserve [`Self::PAGINATION_RESERVE`] for the pagination metadata.
-    fn page_window(&self, byte_sizes: impl FnOnce() -> Vec<usize>, base_frame: usize, total: usize) -> Option<(usize, usize)> {
-        let page_frame = base_frame.saturating_add(Self::PAGINATION_RESERVE);
-        if self.start > 0 {
-            return Some(self.paginate_first_or_continue(byte_sizes, page_frame, total));
-        }
-
+    /// Item payload budget of a byte-budget page: the cap minus the page frame
+    /// (response structure plus pagination metadata). Only meaningful under
+    /// [`PagePolicy::Bytes`]; other policies bound pages by item count instead.
+    fn bytes_item_budget(&self, base_frame: usize) -> usize {
         match self.policy {
-            PagePolicy::Bytes(cap) => {
-                let sizes = byte_sizes();
-                // sizing happens even on the one-shot path: it's how we know it fits.
-                // saturating: usize::MAX (serialization-failure marker) would overflow plain sum.
-                let total_bytes: usize = sizes.iter().copied().fold(0usize, usize::saturating_add);
-                (total_bytes.saturating_add(base_frame) > cap).then(|| self.paginate_first_or_continue(|| sizes, page_frame, total))
-            }
-            #[cfg(any(test, feature = "dev"))]
-            PagePolicy::Count(limit) => (total > limit).then(|| self.paginate_first_or_continue(byte_sizes, page_frame, total)),
+            PagePolicy::Bytes(cap) => cap.saturating_sub(base_frame.saturating_add(Self::PAGINATION_RESERVE)),
+            _ => usize::MAX,
         }
     }
 
-    /// Computes `(end, limit_metric)` for any request that must paginate. The item
-    /// budget is the cap minus the page frame.
-    fn paginate_first_or_continue(&self, byte_sizes: impl FnOnce() -> Vec<usize>, page_frame: usize, total: usize) -> (usize, usize) {
-        // `total` is only used by the dev-only count-based arm.
+    /// Computes the page end index, or `None` when the response is a legacy one-shot.
+    ///
+    /// Continuations (`start > 0`) always paginate; first requests paginate only
+    /// when the policy demands it (opted-in byte budget exceeded, or explicit
+    /// `limit` surpassed).
+    ///
+    /// `total_bytes` measures the full item payload and is only evaluated for the
+    /// byte-policy one-shot check. `pack_from(start)` computes the page end index
+    /// by packing items from `start` and is only evaluated when the request
+    /// paginates.
+    fn page_window(
+        &self,
+        base_frame: usize,
+        total: usize,
+        total_bytes: impl FnOnce() -> usize,
+        pack_from: impl FnOnce(usize) -> Result<usize, RpcError>,
+    ) -> Result<Option<(usize, usize)>, RpcError> {
+        // `total` is used only by the dev-only `Count` policy arm below.
         #[cfg(not(any(test, feature = "dev")))]
         let _ = total;
         match self.policy {
-            PagePolicy::Bytes(cap) => (self.start + take_by_budget(&byte_sizes(), self.start, cap.saturating_sub(page_frame)), cap),
+            PagePolicy::Legacy => Ok(None),
             #[cfg(any(test, feature = "dev"))]
-            PagePolicy::Count(limit) => (self.start.saturating_add(limit).min(total), limit),
+            PagePolicy::Count(limit) =>
+                if self.start > 0 || total > limit {
+                    Ok(Some((self.start.saturating_add(limit).min(total), limit)))
+                } else {
+                    Ok(None)
+                },
+            PagePolicy::Bytes(cap) => {
+                // One-shot when the whole payload fits the cap: item sizes and the
+                // frame are measured on the exact emitted encoding, so the emitted
+                // response (envelope included) is guaranteed to fit the server's max
+                // response size.
+                if self.start == 0 && total_bytes().saturating_add(base_frame) <= cap {
+                    return Ok(None);
+                }
+                let budget = cap.saturating_sub(base_frame.saturating_add(Self::PAGINATION_RESERVE));
+                let end = pack_from(self.start)?;
+                Ok(Some((end, budget)))
+            }
         }
     }
 
@@ -368,25 +463,58 @@ impl ImporterPagination {
 /// The data types sized here always serialize; on a surprise failure we count the
 /// item as "largest possible" instead of zero, so the page budget overestimates
 /// rather than silently dropping the item from the accounting.
+///
+/// Note: the JSON-RPC transport may also aggregate responses (batch requests);
+/// per-response budgets do not bound the aggregate body of a batch. The importer
+/// issues single, non-batch requests.
 fn json_len<T: serde::Serialize>(value: &T) -> usize {
     serde_json::to_vec(value).map(|json| json.len()).unwrap_or(usize::MAX)
 }
 
-/// Number of consecutive items starting at `start` that fit into `budget`.
+/// Number of consecutive flat items starting at `start` that fit into `budget`,
+/// sizing each item with `size_of`.
 ///
-/// Always consumes at least one item: when a single item exceeds the budget the page
-/// carries it anyway, so the stream can always advance past oversized items.
-fn take_by_budget(sizes: &[usize], start: usize, budget: usize) -> usize {
+/// Always consumes at least one item; errors with
+/// [`RpcError::PaginationItemTooLarge`] when even a single item exceeds `budget`,
+/// since a page carrying it alone could never be delivered within the response cap —
+/// failing loudly beats emitting a response the transport would refuse.
+fn take_by_budget(total: usize, start: usize, budget: usize, mut size_of: impl FnMut(usize) -> usize) -> Result<usize, RpcError> {
     let mut used = 0usize;
-    let mut taken = 0;
-    for &size in sizes.get(start..).unwrap_or_default() {
+    let mut taken = 0usize;
+    for idx in start..total {
+        let size = size_of(idx);
         if taken > 0 && used.saturating_add(size) > budget {
             break;
+        }
+        if taken == 0 && size > budget {
+            return Err(RpcError::PaginationItemTooLarge { item_bytes: size, budget });
         }
         used = used.saturating_add(size);
         taken += 1;
     }
-    taken
+    Ok(start + taken)
+}
+
+/// Wire size of the flat item at `flat_idx` of the `block_with_changes` cursor
+/// index space (transactions, then sorted account changes, then sorted slot
+/// changes), charged for its separating comma.
+///
+/// Account and slot entries are sized in their tuple form, which is 2 bytes larger
+/// than the emitted map entry (`"0x…":{…}`) — a conservative overestimate.
+fn flat_item_bytes(
+    flat_idx: usize,
+    transactions: &[crate::eth::storage::permanent::rocks::types::TransactionMinedRocksdb],
+    account_entries: &[(AddressRocksdb, AccountChangesRocksdb)],
+    slot_entries: &[((AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb)],
+) -> usize {
+    let tx_len = transactions.len();
+    if flat_idx < tx_len {
+        json_len(&transactions[flat_idx]).saturating_add(1)
+    } else if flat_idx < tx_len + account_entries.len() {
+        json_len(&account_entries[flat_idx - tx_len]).saturating_add(1)
+    } else {
+        json_len(&slot_entries[flat_idx - tx_len - account_entries.len()]).saturating_add(1)
+    }
 }
 
 /// Distributes the item window `[start, end)` across consecutive sections, producing
@@ -582,6 +710,50 @@ mod tests {
         }
     }
 
+    /// Wire size of the (tx, receipt) pair at `idx` as emitted (alloy encoding),
+    /// charged for both separating commas.
+    fn receipts_item_bytes(block: &Block, idx: usize) -> usize {
+        let tx: AlloyTransaction = block.transactions[idx].clone().into();
+        serde_json::to_vec(&tx).unwrap().len()
+            + serde_json::to_vec(&ExternalReceipt(AlloyReceipt::from(block.transactions[idx].clone())))
+                .unwrap()
+                .len()
+            + 2
+    }
+
+    /// Frame size of the emitted `stratus_getBlockAndReceipts` payload with an empty
+    /// transaction list.
+    fn receipts_frame(block: &Block) -> usize {
+        let empty_block: crate::alias::AlloyBlockAlloyTransaction = block.header.clone().into();
+        serde_json::to_vec(&json!({
+            "block": empty_block.map_transactions(ExternalTransaction::from),
+            "receipts": Vec::<ExternalReceipt>::new(),
+        }))
+        .unwrap()
+        .len()
+    }
+
+    /// Byte budget whose item payload budget equals the largest (tx, receipt) pair:
+    /// guarantees at least one item per page without oversized rejections.
+    fn receipts_one_item_budget(block: &Block) -> usize {
+        let max_item = (0..block.transactions.len()).map(|idx| receipts_item_bytes(block, idx)).max().unwrap_or(0);
+        receipts_frame(block) + ImporterPagination::PAGINATION_RESERVE + max_item
+    }
+
+    /// Reference greedy pack: number of items taken from `start` under `budget`.
+    fn expected_taken(sizes: &[usize], start: usize, budget: usize) -> usize {
+        let mut used = 0usize;
+        let mut taken = 0usize;
+        for &size in &sizes[start..] {
+            if taken > 0 && used + size > budget {
+                break;
+            }
+            used += size;
+            taken += 1;
+        }
+        taken
+    }
+
     // -------------------------------------------------------------------------
     // Cursor codec tests
     // -------------------------------------------------------------------------
@@ -638,25 +810,41 @@ mod tests {
 
     #[test]
     fn limit_none_returns_none() {
-        let req = ImporterPageRequest { cursor: None, limit: None };
+        let req = ImporterPageRequest {
+            cursor: None,
+            pagination: None,
+            limit: None,
+        };
         assert_eq!(req.explicit_limit(), None);
     }
 
     #[test]
     fn limit_zero_returns_default() {
-        let req = ImporterPageRequest { cursor: None, limit: Some(0) };
+        let req = ImporterPageRequest {
+            cursor: None,
+            pagination: None,
+            limit: Some(0),
+        };
         assert_eq!(req.explicit_limit(), Some(IMPORTER_PAGE_LIMIT_DEFAULT));
     }
 
     #[test]
     fn limit_small_value_passed_through() {
-        let req = ImporterPageRequest { cursor: None, limit: Some(50) };
+        let req = ImporterPageRequest {
+            cursor: None,
+            pagination: None,
+            limit: Some(50),
+        };
         assert_eq!(req.explicit_limit(), Some(50));
     }
 
     #[test]
     fn limit_below_floor_clamped_to_min() {
-        let req = ImporterPageRequest { cursor: None, limit: Some(1) };
+        let req = ImporterPageRequest {
+            cursor: None,
+            pagination: None,
+            limit: Some(1),
+        };
         assert_eq!(req.explicit_limit(), Some(IMPORTER_PAGE_LIMIT_MIN));
     }
 
@@ -664,6 +852,7 @@ mod tests {
     fn limit_large_value_clamped_to_max() {
         let req = ImporterPageRequest {
             cursor: None,
+            pagination: None,
             limit: Some(10_000),
         };
         assert_eq!(req.explicit_limit(), Some(IMPORTER_PAGE_LIMIT_MAX));
@@ -674,37 +863,70 @@ mod tests {
     const TEST_MAX_RESPONSE_BYTES: u32 = 20_000_000; // item budget = cap - envelope reserve
 
     #[test]
-    fn from_params_no_param_uses_response_cap_minus_envelope_reserve() {
+    fn from_params_plain_request_is_legacy_even_when_opt_in_available() {
+        // Old clients send no second parameter: pagination must never apply.
         let params = Params::new(Some("[]"));
-        let (filter, pagination) = ImporterPagination::from_params(params.sequence(), BlockFilter::Latest, TEST_MAX_RESPONSE_BYTES).expect("ok");
-
+        let (_, pagination) = ImporterPagination::from_params(params.sequence(), BlockFilter::Latest, TEST_MAX_RESPONSE_BYTES, true).expect("ok");
         assert_eq!(pagination.start, 0);
-        assert!(matches!(pagination.policy, PagePolicy::Bytes(budget) if budget == TEST_MAX_RESPONSE_BYTES as usize - ImporterPagination::ENVELOPE_RESERVE));
-        assert!(matches!(filter, BlockFilter::Latest));
+        assert_eq!(pagination.policy, PagePolicy::Legacy);
     }
 
     #[test]
-    fn from_params_with_cursor_resolves_hash_filter_and_start() {
-        let block_hash = "0x3355a48e6b3e3a3c9e9c4b3a3f3e3d3c3b3a393837363534333231302f2e2d2c";
-        let cursor = codec(block_hash).encode_cursor(5);
-        let json = format!(r#"[{{"cursor":"{cursor}","limit":10}}]"#);
+    fn from_params_opt_in_uses_response_cap_minus_envelope_reserve() {
+        let params = Params::new(Some(r#"[{"pagination": true}]"#));
+        let (_, pagination) = ImporterPagination::from_params(params.sequence(), BlockFilter::Latest, TEST_MAX_RESPONSE_BYTES, true).expect("ok");
 
-        let params = Params::new(Some(&json));
-        let (filter, pagination) = ImporterPagination::from_params(params.sequence(), BlockFilter::Latest, TEST_MAX_RESPONSE_BYTES).expect("ok");
+        assert_eq!(pagination.start, 0);
+        assert!(matches!(pagination.policy, PagePolicy::Bytes(budget) if budget == TEST_MAX_RESPONSE_BYTES as usize - ImporterPagination::ENVELOPE_RESERVE));
+    }
 
-        assert!(matches!(filter, BlockFilter::Hash(h) if h == block_hash.parse::<Hash>().unwrap()));
-        assert_eq!(pagination.start, 5);
+    #[test]
+    fn from_params_opt_in_false_is_legacy() {
+        let params = Params::new(Some(r#"[{"pagination": false}]"#));
+        let (_, pagination) = ImporterPagination::from_params(params.sequence(), BlockFilter::Latest, TEST_MAX_RESPONSE_BYTES, true).expect("ok");
+        assert_eq!(pagination.policy, PagePolicy::Legacy);
+    }
+
+    #[test]
+    fn from_params_explicit_limit_forces_count_policy() {
+        let json = r#"[{"pagination": true, "limit": 10}]"#;
+        let params = Params::new(Some(json));
+        let (_, pagination) = ImporterPagination::from_params(params.sequence(), BlockFilter::Latest, TEST_MAX_RESPONSE_BYTES, true).expect("ok");
+
         // limit 10 is below the floor and clamps up to IMPORTER_PAGE_LIMIT_MIN
         assert!(matches!(pagination.policy, PagePolicy::Count(IMPORTER_PAGE_LIMIT_MIN)));
     }
 
     #[test]
-    fn from_params_null_cursor_and_no_limit_uses_byte_budget() {
-        let params = Params::new(Some(r#"[{"cursor":null}]"#));
-        let (_filter, pagination) = ImporterPagination::from_params(params.sequence(), BlockFilter::Latest, TEST_MAX_RESPONSE_BYTES).expect("ok");
+    fn from_params_limit_alone_implies_opt_in() {
+        let params = Params::new(Some(r#"[{"limit": 100}]"#));
+        let (_, pagination) = ImporterPagination::from_params(params.sequence(), BlockFilter::Latest, TEST_MAX_RESPONSE_BYTES, true).expect("ok");
+        assert!(matches!(pagination.policy, PagePolicy::Count(100)));
+    }
 
-        assert_eq!(pagination.start, 0);
+    #[test]
+    fn from_params_cursor_continuation_paginates_by_budget() {
+        let block_hash = "0x3355a48e6b3e3a3c9e9c4b3a3f3e3d3c3b3a393837363534333231302f2e2d2c";
+        let cursor = codec(block_hash).encode_cursor(5);
+        let json = format!(r#"[{{"cursor":"{cursor}"}}]"#);
+
+        let params = Params::new(Some(&json));
+        let (filter, pagination) = ImporterPagination::from_params(params.sequence(), BlockFilter::Latest, TEST_MAX_RESPONSE_BYTES, true).expect("ok");
+
+        assert!(matches!(filter, BlockFilter::Hash(h) if h == block_hash.parse::<Hash>().unwrap()));
+        assert_eq!(pagination.start, 5);
         assert!(matches!(pagination.policy, PagePolicy::Bytes(_)));
+    }
+
+    #[test]
+    fn from_params_disabled_switch_resolves_everything_to_legacy() {
+        let block_hash = "0x3355a48e6b3e3a3c9e9c4b3a3f3e3d3c3b3a393837363534333231302f2e2d2c";
+        let cursor = codec(block_hash).encode_cursor(5);
+        let json = format!(r#"[{{"pagination": true, "cursor": "{cursor}", "limit": 10}}]"#);
+
+        let params = Params::new(Some(&json));
+        let (_, pagination) = ImporterPagination::from_params(params.sequence(), BlockFilter::Latest, TEST_MAX_RESPONSE_BYTES, false).expect("ok");
+        assert_eq!(pagination.policy, PagePolicy::Legacy);
     }
 
     // block_and_receipts_response (server slicing)
@@ -720,7 +942,7 @@ mod tests {
         // total (3) <= limit (10): complete block in one response, no pagination field.
         let block = block_with_txs(3);
         let pagination = ImporterPagination::for_test(0, 10);
-        let json = pagination.block_and_receipts_response(block).expect("ok");
+        let (json, _) = pagination.block_and_receipts_response(block).expect("ok");
 
         assert!(json.get("pagination").is_none());
         let one_shot: ExternalBlockWithReceipts = serde_json::from_value(json).expect("legacy shape");
@@ -733,7 +955,7 @@ mod tests {
 
         // page 1: start=0, limit=3
         let pagination = ImporterPagination::for_test(0, 3);
-        let json = pagination.block_and_receipts_response(block.clone()).expect("ok");
+        let (json, _) = pagination.block_and_receipts_response(block.clone()).expect("ok");
         let response: BlockAndReceiptsPageResponse = serde_json::from_value(json).expect("paginated shape");
         let info = response.pagination.expect("pagination present");
 
@@ -748,7 +970,7 @@ mod tests {
 
         // page 2: start=3, limit=3
         let pagination = ImporterPagination::for_test(start, 3);
-        let json = pagination.block_and_receipts_response(block).expect("ok");
+        let (json, _) = pagination.block_and_receipts_response(block).expect("ok");
         let response: BlockAndReceiptsPageResponse = serde_json::from_value(json).expect("paginated shape");
         let info = response.pagination.expect("pagination present");
 
@@ -793,7 +1015,7 @@ mod tests {
 
         // page 1: start=0, limit=3 -> 2 txs + 1 account
         let pagination = ImporterPagination::for_test(0, 3);
-        let json = pagination.block_with_changes_response(block.clone(), changes.clone()).expect("ok");
+        let (json, _) = pagination.block_with_changes_response(block.clone(), changes.clone()).expect("ok");
         let response: BlockWithChangesPageResponse = serde_json::from_value(json).expect("paginated shape");
         let info = response.pagination.expect("pagination present");
 
@@ -808,7 +1030,7 @@ mod tests {
 
         // page 2: start=3, limit=3 -> 2 accounts + 1 slot
         let pagination = ImporterPagination::for_test(3, 3);
-        let json = pagination.block_with_changes_response(block.clone(), changes.clone()).expect("ok");
+        let (json, _) = pagination.block_with_changes_response(block.clone(), changes.clone()).expect("ok");
         let response: BlockWithChangesPageResponse = serde_json::from_value(json).expect("paginated shape");
         let info = response.pagination.expect("pagination present");
 
@@ -822,7 +1044,7 @@ mod tests {
 
         // page 3: start=6, limit=3 -> 1 slot
         let pagination = ImporterPagination::for_test(6, 3);
-        let json = pagination.block_with_changes_response(block, changes).expect("ok");
+        let (json, _) = pagination.block_with_changes_response(block, changes).expect("ok");
         let response: BlockWithChangesPageResponse = serde_json::from_value(json).expect("paginated shape");
         let info = response.pagination.expect("pagination present");
 
@@ -840,7 +1062,7 @@ mod tests {
         let changes = changes_fixture();
 
         let pagination = ImporterPagination::for_test(0, 10);
-        let json = pagination.block_with_changes_response(block.clone(), changes.clone()).expect("ok");
+        let (json, _) = pagination.block_with_changes_response(block.clone(), changes.clone()).expect("ok");
 
         assert!(json.get("pagination").is_none());
         let (one_shot_block, one_shot_changes): (BlockRocksdb, BlockChangesRocksdb) = serde_json::from_value(json).expect("legacy tuple shape");
@@ -875,7 +1097,7 @@ mod tests {
     fn receipts_response_deserializes_paginated_object() {
         let block = block_with_txs(2);
         let pagination = ImporterPagination::for_test(0, 1);
-        let json = pagination.block_and_receipts_response(block).expect("ok");
+        let (json, _) = pagination.block_and_receipts_response(block).expect("ok");
         assert!(json.get("pagination").is_some());
 
         let response: BlockAndReceiptsPageResponse = serde_json::from_value(json).expect("paginated response deserializes");
@@ -929,7 +1151,7 @@ mod tests {
         let block = block_rocksdb_with_txs(1);
         let changes = changes_fixture();
         let pagination = ImporterPagination::for_test(0, 1);
-        let json = pagination.block_with_changes_response(block, changes).expect("ok");
+        let (json, _) = pagination.block_with_changes_response(block, changes).expect("ok");
         assert!(json.get("pagination").is_some());
 
         let response: BlockWithChangesPageResponse = serde_json::from_value(json).expect("paginated response deserializes");
@@ -938,14 +1160,10 @@ mod tests {
 
     // Byte-budget policy (production default)
 
-    // every fixture item serializes to more than 1 byte, so budget=1 packs exactly
-    // one item per page — a deterministic boundary for byte-budget behavior tests.
-    const BYTE_BUDGET_ONE_ITEM: usize = 1;
-
     #[test]
     fn receipts_byte_budget_max_returns_one_shot() {
         let block = block_with_txs(5);
-        let json = ImporterPagination::for_budget_test(0, usize::MAX)
+        let (json, _) = ImporterPagination::for_budget_test(0, usize::MAX)
             .block_and_receipts_response(block)
             .expect("ok");
         assert!(json.get("pagination").is_none());
@@ -954,18 +1172,28 @@ mod tests {
     #[test]
     fn receipts_byte_budget_packs_items_to_byte_boundary() {
         let block = block_with_txs(5);
-        let pagination = ImporterPagination::for_budget_test(0, BYTE_BUDGET_ONE_ITEM);
-        let json = pagination.block_and_receipts_response(block).expect("ok");
-        let response: BlockAndReceiptsPageResponse = serde_json::from_value(json).expect("paginated shape");
-        let info = response.pagination.expect("pagination present");
+        let budget = receipts_one_item_budget(&block);
+        let item_budget = budget - receipts_frame(&block) - ImporterPagination::PAGINATION_RESERVE;
+        let sizes: Vec<usize> = (0..5).map(|idx| receipts_item_bytes(&block, idx)).collect();
 
-        // exactly one item per page: 5 pages of 1 tx each
-        assert_eq!(info.returned, 1);
-        assert_eq!(info.total, 5);
-        assert_eq!(info.limit, BYTE_BUDGET_ONE_ITEM);
-        assert_eq!(response.receipts.len(), 1);
-        let (_, next) = BlockHashCursor::decode_cursor(&info.next_cursor.expect("more pages")).expect("valid cursor");
-        assert_eq!(next, 1);
+        let mut start = 0;
+        let mut pages = 0;
+        while start < 5 {
+            let (json, _) = ImporterPagination::for_budget_test(start, budget)
+                .block_and_receipts_response(block.clone())
+                .expect("ok");
+            let response: BlockAndReceiptsPageResponse = serde_json::from_value(json).expect("paginated shape");
+            let info = response.pagination.expect("pagination present");
+
+            // the reported limit is the exact item payload budget
+            assert_eq!(info.limit, item_budget);
+            // packing matches the reference greedy
+            assert_eq!(info.returned, expected_taken(&sizes, start, item_budget));
+            start += info.returned;
+            pages += 1;
+        }
+        assert_eq!(start, 5, "whole block streamed");
+        assert!(pages > 1, "small item budget must produce multiple pages");
     }
 
     #[test]
@@ -990,12 +1218,12 @@ mod tests {
                 .map(|(tx, receipt): (AlloyTransaction, &ExternalReceipt)| json_len(&tx) + json_len(receipt) + 2)
                 .sum::<usize>();
 
-        let json = ImporterPagination::for_budget_test(0, total_bytes)
+        let (json, _) = ImporterPagination::for_budget_test(0, total_bytes)
             .block_and_receipts_response(block.clone())
             .expect("ok");
         assert!(json.get("pagination").is_none(), "equal-to-emitted budget must one-shot");
 
-        let json = ImporterPagination::for_budget_test(0, total_bytes.saturating_sub(1))
+        let (json, _) = ImporterPagination::for_budget_test(0, total_bytes.saturating_sub(1))
             .block_and_receipts_response(block)
             .expect("ok");
         let response: BlockAndReceiptsPageResponse = serde_json::from_value(json).expect("paginated shape");
@@ -1006,82 +1234,103 @@ mod tests {
     }
 
     #[test]
-    fn receipts_byte_budget_single_oversized_item_still_emits() {
-        // a single item larger than the budget must not stall the stream.
+    fn receipts_byte_budget_single_oversized_item_is_rejected() {
+        // a single item larger than the budget cannot be delivered within the
+        // response cap, so the server returns an explicit error instead of emitting
+        // a page the transport would refuse.
         let block = block_with_txs(1);
-        let pagination = ImporterPagination::for_budget_test(0, BYTE_BUDGET_ONE_ITEM);
-        let json = pagination.block_and_receipts_response(block).expect("ok");
-        let response: BlockAndReceiptsPageResponse = serde_json::from_value(json).expect("paginated shape");
-        let info = response.pagination.expect("pagination present");
+        let budget = receipts_frame(&block) + ImporterPagination::PAGINATION_RESERVE + 1; // item budget = 1
+        let result = ImporterPagination::for_budget_test(0, budget).block_and_receipts_response(block);
+        assert!(matches!(result, Err(RpcError::PaginationItemTooLarge { .. })));
+    }
 
-        assert_eq!(info.returned, 1);
-        assert_eq!(info.total, 1);
-        assert!(info.next_cursor.is_none());
+    #[test]
+    fn receipts_byte_budget_single_item_block_fits_when_whole_response_fits() {
+        // one big item still one-shots when the whole response fits the cap.
+        let block = block_with_txs(1);
+        let item_bytes = serde_json::to_vec(&block.transactions[0]).unwrap().len();
+        let budget = receipts_frame(&block) + ImporterPagination::PAGINATION_RESERVE + item_bytes * 4;
+        let (json, paginated) = ImporterPagination::for_budget_test(0, budget).block_and_receipts_response(block).expect("ok");
+        assert!(!paginated);
+        assert!(json.get("pagination").is_none());
     }
 
     #[test]
     fn take_by_budget_every_window_fits_unless_single_item() {
-        // reference implementation: greedy window pack, always at least one item.
-        fn expected_taken(sizes: &[usize], start: usize, budget: usize) -> usize {
-            let mut used = 0usize;
-            let mut taken = 0;
-            for &size in &sizes[start..] {
-                let new_used = used.saturating_add(size);
-                if taken > 0 && new_used > budget {
-                    break;
-                }
-                used = new_used;
-                taken += 1;
-            }
-            taken
-        }
-
+        // reference behavior: greedy window pack; every window fits the budget and the
+        // stream covers every item. The return value is the END index of the window.
         let budget = 10_000usize;
-        let sizes: Vec<usize> = std::iter::repeat_with(|| (0..20_000usize).fake()).take(500).collect();
+        let sizes: Vec<usize> = std::iter::repeat_with(|| (0..2_000usize).fake()).take(500).collect();
+        let size_of = |idx: usize| sizes[idx];
 
         let mut start = 0;
         while start < sizes.len() {
-            let taken = take_by_budget(&sizes, start, budget);
-            assert_eq!(taken, expected_taken(&sizes, start, budget));
-            assert!(taken >= 1, "stream must always make progress");
+            let end = take_by_budget(sizes.len(), start, budget, size_of).expect("no oversized items");
+            assert!(end > start, "stream must always make progress");
 
-            let window_sum: usize = sizes[start..start + taken].iter().copied().fold(0, usize::saturating_add);
+            let window_sum: usize = sizes[start..end].iter().copied().fold(0, usize::saturating_add);
             assert!(
-                window_sum <= budget || taken == 1,
-                "window of {taken} items at {start} sums {window_sum} bytes, over budget {budget}"
+                window_sum <= budget,
+                "window of {} items at {start} sums {window_sum} bytes, over budget {budget}",
+                end - start
             );
-            start += taken;
+            start = end;
         }
         assert_eq!(start, sizes.len(), "stream must cover every item");
+    }
+
+    #[test]
+    fn take_by_budget_first_item_over_budget_errors() {
+        let sizes = [50_000usize, 10, 10];
+        let result = take_by_budget(sizes.len(), 0, 10_000, |idx| sizes[idx]);
+        assert!(matches!(
+            result,
+            Err(RpcError::PaginationItemTooLarge {
+                item_bytes: 50_000,
+                budget: 10_000
+            })
+        ));
+
+        // a later page starting on the oversized item errors the same way
+        let sizes = [10usize, 50_000, 10];
+        let result = take_by_budget(sizes.len(), 1, 10_000, |idx| sizes[idx]);
+        assert!(matches!(result, Err(RpcError::PaginationItemTooLarge { .. })));
+    }
+
+    #[test]
+    fn take_by_budget_stops_before_item_that_overflows_window() {
+        // the greedy pack never takes an item that pushes the window over the budget
+        // (only the mandatory first item may overflow, and that is an error instead).
+        let sizes = [5_000usize, 9_999, 50_000];
+        let end = take_by_budget(sizes.len(), 0, 10_000, |idx| sizes[idx]).expect("first item fits");
+        assert_eq!(end, 1); // 5000 taken; 5000 + 9999 > 10000 stops the window
     }
 
     #[test]
     fn receipts_byte_budget_serialized_page_including_frame_fits_cap() {
         // walk a full paginated stream and measure the entire emitted response —
         // JSON structure, block header, items, commas, pagination metadata — against
-        // the budget. The only legal overshoot is a single item whose payload alone
-        // exceeds the item budget (guaranteed progress).
+        // the budget.
         let block = block_with_txs(30);
-        let budget = serde_json::to_vec(&block.transactions[0]).unwrap().len()
-            + serde_json::to_vec(&ExternalReceipt(AlloyReceipt::from(block.transactions[0].clone())))
-                .unwrap()
-                .len()
-            + 2
-            + 512; // room for a couple of items per page
+        let max_item = (0..30).map(|idx| receipts_item_bytes(&block, idx)).max().unwrap();
+        // item budget = largest item + slack -> a couple of items per page, no
+        // oversized rejections
+        let budget = receipts_frame(&block) + ImporterPagination::PAGINATION_RESERVE + max_item + 512;
+        let item_budget = budget - receipts_frame(&block) - ImporterPagination::PAGINATION_RESERVE;
+        let sizes: Vec<usize> = (0..30).map(|idx| receipts_item_bytes(&block, idx)).collect();
 
         let mut start = 0;
-        let mut total = usize::MAX;
-        while start < total {
-            let json = ImporterPagination::for_budget_test(start, budget)
+        while start < 30 {
+            let (json, _) = ImporterPagination::for_budget_test(start, budget)
                 .block_and_receipts_response(block.clone())
                 .expect("ok");
             let emitted_len = serde_json::to_vec(&json).unwrap().len();
             let response: BlockAndReceiptsPageResponse = serde_json::from_value(json).expect("paginated shape");
             let info = response.pagination.expect("pagination present");
-            total = info.total;
 
+            assert_eq!(info.returned, expected_taken(&sizes, start, item_budget));
             assert!(
-                emitted_len <= budget || info.returned == 1,
+                emitted_len <= budget,
                 "page starting at {start} emitted {emitted_len} bytes ({} items), over budget {budget}",
                 info.returned
             );
@@ -1093,14 +1342,17 @@ mod tests {
     #[test]
     fn receipts_byte_budget_continuation_uses_cursor_index() {
         let block = block_with_txs(5);
-        let pagination = ImporterPagination::for_budget_test(2, BYTE_BUDGET_ONE_ITEM);
-        let json = pagination.block_and_receipts_response(block).expect("ok");
+        let budget = receipts_one_item_budget(&block);
+        let item_budget = budget - receipts_frame(&block) - ImporterPagination::PAGINATION_RESERVE;
+        let sizes: Vec<usize> = (0..5).map(|idx| receipts_item_bytes(&block, idx)).collect();
+
+        let (json, _) = ImporterPagination::for_budget_test(2, budget).block_and_receipts_response(block).expect("ok");
         let response: BlockAndReceiptsPageResponse = serde_json::from_value(json).expect("paginated shape");
         let info = response.pagination.expect("pagination present");
 
-        assert_eq!(info.returned, 1);
+        assert_eq!(info.returned, expected_taken(&sizes, 2, item_budget));
         let (_, next) = BlockHashCursor::decode_cursor(&info.next_cursor.expect("more pages")).expect("valid cursor");
-        assert_eq!(next, 3);
+        assert_eq!(next, 2 + info.returned);
     }
 
     #[test]
@@ -1109,30 +1361,54 @@ mod tests {
         let changes = changes_fixture();
         // total = 2 txs + 3 accounts + 2 slots = 7
 
-        // page 1: 2 txs + 1 account; page 2: 1 account; ...
-        let pagination = ImporterPagination::for_budget_test(0, BYTE_BUDGET_ONE_ITEM);
-        let json = pagination.block_with_changes_response(block.clone(), changes.clone()).expect("ok");
-        let response: BlockWithChangesPageResponse = serde_json::from_value(json).expect("paginated shape");
-        let info = response.pagination.expect("pagination present");
+        // flat item sizes in cursor index space (txs, sorted accounts, sorted slots)
+        let account_entries = super::sorted_account_changes(&changes);
+        let slot_entries = super::sorted_slot_changes(&changes);
+        let mut sizes: Vec<usize> = block.transactions.iter().map(|tx| serde_json::to_vec(tx).unwrap().len() + 1).collect();
+        sizes.extend(account_entries.iter().map(|entry| serde_json::to_vec(entry).unwrap().len() + 1));
+        sizes.extend(slot_entries.iter().map(|entry| serde_json::to_vec(entry).unwrap().len() + 1));
 
-        assert_eq!(info.returned, 1);
-        assert_eq!(info.total, 7);
-        // first page takes only the first tx
-        assert_eq!(response.block.transactions.len(), 1);
-        assert_eq!(response.changes.account_changes.len(), 0);
+        // frame: [block, changes] tuple with empty item sections
+        let frame = {
+            let empty_block = BlockRocksdb {
+                header: block.header.clone(),
+                transactions: Vec::new(),
+            };
+            serde_json::to_vec(&json!((empty_block, BlockChangesRocksdb::default()))).unwrap().len()
+        };
+        let max_item = sizes.iter().copied().max().unwrap();
+        let budget = frame + ImporterPagination::PAGINATION_RESERVE + max_item;
+        let item_budget = budget - frame - ImporterPagination::PAGINATION_RESERVE;
 
-        // from cursor 3: items 3..7 = 4 (account 2, account 3, slot 1, slot 2)
-        let pagination = ImporterPagination::for_budget_test(3, BYTE_BUDGET_ONE_ITEM);
-        let json = pagination.block_with_changes_response(block, changes).expect("ok");
-        let response: BlockWithChangesPageResponse = serde_json::from_value(json).expect("paginated shape");
-        let info = response.pagination.expect("pagination present");
+        let mut start = 0;
+        while start < sizes.len() {
+            let (json, _) = ImporterPagination::for_budget_test(start, budget)
+                .block_with_changes_response(block.clone(), changes.clone())
+                .expect("ok");
+            let response: BlockWithChangesPageResponse = serde_json::from_value(json).expect("paginated shape");
+            let info = response.pagination.expect("pagination present");
 
-        assert_eq!(info.returned, 1);
-        assert_eq!(response.block.transactions.len(), 0);
-        assert_eq!(response.changes.account_changes.len(), 1);
-        assert_eq!(response.changes.slot_changes.len(), 0);
-        let (_, next) = BlockHashCursor::decode_cursor(&info.next_cursor.expect("more pages")).expect("valid cursor");
-        assert_eq!(next, 4);
+            assert_eq!(info.limit, item_budget);
+            assert_eq!(info.returned, expected_taken(&sizes, start, item_budget));
+            start += info.returned;
+        }
+        assert_eq!(start, sizes.len(), "whole stream covered");
+    }
+
+    #[test]
+    fn changes_byte_budget_single_oversized_item_is_rejected() {
+        let block = block_rocksdb_with_txs(1);
+        let changes = changes_fixture();
+        let frame = {
+            let empty_block = BlockRocksdb {
+                header: block.header.clone(),
+                transactions: Vec::new(),
+            };
+            serde_json::to_vec(&json!((empty_block, BlockChangesRocksdb::default()))).unwrap().len()
+        };
+        let budget = frame + ImporterPagination::PAGINATION_RESERVE + 1; // item budget = 1
+        let result = ImporterPagination::for_budget_test(0, budget).block_with_changes_response(block, changes);
+        assert!(matches!(result, Err(RpcError::PaginationItemTooLarge { .. })));
     }
 
     #[test]
@@ -1155,7 +1431,7 @@ mod tests {
     #[test]
     fn empty_block_is_valid_one_shot() {
         let block = block_with_txs(0);
-        let json = ImporterPagination::for_test(0, 10).block_and_receipts_response(block).expect("ok");
+        let (json, _) = ImporterPagination::for_test(0, 10).block_and_receipts_response(block).expect("ok");
         assert!(json.get("pagination").is_none());
     }
 }

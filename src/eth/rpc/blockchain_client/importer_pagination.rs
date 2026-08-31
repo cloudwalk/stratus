@@ -47,12 +47,14 @@ impl<'a> ImporterPaginationClient<'a> {
     where
         T: DeserializeOwned,
     {
-        // first request is a plain request: the leader decides whether the response
-        // needs pagination (by size). Continuations carry only the returned cursor.
-        let params = match cursor {
-            Some(cursor) => vec![to_json_value(block_number), to_json_value(ImporterPageRequest::with_cursor(cursor))],
-            None => vec![to_json_value(block_number)],
+        // The first request opts in to pagination: the leader decides whether the
+        // response needs pagination (by size). Continuations carry only the returned
+        // cursor, which always continues a paginated stream.
+        let page_request = match cursor {
+            Some(cursor) => ImporterPageRequest::with_cursor(cursor),
+            None => ImporterPageRequest::opt_in(),
         };
+        let params = vec![to_json_value(block_number), to_json_value(page_request)];
 
         match self.http.request::<Option<T>, _>(method, params).await {
             Ok(page) => Ok(page),
@@ -122,7 +124,12 @@ impl BlockAndReceiptsReducer {
         }
 
         match &mut self.block {
-            Some(block) => block.extend_full_transactions_from(page_block),
+            Some(block) => {
+                if block.hash() != page_block.hash() {
+                    bail!("paginated block with receipts changed block hash");
+                }
+                block.extend_full_transactions_from(page_block)
+            }
             None => {
                 self.block = Some(page_block);
                 Ok(())
@@ -480,6 +487,21 @@ mod tests {
         let mut reducer = BlockAndReceiptsReducer::new(block_number);
         let page = receipts_page(block, vec![], page_info(0, 0, None));
         assert!(reducer.reduce(page).is_err());
+    }
+
+    #[test]
+    fn receipts_reducer_changed_block_hash_errors() {
+        let block1 = external_block_with_txs(1);
+        let mut block2 = external_block_with_txs(1);
+        block2.0.header.hash = alloy_primitives::B256::from_slice(&[0xBB; 32]);
+        let block_number = block1.number();
+
+        let mut reducer = BlockAndReceiptsReducer::new(block_number);
+        reducer
+            .reduce(receipts_page(block1, vec![Faker.fake()], page_info(1, 2, Some(&cursor_at(1)))))
+            .expect("ok");
+
+        assert!(reducer.reduce(receipts_page(block2, vec![Faker.fake()], page_info(1, 2, None))).is_err());
     }
 
     #[test]
