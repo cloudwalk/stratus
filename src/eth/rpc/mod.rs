@@ -4,6 +4,7 @@ pub mod blockchain_client;
 mod config;
 mod context;
 pub mod middleware;
+mod pagination;
 mod parser;
 mod server;
 mod subscriptions;

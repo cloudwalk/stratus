@@ -404,6 +404,26 @@ e2e-leader-follower-up test="brlc" use_block_changes_replication="false":
     just _e2e-leader-follower-up-impl {{test}} {{use_block_changes_replication}}
     just e2e-leader-follower-down
 
+# E2E: Leader & Follower with small response size limits, to exercise importer response pagination
+e2e-leader-follower-pagination:
+    #!/bin/bash
+    mkdir -p e2e_logs
+
+    # leader with a small response limit, forcing oversized importer responses to be paginated
+    MAX_RESPONSE_SIZE_BYTES=8192 just e2e-leader
+
+    # follower with a small response limit, forcing its chunks to be small as well
+    EXTERNAL_RPC_MAX_RESPONSE_SIZE_BYTES=8192 just e2e-follower
+
+    cd e2e
+    if [ ! -d node_modules ]; then npm install; fi
+    npx hardhat test test/follower/e2e-pagination.test.ts --network stratus --bail
+    exit_code=$?
+    cd ..
+
+    just e2e-leader-follower-down
+    exit $exit_code
+
 # E2E: Leader & Follower Down
 e2e-leader-follower-down:
     #!/bin/bash
