@@ -38,7 +38,6 @@ mod tests {
     use serde_json::json;
 
     use super::pagination::MARGIN;
-    use super::pagination::MIN_RESPONSE_SIZE_BYTES;
     use super::pagination::PaginatedResponse;
     use super::pagination::PaginationEnvelope;
     use super::pagination::PaginationParams;
@@ -47,7 +46,6 @@ mod tests {
     use super::pagination::parse_envelope;
     use super::pagination::parse_request;
     use super::pagination::respond;
-    use super::pagination::validate_response_size_limit;
     use super::types::RpcError;
     use crate::eth::types::StratusError;
     use crate::ext::InfallibleExt;
@@ -62,14 +60,14 @@ mod tests {
     #[test]
     fn respond_with_fitting_response_returns_full() {
         let value = json!({"block": "abc"});
-        let raw = respond(value.clone(), Some(PaginationParams { offset: 0, chunk_budget: 1024 }), 1024).expect("respond");
+        let raw = respond(value.clone(), Some(PaginationParams { offset: 0 }), 1024).expect("respond");
         assert_eq!(raw.get(), serde_json::to_string(&value).expect_infallible());
     }
 
     #[test]
     fn respond_with_oversized_response_returns_envelope() {
         let value = json!({"block": "a somewhat long value that will not fit"});
-        let raw = respond(value.clone(), Some(PaginationParams { offset: 0, chunk_budget: 16 }), 10_000).expect("respond");
+        let raw = respond(value.clone(), Some(PaginationParams { offset: 0 }), MARGIN + 16).expect("respond");
 
         let full = serde_json::to_string(&value).expect_infallible();
         assert!(is_envelope(raw.get()));
@@ -82,12 +80,11 @@ mod tests {
     fn respond_envelope_chunks_cover_whole_response() {
         let value = json!({"block": "value with \"quotes\" to force escaping", "receipts": [1, 2, 3]});
         let full = serde_json::to_string(&value).expect_infallible();
-        let budget = 8u64;
 
         let mut reassembler = Reassembler::new(0);
         let mut offset = 0;
         while offset < full.len() as u64 {
-            let raw = respond(value.clone(), Some(PaginationParams { offset, chunk_budget: budget }), u32::MAX).expect("respond");
+            let raw = respond(value.clone(), Some(PaginationParams { offset }), MARGIN + 8).expect("respond");
             assert!(is_envelope(raw.get()), "expected envelope at offset {offset}");
             let envelope = parse_envelope(raw.get()).expect("parse envelope");
             if offset == 0 {
@@ -103,21 +100,11 @@ mod tests {
 
     #[test]
     fn respond_with_response_exactly_at_budget_returns_full() {
-        // a response whose serialized length is exactly the effective budget is not paginated
+        // a response whose serialized length is exactly the chunk budget is not paginated
         let value = json!({"block": "some content"});
         let full = serde_json::to_string(&value).expect("serialize");
-        let requested = full.len() as u64;
 
-        // leader limit chosen so both sides of the effective budget resolve to the response size
-        let result = respond(
-            value,
-            Some(PaginationParams {
-                offset: 0,
-                chunk_budget: requested,
-            }),
-            full.len() as u32 + MARGIN,
-        )
-        .expect("should respond");
+        let result = respond(value, Some(PaginationParams { offset: 0 }), full.len() as u32 + MARGIN).expect("should respond");
         assert_eq!(result.get(), full);
         assert!(!is_envelope(result.get()));
     }
@@ -125,7 +112,7 @@ mod tests {
     #[test]
     fn respond_with_offset_beyond_response_fails() {
         let value = json!({"block": "abc"});
-        let error = respond(value, Some(PaginationParams { offset: 100, chunk_budget: 2 }), 10_000).expect_err("should fail");
+        let error = respond(value, Some(PaginationParams { offset: 100 }), MARGIN + 8).expect_err("should fail");
         assert!(matches!(error, StratusError::RPC(RpcError::ParameterInvalid)));
     }
 
@@ -141,35 +128,18 @@ mod tests {
             .expect("multi-byte char");
         assert!(!full.is_char_boundary(misaligned));
 
-        let error = respond(
-            value,
-            Some(PaginationParams {
-                offset: misaligned as u64,
-                chunk_budget: 8,
-            }),
-            10_000,
-        )
-        .expect_err("should fail");
+        let error = respond(value, Some(PaginationParams { offset: misaligned as u64 }), MARGIN + 8).expect_err("should fail");
         assert!(matches!(error, StratusError::RPC(RpcError::ParameterInvalid)));
     }
 
     #[test]
-    fn validate_response_size_limit_accepts_floor_and_rejects_below() {
-        validate_response_size_limit(MIN_RESPONSE_SIZE_BYTES).expect("floor should be accepted");
-        validate_response_size_limit(MIN_RESPONSE_SIZE_BYTES + 1).expect("above floor should be accepted");
-        let error = validate_response_size_limit(MIN_RESPONSE_SIZE_BYTES - 1).expect_err("below floor should be rejected");
-        assert!(error.to_string().contains("too small for pagination"));
-    }
-
-    #[test]
     fn parse_request_parses_valid_params() {
-        let params = jsonrpsee::types::Params::new(Some(r#"["0x1", {"offset": 5, "chunk_budget": 1024}]"#));
+        let params = jsonrpsee::types::Params::new(Some(r#"["0x1", {"offset": 5}]"#));
         let mut sequence = params.sequence();
         sequence.optional_next::<String>().expect("parse first").expect("present");
         let pagination = parse_request(sequence).expect("parse request");
         let pagination = pagination.expect("present");
         assert_eq!(pagination.offset, 5);
-        assert_eq!(pagination.chunk_budget, 1024);
     }
 
     #[test]
@@ -182,15 +152,15 @@ mod tests {
 
     #[test]
     fn parse_request_rejects_invalid_params() {
-        let params = jsonrpsee::types::Params::new(Some(r#"["0x1", {"offset": 5}]"#));
+        let params = jsonrpsee::types::Params::new(Some(r#"["0x1", {"offset": -1}]"#));
         let mut sequence = params.sequence();
         sequence.optional_next::<String>().expect("parse first").expect("present");
         assert!(matches!(parse_request(sequence), Err(RpcError::ParameterDecodeError { .. })));
 
-        let params = jsonrpsee::types::Params::new(Some(r#"["0x1", {"offset": 5, "chunk_budget": 1}]"#));
+        let params = jsonrpsee::types::Params::new(Some(r#"["0x1", {"offset": "not a number"}]"#));
         let mut sequence = params.sequence();
         sequence.optional_next::<String>().expect("parse first").expect("present");
-        assert!(matches!(parse_request(sequence), Err(RpcError::ParameterInvalid)));
+        assert!(matches!(parse_request(sequence), Err(RpcError::ParameterDecodeError { .. })));
     }
 
     #[test]
@@ -347,9 +317,7 @@ mod wire_tests {
 
         // follower with a tiny response limit, like the importer uses
         let url = format!("http://{addr}");
-        let client = BlockchainClient::new_http(&url, Duration::from_secs(10), MAX_RESPONSE_BYTES)
-            .await
-            .expect("build client");
+        let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
         let fetched = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect("fetch block");
         assert_eq!(fetched.expect("block present"), expected);
@@ -378,9 +346,7 @@ mod wire_tests {
 
         // the oversized response is rejected by the server, same as before pagination existed
         let url = format!("http://{addr}");
-        let client = BlockchainClient::new_http(&url, Duration::from_secs(10), MAX_RESPONSE_BYTES)
-            .await
-            .expect("build client");
+        let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
         let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
         assert!(error.to_string().contains("failed to fetch block with receipts"));
@@ -408,9 +374,7 @@ mod wire_tests {
         let _server_handle = server.start(module);
 
         let url = format!("http://{addr}");
-        let client = BlockchainClient::new_http(&url, Duration::from_secs(10), MAX_RESPONSE_BYTES)
-            .await
-            .expect("build client");
+        let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
         let fetched = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect("fetch block");
         assert!(fetched.is_none(), "null response must deserialize to Ok(None)");
@@ -440,9 +404,7 @@ mod wire_tests {
         let _server_handle = server.start(module);
 
         let url = format!("http://{addr}");
-        let client = BlockchainClient::new_http(&url, Duration::from_secs(10), MAX_RESPONSE_BYTES)
-            .await
-            .expect("build client");
+        let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
         let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
         assert!(format!("{error:?}").contains("exceeds the reassembly cap"));
@@ -477,9 +439,7 @@ mod wire_tests {
         let _server_handle = server.start(module);
 
         let url = format!("http://{addr}");
-        let client = BlockchainClient::new_http(&url, Duration::from_secs(10), MAX_RESPONSE_BYTES)
-            .await
-            .expect("build client");
+        let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
         let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
         assert!(format!("{error:?}").contains("expected paginated chunk but got normal response"));

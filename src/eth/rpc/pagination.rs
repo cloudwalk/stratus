@@ -1,9 +1,9 @@
 //! Response pagination for oversized importer RPC responses.
 //!
 //! The importer endpoints (`stratus_getBlockAndReceipts` and `stratus_getBlockWithChanges`) can
-//! produce responses larger than [`MAX_RESPONSE_SIZE_BYTES`] (leader) or
-//! `EXTERNAL_RPC_MAX_RESPONSE_SIZE_BYTES` (follower), which makes the importer get stuck retrying
-//! forever. This module implements a minimal, stateless pagination protocol to circumvent that:
+//! produce responses larger than [`MAX_RESPONSE_SIZE_BYTES`] (leader), which makes the importer
+//! get stuck retrying forever. This module implements a minimal, stateless pagination protocol
+//! to circumvent that:
 //!
 //! - The follower signals pagination support by sending an optional second parameter object
 //!   [`PaginationParams`] alongside the block filter. Old leaders ignore extra params, so the
@@ -20,8 +20,8 @@
 //! ```
 //!
 //! The `chunk` string is a raw slice of the serialized response; its JSON-escaped form is bounded by
-//! the chunk budget so the whole envelope fits within the response size limits of both sides. Since
-//! the envelope has exactly one top-level key, it always serializes first, allowing O(1) prefix
+//! the chunk budget so the whole envelope fits within the leader's response size limit. Since the
+//! envelope has exactly one top-level key, it always serializes first, allowing O(1) prefix
 //! detection ([`is_envelope`]) on the follower side without parsing the (potentially huge) response.
 
 use jsonrpsee::types::ParamsSequence;
@@ -44,30 +44,16 @@ const ENVELOPE_PREFIX: &str = "{\"__stratus_paginated__\":";
 
 /// Bytes reserved for the JSON-RPC response envelope (`{"jsonrpc":"2.0","id":..,"result":..}`)
 /// and the pagination envelope object itself, on top of the chunk payload.
+pub(crate) const MARGIN: u32 = 512;
+
+/// Minimum chunk budget worth advertising; used in the floor below.
+const MIN_CHUNK_BUDGET: u32 = 64;
+
+/// Minimum response size limit for pagination to make progress: the envelope margin, one minimum
+/// chunk, and headroom for the envelope and JSON-RPC wrappers.
 ///
-/// Both the leader's `max_response_body_size` and the follower's `max_response_size` count the
-/// whole JSON-RPC response body, so a single margin covers both sides.
-pub const MARGIN: u32 = 512;
-
-/// Minimum accepted `chunk_budget`; smaller values could stall reassembly to a crawl.
-pub const MIN_CHUNK_BUDGET: u64 = 64;
-
-/// Minimum response size limit for pagination to make progress on either side of the connection:
-/// the envelope margin, one minimum chunk, and headroom for the envelope and JSON-RPC wrappers.
-///
-/// Limits below this floor are rejected at startup ([`validate_response_size_limit`]): the leader
-/// would clamp the effective chunk budget below [`MIN_CHUNK_BUDGET`] (stalling reassembly with
-/// empty chunks), and the follower would request a budget the leader rejects as invalid.
-pub const MIN_RESPONSE_SIZE_BYTES: u32 = MARGIN + MIN_CHUNK_BUDGET as u32 + 128;
-
-/// Validates a response size limit (leader `max_response_size` or follower
-/// `max_response_size_bytes`) is large enough for pagination to make progress.
-pub fn validate_response_size_limit(limit: u32) -> anyhow::Result<()> {
-    if limit < MIN_RESPONSE_SIZE_BYTES {
-        anyhow::bail!("response size limit of {limit} bytes is too small for pagination: must be at least {MIN_RESPONSE_SIZE_BYTES} bytes");
-    }
-    Ok(())
-}
+/// Enforced at startup by the `MAX_RESPONSE_SIZE_BYTES` clap argument.
+pub const MIN_RESPONSE_SIZE_BYTES: u32 = MARGIN + MIN_CHUNK_BUDGET + 128;
 
 /// Maximum bytes preallocated for reassembly, to avoid OOM on a bogus `total` from a malicious peer.
 const MAX_REASSEMBLY_PREALLOC: usize = 1024 * 1024;
@@ -81,29 +67,18 @@ pub const MAX_REASSEMBLY_TOTAL: u64 = 512 * 1024 * 1024;
 // -----------------------------------------------------------------------------
 
 /// Optional second parameter sent by pagination-capable followers.
-///
-/// Presence of the object is the capability signal: old leaders ignore extra params, and the
-/// leader never paginates without it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaginationParams {
     /// Byte offset of the requested chunk within the serialized response.
     pub offset: u64,
-
-    /// Maximum size (in bytes) of the JSON-escaped chunk the follower can receive in one response.
-    pub chunk_budget: u64,
 }
 
 /// Extracts the optional [`PaginationParams`] from the remaining request params sequence.
 pub fn parse_request(mut params: ParamsSequence<'_>) -> Result<Option<PaginationParams>, RpcError> {
-    let parsed = params.optional_next::<PaginationParams>().map_err(|e| RpcError::ParameterDecodeError {
+    params.optional_next::<PaginationParams>().map_err(|e| RpcError::ParameterDecodeError {
         rust_type: "PaginationParams",
         decode_error: e.data().map(|d| d.to_string()).unwrap_or_default(),
-    })?;
-
-    match parsed {
-        Some(pagination) if pagination.chunk_budget < MIN_CHUNK_BUDGET => Err(RpcError::ParameterInvalid),
-        other => Ok(other),
-    }
+    })
 }
 
 // -----------------------------------------------------------------------------
@@ -151,8 +126,7 @@ pub fn parse_envelope(raw: &str) -> anyhow::Result<PaginationEnvelope> {
 /// - `pagination` present and the serialized value does not fit: returns a [`PaginatedResponse`]
 ///   with the chunk starting at the requested offset.
 ///
-/// The effective chunk budget is the minimum of what the follower requested and what the leader
-/// can send, so the envelope always fits within the response size limits of both sides.
+/// The leader alone decides the chunk size, derived from its own response size limit.
 pub fn respond(value: JsonValue, pagination: Option<PaginationParams>, max_response_bytes: u32) -> Result<Box<RawValue>, StratusError> {
     let raw = to_raw_value(&value).map_err(|e| StratusError::Unexpected(crate::eth::types::UnexpectedError::Unexpected(anyhow::anyhow!(e))))?;
 
@@ -161,7 +135,7 @@ pub fn respond(value: JsonValue, pagination: Option<PaginationParams>, max_respo
     };
 
     let full = raw.get();
-    let budget = effective_chunk_budget(pagination.chunk_budget, max_response_bytes);
+    let budget = max_response_bytes.saturating_sub(MARGIN) as usize;
 
     if full.len() <= budget {
         return Ok(raw);
@@ -193,12 +167,6 @@ pub fn respond(value: JsonValue, pagination: Option<PaginationParams>, max_respo
         },
     };
     to_raw_value(&envelope).map_err(|e| StratusError::Unexpected(crate::eth::types::UnexpectedError::Unexpected(anyhow::anyhow!(e))))
-}
-
-/// Returns the chunk budget bounded by both the follower request and the leader response limit.
-fn effective_chunk_budget(requested: u64, max_response_bytes: u32) -> usize {
-    let leader_cap = max_response_bytes.saturating_sub(MARGIN) as u64;
-    requested.min(leader_cap) as usize
 }
 
 /// Returns the raw fragment of `full` starting at `offset` whose JSON-escaped form fits in `budget`.
@@ -244,8 +212,8 @@ fn escaped_len_of_char(ch: char) -> usize {
 // -----------------------------------------------------------------------------
 
 /// Builds pagination request params for the follower side.
-pub fn request_params(offset: u64, chunk_budget: u64) -> JsonValue {
-    to_json_value(PaginationParams { offset, chunk_budget })
+pub fn request_params(offset: u64) -> JsonValue {
+    to_json_value(PaginationParams { offset })
 }
 
 /// Progressive reassembly of a paginated response, with validation against a malicious peer.
@@ -359,12 +327,5 @@ mod tests {
         assert_eq!(take_escaped_chunk(full, 4, 4), "4567");
         assert_eq!(take_escaped_chunk(full, 8, 4), "89");
         assert_eq!(take_escaped_chunk(full, 10, 4), "");
-    }
-
-    #[test]
-    fn effective_chunk_budget_is_bounded_by_both_sides() {
-        assert_eq!(effective_chunk_budget(1000, 10_000), 1000);
-        assert_eq!(effective_chunk_budget(10_000, 1000), 488); // 1000 - MARGIN
-        assert_eq!(effective_chunk_budget(10_000, 100), 0);
     }
 }

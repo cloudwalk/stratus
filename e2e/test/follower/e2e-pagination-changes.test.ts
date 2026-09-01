@@ -41,14 +41,11 @@ describe("Pagination (block changes replication)", () => {
         expect(legacy.data.error).to.not.be.undefined;
         expect(legacy.data.error.code).to.equal(-32008);
 
-        // paginated reassembly, with a small chunk budget to force several round trips
+        // paginated reassembly; the chunk size is decided by the leader's response size limit
         let assembled = "";
         let total = 0;
         for (let offset = 0; total === 0 || assembled.length < total; offset = assembled.length) {
-            const envelope = await send("stratus_getBlockWithChanges", [
-                fatBlockHash,
-                { offset: offset, chunk_budget: 1024 },
-            ]);
+            const envelope = await send("stratus_getBlockWithChanges", [fatBlockHash, { offset: offset }]);
             expect(envelope.__stratus_paginated__).to.not.be.undefined;
             total = envelope.__stratus_paginated__.total;
             expect(envelope.__stratus_paginated__.chunk.length).to.be.greaterThan(0);

@@ -126,9 +126,6 @@ pub struct Server {
 
 impl Server {
     pub async fn serve(self) -> Result<()> {
-        // fail fast on response size limits that would break importer pagination
-        pagination::validate_response_size_limit(self.rpc_config.rpc_max_response_size_bytes)?;
-
         let this = Arc::new(self);
         this.update_health().await;
 
@@ -606,8 +603,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     let (params, external_rpc) = next_rpc_param::<String>(params.sequence())?;
     let (params, external_rpc_ws) = next_rpc_param::<String>(params)?;
     let (params, raw_external_rpc_timeout) = next_rpc_param::<String>(params)?;
-    let (params, raw_sync_interval) = next_rpc_param::<String>(params)?;
-    let (_, raw_external_rpc_max_response_size_bytes) = next_rpc_param::<String>(params)?;
+    let (_, raw_sync_interval) = next_rpc_param::<String>(params)?;
 
     let external_rpc_timeout = parse_duration(&raw_external_rpc_timeout).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse external_rpc_timeout");
@@ -619,17 +615,11 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         ImporterError::ConfigParseError
     })?;
 
-    let external_rpc_max_response_size_bytes = raw_external_rpc_max_response_size_bytes.parse::<u32>().map_err(|e| {
-        tracing::error!(reason = ?e, "failed to parse external_rpc_max_response_size_bytes");
-        ImporterError::ConfigParseError
-    })?;
-
     let importer_config = ImporterConfig {
         external_rpc,
         external_rpc_ws: Some(external_rpc_ws),
         external_rpc_timeout,
         sync_interval,
-        external_rpc_max_response_size_bytes,
         enable_block_changes_replication: std::env::var("ENABLE_BLOCK_CHANGES_REPLICATION")
             .ok()
             .is_some_and(|val| val == "1" || val == "true"),
