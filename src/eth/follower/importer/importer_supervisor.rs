@@ -6,7 +6,6 @@ use anyhow::bail;
 use futures::try_join;
 use tokio::sync::mpsc;
 
-use crate::eth::executor::CallExecutionOutput;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::consensus::LagDirection;
@@ -24,13 +23,9 @@ use crate::eth::follower::importer::importers::fake_leader::FakeLeaderWorker;
 use crate::eth::follower::importer::importers::replication::ReplicationWorker;
 use crate::eth::follower::importer::start_number_fetcher;
 use crate::eth::miner::Miner;
-use crate::eth::rpc::BlockFilter;
 use crate::eth::rpc::BlockchainClient;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::BlockNumber;
-use crate::eth::types::CallInput;
-use crate::eth::types::Gas;
-use crate::eth::types::StratusError;
 use crate::ext::spawn;
 use crate::infra::kafka::KafkaConnector;
 #[cfg(feature = "metrics")]
@@ -157,21 +152,6 @@ pub struct ImporterConsensus {
     pub storage: Arc<StratusStorage>,
     pub chain: Arc<BlockchainClient>,
     pub executor: Arc<Executor>,
-}
-
-impl ImporterConsensus {
-    /// Forwards an `eth_call` to the leader, which executes it against its pending block.
-    pub async fn forward_call_to_leader(&self, call: CallInput, filter: BlockFilter) -> Result<CallExecutionOutput, StratusError> {
-        tracing::info!(?filter, "forwarding eth_call to leader");
-
-        let output = self.chain.call_to_leader(call, filter).await?;
-
-        Ok(CallExecutionOutput {
-            output,
-            gas_used: Gas::default(),
-            success: true,
-        })
-    }
 }
 
 impl Consensus for ImporterConsensus {

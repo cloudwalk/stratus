@@ -825,7 +825,6 @@ impl StratusStorage {
     }
 
     pub fn load_access_list(&self, access_list: AccessListOutput) {
-        let _guard = self.transient_state_lock.read();
         let mut account_addresses = vec![];
         let mut slot_keys = vec![];
         for (address, slots) in access_list {
