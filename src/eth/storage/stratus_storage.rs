@@ -94,8 +94,11 @@ pub(super) trait EntityRead: Sized + Clone {
     type Key: Copy;
     /// Reads the latest (mined tip) value from the cache, if present.
     fn read_latest_cache(s: &StratusStorage, key: &Self::Key) -> Option<Self>;
-    /// Checks if the latest cache contains the given key.
-    fn cache_contains_key(s: &StratusStorage, key: &Self::Key) -> bool;
+    /// Retains only the keys that are missing from both the temporary storage and the latest cache.
+    ///
+    /// Batched: the temporary-storage locks are acquired once for the whole key set, instead of
+    /// once per key, to reduce contention with the executor.
+    fn retain_missing_keys(s: &StratusStorage, keys: &mut Vec<Self::Key>);
     /// Reads from temporary (pending) storage.
     fn read_temp(s: &StratusStorage, key: Self::Key) -> Option<Self>;
     /// Reads from permanent storage at the resolved mined point.
@@ -125,8 +128,9 @@ impl EntityRead for Account {
         })
     }
 
-    fn cache_contains_key(s: &StratusStorage, key: &Self::Key) -> bool {
-        s.temp.transaction_storage.contains_account(key) || s.cache.contains_account(key)
+    fn retain_missing_keys(s: &StratusStorage, keys: &mut Vec<Self::Key>) {
+        s.temp.transaction_storage.retain_missing_accounts(keys);
+        keys.retain(|address| !s.cache.contains_account(address));
     }
 
     fn read_perm(s: &StratusStorage, address: Address, point: MinedPointInTime<'_>) -> Result<Self, StorageError> {
@@ -180,8 +184,9 @@ impl EntityRead for Slot {
         })
     }
 
-    fn cache_contains_key(s: &StratusStorage, key: &Self::Key) -> bool {
-        s.temp.transaction_storage.contains_slot(key) || s.cache.contains_slot(&key.0, &key.1)
+    fn retain_missing_keys(s: &StratusStorage, keys: &mut Vec<Self::Key>) {
+        s.temp.transaction_storage.retain_missing_slots(keys);
+        keys.retain(|(address, index)| !s.cache.contains_slot(address, index));
     }
 
     fn read_perm(s: &StratusStorage, key: (Address, SlotIndex), point: MinedPointInTime<'_>) -> Result<Self, StorageError> {
@@ -824,15 +829,13 @@ impl StratusStorage {
         let mut account_addresses = vec![];
         let mut slot_keys = vec![];
         for (address, slots) in access_list {
-            if !Account::cache_contains_key(self, &address) {
-                account_addresses.push(address);
-            }
+            account_addresses.push(address);
             for slot_index in slots {
-                if !Slot::cache_contains_key(self, &(address, slot_index)) {
-                    slot_keys.push((address, slot_index));
-                }
+                slot_keys.push((address, slot_index));
             }
         }
+        Account::retain_missing_keys(self, &mut account_addresses);
+        Slot::retain_missing_keys(self, &mut slot_keys);
         self.load_accounts_to_cache(account_addresses);
         self.load_slots_to_cache(slot_keys);
     }
@@ -846,14 +849,15 @@ mod tests {
     use crate::eth::executor::TransactionExecutionResult;
     use crate::eth::executor::types::state::AccountChanges;
     use crate::eth::executor::types::state::CompleteValue;
+    use crate::eth::types::Nonce;
     use crate::eth::types::Signature;
     use crate::eth::types::SlotValue;
     use crate::eth::types::TransactionInfo;
     use crate::eth::types::TransactionInput;
     use crate::eth::types::Wei;
 
-    /// Mines a block applying `changes`
-    fn mine_block(storage: &StratusStorage, changes: State<Complete>) -> BlockNumber {
+    /// Saves an execution applying `changes` to the pending block, without finishing it.
+    fn save_execution(storage: &StratusStorage, changes: State<Complete>) {
         let header = storage.read_pending_block_header();
         let evm_input = TransactionExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
@@ -864,11 +868,69 @@ mod tests {
 
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
         storage.save_execution(tx, changes).expect("save execution");
+    }
+
+    /// Mines a block applying `changes`
+    fn mine_block(storage: &StratusStorage, changes: State<Complete>) -> BlockNumber {
+        save_execution(storage, changes);
 
         let (block, block_changes) = storage.finish_pending_block();
         storage.save_block(block.into(), block_changes).expect("save block");
 
         storage.read_mined_block_number()
+    }
+
+    /// Keys present in the temporary storage (pending or latest) or in the latest cache must be
+    /// filtered out by `retain_missing_keys`, keeping only the keys missing from both.
+    #[test]
+    fn retain_missing_keys_filters_temporary_and_cached_keys() {
+        let storage = StratusStorage::new_test().expect("failed to build test storage");
+
+        let pending_address = Address::new([0xAA; 20]);
+        let cached_address = Address::new([0xBB; 20]);
+        let missing_address = Address::new([0xCC; 20]);
+
+        // The cached address is mined and saved, landing in the latest cache.
+        let mut mined_changes = State::default();
+        mined_changes.accounts.insert(
+            cached_address,
+            AccountChanges {
+                nonce: CompleteValue::Changed(Nonce::from(1u64)),
+                balance: CompleteValue::Changed(Wei::from(1u64)),
+                bytecode: CompleteValue::Changed(None),
+            },
+        );
+        mined_changes
+            .slots
+            .insert((cached_address, SlotIndex::ZERO), CompleteValue::Changed(SlotValue::from([200u64, 0, 0, 0])));
+        mine_block(&storage, mined_changes);
+
+        // The pending address is saved to the pending block, which is not finished.
+        let mut pending_changes = State::default();
+        pending_changes.accounts.insert(
+            pending_address,
+            AccountChanges {
+                nonce: CompleteValue::Changed(Nonce::from(1u64)),
+                balance: CompleteValue::Changed(Wei::from(1u64)),
+                bytecode: CompleteValue::Changed(None),
+            },
+        );
+        pending_changes
+            .slots
+            .insert((pending_address, SlotIndex::ZERO), CompleteValue::Changed(SlotValue::from([100u64, 0, 0, 0])));
+        save_execution(&storage, pending_changes);
+
+        let mut account_addresses = vec![pending_address, cached_address, missing_address];
+        Account::retain_missing_keys(&storage, &mut account_addresses);
+        assert_eq!(account_addresses, vec![missing_address]);
+
+        let mut slot_keys = vec![
+            (pending_address, SlotIndex::ZERO),
+            (cached_address, SlotIndex::ZERO),
+            (missing_address, SlotIndex::ZERO),
+        ];
+        Slot::retain_missing_keys(&storage, &mut slot_keys);
+        assert_eq!(slot_keys, vec![(missing_address, SlotIndex::ZERO)]);
     }
 
     /// An `eth_call` pinned to a block that is no longer the latest must read the historical

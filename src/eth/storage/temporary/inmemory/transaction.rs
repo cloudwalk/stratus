@@ -178,27 +178,33 @@ impl InmemoryTransactionTemporaryStorage {
         }
     }
 
-    pub fn contains_account(&self, address: &Address) -> bool {
-        match self.pending_block.read().state.accounts.contains_key(&address) {
-            true => true,
-            false => self
-                .latest_block
-                .read()
-                .as_ref()
-                .map(|latest| latest.state.accounts.contains_key(&address))
-                .unwrap_or(false),
+    /// Retains only the addresses that are missing from both the pending and latest temporary states.
+    ///
+    /// Batched: each lock is acquired once for the whole key set, instead of once per key,
+    /// to reduce contention with the executor.
+    pub fn retain_missing_accounts(&self, addresses: &mut Vec<Address>) {
+        {
+            let pending_block = self.pending_block.read();
+            addresses.retain(|address| !pending_block.state.accounts.contains_key(address));
+        }
+        let latest_block = self.latest_block.read();
+        if let Some(latest_block) = latest_block.as_ref() {
+            addresses.retain(|address| !latest_block.state.accounts.contains_key(address));
         }
     }
 
-    pub fn contains_slot(&self, slot_key: &(Address, SlotIndex)) -> bool {
-        match self.pending_block.read().state.slots.contains_key(slot_key) {
-            true => true,
-            false => self
-                .latest_block
-                .read()
-                .as_ref()
-                .map(|latest| latest.state.slots.contains_key(slot_key))
-                .unwrap_or(false),
+    /// Retains only the slot keys that are missing from both the pending and latest temporary states.
+    ///
+    /// Batched: each lock is acquired once for the whole key set, instead of once per key,
+    /// to reduce contention with the executor.
+    pub fn retain_missing_slots(&self, slot_keys: &mut Vec<(Address, SlotIndex)>) {
+        {
+            let pending_block = self.pending_block.read();
+            slot_keys.retain(|slot_key| !pending_block.state.slots.contains_key(slot_key));
+        }
+        let latest_block = self.latest_block.read();
+        if let Some(latest_block) = latest_block.as_ref() {
+            slot_keys.retain(|slot_key| !latest_block.state.slots.contains_key(slot_key));
         }
     }
 
