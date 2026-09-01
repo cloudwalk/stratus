@@ -1183,6 +1183,17 @@ fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<CallExecutionOut
 
     // execute
     let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
+    if matches!(point_in_time, PointInTime::Pending) && GlobalState::get_node_mode() == NodeMode::Follower {
+        // followers have no pending state, so the call must be forwarded to the leader, which executes it against its pending block
+        return match ctx.server.read_importer() {
+            Some(importer) => Handle::current().block_on(importer.forward_call_to_leader(call, filter)),
+            None => {
+                tracing::error!("unable to forward eth_call because consensus is temporarily unavailable for follower node");
+                Err(ConsensusError::Unavailable.into())
+            }
+        };
+    }
+
     if let Some(to_address) = call.to
         && !call.data.is_empty()
     {
