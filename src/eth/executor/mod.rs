@@ -342,7 +342,7 @@ impl Executor {
 
         #[cfg(feature = "metrics")]
         metrics::inc_executor_local_transaction_lock_waiting(1);
-        let _permit = self.locks.transaction_warmup.acquire();
+        let permit = self.locks.transaction_warmup.acquire();
         if let Some(access_list) = access_list {
             self.storage.load_access_list(access_list);
         }
@@ -354,6 +354,7 @@ impl Executor {
         // * Uses a Mutex, so a new transactions starts executing only after the previous one is executed and persisted.
         // * Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.
         let transaction_lock = self.locks.transaction.lock();
+        drop(permit);
         #[cfg(feature = "metrics")]
         metrics::dec_executor_local_transaction_lock_waiting(1);
 
