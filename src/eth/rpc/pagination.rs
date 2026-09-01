@@ -62,10 +62,6 @@ const MAX_REASSEMBLY_PREALLOC: usize = 1024 * 1024;
 /// malicious or buggy leader advertising an arbitrarily large `total`.
 pub const MAX_REASSEMBLY_TOTAL: u64 = 512 * 1024 * 1024;
 
-// -----------------------------------------------------------------------------
-// Request params
-// -----------------------------------------------------------------------------
-
 /// Optional second parameter sent by pagination-capable followers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaginationParams {
@@ -80,10 +76,6 @@ pub fn parse_request(mut params: ParamsSequence<'_>) -> Result<Option<Pagination
         decode_error: e.data().map(|d| d.to_string()).unwrap_or_default(),
     })
 }
-
-// -----------------------------------------------------------------------------
-// Response envelope
-// -----------------------------------------------------------------------------
 
 /// One chunk of the serialized response, plus its total size in bytes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,10 +106,6 @@ pub fn parse_envelope(raw: &str) -> anyhow::Result<PaginationEnvelope> {
     let response = serde_json::from_str::<PaginatedResponse>(raw).map_err(|e| anyhow::anyhow!(e).context("failed to parse paginated response envelope"))?;
     Ok(response.__stratus_paginated__)
 }
-
-// -----------------------------------------------------------------------------
-// Leader side
-// -----------------------------------------------------------------------------
 
 /// Builds the method result, paginating when the follower asked for it and the response is too big.
 ///
@@ -207,10 +195,6 @@ fn escaped_len_of_char(ch: char) -> usize {
     }
 }
 
-// -----------------------------------------------------------------------------
-// Follower side
-// -----------------------------------------------------------------------------
-
 /// Builds pagination request params for the follower side.
 pub fn request_params(offset: u64) -> JsonValue {
     to_json_value(PaginationParams { offset })
@@ -261,10 +245,6 @@ impl Reassembler {
         Ok(self.received)
     }
 }
-
-// -----------------------------------------------------------------------------
-// Tests (private helpers only; tests of the public API live in `mod.rs`)
-// -----------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
