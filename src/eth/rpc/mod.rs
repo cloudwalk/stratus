@@ -35,6 +35,8 @@ pub use types::RpcError;
 // Tests of the public pagination API; tests of its private helpers live in `pagination.rs`.
 #[cfg(test)]
 mod tests {
+    use base64::Engine;
+    use base64::prelude::BASE64_STANDARD;
     use serde_json::json;
 
     use super::pagination::MARGIN;
@@ -73,20 +75,27 @@ mod tests {
         assert!(is_envelope(raw.get()));
         let envelope = parse_envelope(raw.get()).expect("parse envelope");
         assert_eq!(envelope.total, full.len() as u64);
-        assert_eq!(envelope.chunk, &full[..envelope.chunk.len()]);
+        let chunk = BASE64_STANDARD.decode(&envelope.chunk).expect("decode chunk");
+        assert_eq!(chunk, &full.as_bytes()[..chunk.len()]);
     }
 
     #[test]
     fn respond_envelope_chunks_cover_whole_response() {
-        let value = json!({"block": "value with \"quotes\" to force escaping", "receipts": [1, 2, 3]});
+        let value = json!({"block": "value with \"quotes\", \u{65e5}\u{672c}\u{8a9e} and \u{1f600} emoji", "receipts": [1, 2, 3]});
         let full = serde_json::to_string(&value).expect_infallible();
+        let limit = MARGIN + 8;
 
         let mut reassembler = Reassembler::new(0);
         let mut offset = 0;
         while offset < full.len() as u64 {
-            let raw = respond(value.clone(), Some(PaginationParams { offset }), MARGIN + 8).expect("respond");
+            let raw = respond(value.clone(), Some(PaginationParams { offset }), limit).expect("respond");
             assert!(is_envelope(raw.get()), "expected envelope at offset {offset}");
             let envelope = parse_envelope(raw.get()).expect("parse envelope");
+            assert!(
+                envelope.chunk.len() <= (limit - MARGIN) as usize,
+                "wire chunk of {} chars exceeds the budget",
+                envelope.chunk.len()
+            );
             if offset == 0 {
                 reassembler = Reassembler::new(envelope.total);
             }
@@ -117,19 +126,24 @@ mod tests {
     }
 
     #[test]
-    fn respond_with_misaligned_offset_fails_instead_of_panicking() {
+    fn respond_with_offset_inside_multi_byte_char_reassembles() {
         let value = json!({"block": "\u{65e5}\u{672c}\u{8a9e} unicode content that will not fit", "receipts": [1, 2, 3]});
         let full = serde_json::to_string(&value).expect_infallible();
 
-        // first byte strictly inside a multi-byte char: a valid index that is not a boundary
+        // first byte strictly inside a multi-byte char: a byte index that is not a utf-8 boundary;
+        // base64 lets the chunk cut mid-character, which must still reassemble
         let misaligned = full
             .char_indices()
             .find_map(|(i, ch)| (ch.len_utf8() > 1).then_some(i + 1))
             .expect("multi-byte char");
         assert!(!full.is_char_boundary(misaligned));
 
-        let error = respond(value, Some(PaginationParams { offset: misaligned as u64 }), MARGIN + 8).expect_err("should fail");
-        assert!(matches!(error, StratusError::RPC(RpcError::ParameterInvalid)));
+        let raw = respond(value, Some(PaginationParams { offset: misaligned as u64 }), MARGIN + 8).expect("should respond");
+        assert!(is_envelope(raw.get()));
+
+        let envelope = parse_envelope(raw.get()).expect("parse envelope");
+        let chunk = BASE64_STANDARD.decode(&envelope.chunk).expect("decode chunk");
+        assert_eq!(chunk, &full.as_bytes()[misaligned..misaligned + chunk.len()]);
     }
 
     #[test]
@@ -166,21 +180,20 @@ mod tests {
     #[test]
     fn envelope_wire_format_is_stable() {
         let envelope = PaginatedResponse {
-            __stratus_paginated__: PaginationEnvelope {
+            stratus_paginated: PaginationEnvelope {
                 total: 42,
-                chunk: "a\"b".to_owned(),
+                chunk: "YWJj".to_owned(), // base64 of "abc"
             },
         };
         let serialized = serde_json::to_string(&envelope).expect_infallible();
 
         // Single top-level key always serializes first; pins the prefix sniffing contract.
-        assert!(serialized.starts_with(r#"{"__stratus_paginated__":"#), "serialized: {serialized}");
-        assert!(serialized.contains(r#""__stratus_paginated__""#));
+        assert!(serialized.starts_with(r#"{"stratus_paginated":"#), "serialized: {serialized}");
 
         // Round-trip.
         let parsed: PaginatedResponse = serde_json::from_str(&serialized).expect_infallible();
-        assert_eq!(parsed.__stratus_paginated__.total, 42);
-        assert_eq!(parsed.__stratus_paginated__.chunk, "a\"b");
+        assert_eq!(parsed.stratus_paginated.total, 42);
+        assert_eq!(parsed.stratus_paginated.chunk, "YWJj");
     }
 
     #[test]
@@ -188,25 +201,25 @@ mod tests {
         assert!(!is_envelope("{\"block\": 1, \"receipts\": []}"));
         assert!(!is_envelope("[{\"header\": 1}, {\"changes\": 2}]"));
         assert!(!is_envelope("null"));
-        assert!(is_envelope("{\"__stratus_paginated__\":{\"chunk\":\"a\",\"total\":1}}"));
+        assert!(is_envelope("{\"stratus_paginated\":{\"chunk\":\"a\",\"total\":1}}"));
     }
 
     #[test]
     fn reassembler_validates_progress_and_totals() {
-        let mut reassembler = Reassembler::new(10);
+        let mut reassembler = Reassembler::new(6);
         assert!(
             !reassembler
                 .push(PaginationEnvelope {
-                    total: 10,
-                    chunk: "abcd".to_owned()
+                    total: 6,
+                    chunk: BASE64_STANDARD.encode("abc")
                 })
                 .expect("push")
         );
-        assert_eq!(reassembler.next_offset(), 4);
+        assert_eq!(reassembler.next_offset(), 3);
         assert!(
             reassembler
                 .push(PaginationEnvelope {
-                    total: 10,
+                    total: 6,
                     chunk: String::new()
                 })
                 .is_err()
@@ -214,20 +227,28 @@ mod tests {
         assert!(
             reassembler
                 .push(PaginationEnvelope {
-                    total: 11,
-                    chunk: "efg".to_owned()
+                    total: 7,
+                    chunk: BASE64_STANDARD.encode("def")
                 })
                 .is_err()
         );
         assert!(
             reassembler
                 .push(PaginationEnvelope {
-                    total: 10,
-                    chunk: "efghij".to_owned()
+                    total: 6,
+                    chunk: "not base64!".to_owned()
+                })
+                .is_err()
+        );
+        assert!(
+            reassembler
+                .push(PaginationEnvelope {
+                    total: 6,
+                    chunk: BASE64_STANDARD.encode("def")
                 })
                 .expect("push")
         );
-        assert_eq!(reassembler.finish().expect("finish"), "abcdefghij");
+        assert_eq!(reassembler.finish().expect("finish"), "abcdef");
     }
 
     #[test]
@@ -236,7 +257,7 @@ mod tests {
         reassembler
             .push(PaginationEnvelope {
                 total: 10,
-                chunk: "abc".to_owned(),
+                chunk: BASE64_STANDARD.encode("abc"),
             })
             .expect("push");
         assert!(reassembler.finish().is_err());
@@ -384,7 +405,7 @@ mod wire_tests {
     async fn envelope_total_above_reassembly_cap_is_rejected() {
         // malicious or buggy leader advertising a total beyond the reassembly cap
         let storage = Arc::new(RwLock::new(json!({
-            "__stratus_paginated__": { "total": MAX_REASSEMBLY_TOTAL + 1, "chunk": "a" }
+            "stratus_paginated": { "total": MAX_REASSEMBLY_TOTAL + 1, "chunk": "a" }
         })));
 
         let server_config = jsonrpsee::server::ServerConfig::builder().max_response_body_size(MAX_RESPONSE_BYTES).build();
@@ -430,7 +451,8 @@ mod wire_tests {
             .register_method("stratus_getBlockAndReceipts", |_, calls, _| {
                 let n = calls.fetch_add(1, Ordering::SeqCst);
                 if n == 0 {
-                    Ok(json!({ "__stratus_paginated__": { "total": 100, "chunk": "a".repeat(50) } })) as Result<JsonValue, StratusError>
+                    // first chunk is valid base64; the next call switches to a normal response
+                    Ok(json!({ "stratus_paginated": { "total": 100, "chunk": "a".repeat(52) } })) as Result<JsonValue, StratusError>
                 } else {
                     Ok(json!({ "block": "abc" })) as Result<JsonValue, StratusError>
                 }

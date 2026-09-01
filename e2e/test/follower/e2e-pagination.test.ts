@@ -17,7 +17,7 @@ describe("Pagination", () => {
         const earlyBlock = await send("eth_getBlockByNumber", ["0x1", false]);
         expect(earlyBlock).to.not.be.null;
         const small = await send("stratus_getBlockAndReceipts", [earlyBlock.hash]);
-        expect(small.__stratus_paginated__).to.be.undefined;
+        expect(small.stratus_paginated).to.be.undefined;
         expect(small.block.number).to.equal("0x1");
 
         // fat contract deployment: the code always fails, but the fat data makes the response oversized
@@ -42,20 +42,21 @@ describe("Pagination", () => {
         expect(legacy.data.error.code).to.equal(-32008);
 
         // paginated reassembly; the chunk size is decided by the leader's response size limit
-        let assembled = "";
+        let assembled: Buffer = Buffer.alloc(0);
         let total = 0;
         for (let offset = 0; total === 0 || assembled.length < total; offset = assembled.length) {
             const envelope = await send("stratus_getBlockAndReceipts", [fatBlockHash, { offset: offset }]);
-            expect(envelope.__stratus_paginated__).to.not.be.undefined;
-            total = envelope.__stratus_paginated__.total;
-            expect(envelope.__stratus_paginated__.chunk.length).to.be.greaterThan(0);
-            assembled += envelope.__stratus_paginated__.chunk;
+            expect(envelope.stratus_paginated).to.not.be.undefined;
+            total = envelope.stratus_paginated.total;
+            const chunk = Buffer.from(envelope.stratus_paginated.chunk, "base64");
+            expect(chunk.length).to.be.greaterThan(0);
+            assembled = Buffer.concat([assembled, chunk]);
         }
         expect(assembled.length).to.equal(total);
         expect(total).to.be.greaterThan(MAX_RESPONSE_BYTES, "the block response should be oversized");
 
         // the reassembled content matches the block
-        const response = JSON.parse(assembled);
+        const response = JSON.parse(assembled.toString("utf8"));
         expect(response.block.hash).to.equal(fatBlockHash);
         expect(parseInt(response.block.number, 16)).to.equal(fatBlockNumber);
         expect(response.block.transactions).to.have.length(1);

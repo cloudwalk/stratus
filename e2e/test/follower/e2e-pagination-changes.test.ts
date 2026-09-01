@@ -18,7 +18,7 @@ describe("Pagination (block changes replication)", () => {
         const earlyBlock = await send("eth_getBlockByNumber", ["0x1", false]);
         expect(earlyBlock).to.not.be.null;
         const small = await send("stratus_getBlockWithChanges", [earlyBlock.hash]);
-        expect(small.__stratus_paginated__).to.be.undefined;
+        expect(small.stratus_paginated).to.be.undefined;
         expect(Buffer.from(small[0].header.hash).toString("hex")).to.equal(earlyBlock.hash.slice(2));
 
         // fat contract deployment: the code always fails, but the fat data makes the response oversized
@@ -42,20 +42,21 @@ describe("Pagination (block changes replication)", () => {
         expect(legacy.data.error.code).to.equal(-32008);
 
         // paginated reassembly; the chunk size is decided by the leader's response size limit
-        let assembled = "";
+        let assembled: Buffer = Buffer.alloc(0);
         let total = 0;
         for (let offset = 0; total === 0 || assembled.length < total; offset = assembled.length) {
             const envelope = await send("stratus_getBlockWithChanges", [fatBlockHash, { offset: offset }]);
-            expect(envelope.__stratus_paginated__).to.not.be.undefined;
-            total = envelope.__stratus_paginated__.total;
-            expect(envelope.__stratus_paginated__.chunk.length).to.be.greaterThan(0);
-            assembled += envelope.__stratus_paginated__.chunk;
+            expect(envelope.stratus_paginated).to.not.be.undefined;
+            total = envelope.stratus_paginated.total;
+            const chunk = Buffer.from(envelope.stratus_paginated.chunk, "base64");
+            expect(chunk.length).to.be.greaterThan(0);
+            assembled = Buffer.concat([assembled, chunk]);
         }
         expect(assembled.length).to.equal(total);
         expect(total).to.be.greaterThan(MAX_RESPONSE_BYTES, "the with-changes response should be oversized");
 
         // the reassembled content is the (block, changes) pair the follower importer deserializes
-        const parsed = JSON.parse(assembled);
+        const parsed = JSON.parse(assembled.toString("utf8"));
         expect(parsed).to.be.an("array").with.length(2);
         expect(Buffer.from(parsed[0].header.hash).toString("hex")).to.equal(fatBlockHash.slice(2));
         expect(parsed[0].transactions).to.have.length(1);
