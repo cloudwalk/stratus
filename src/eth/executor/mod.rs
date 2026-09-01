@@ -462,9 +462,13 @@ impl Executor {
         }
     }
 
-    /// Executes a transaction without persisting state changes.
+    /// Executes a read-only call in the local EVM, without persisting state changes.
+    ///
+    /// When `skip_transient_lock` is set, storage reads do not acquire the transient state lock.
+    /// Only meant for access-list computation, where only the set of touched accounts/slots
+    /// matters and not their values, so the call does not have to wait for a block being saved.
     #[tracing::instrument(name = "executor::local_call", skip_all, fields(from, to))]
-    pub fn execute_local_call<Output>(&self, call_input: CallInput, point_in_time: PointInTime) -> Result<Output, StratusError>
+    pub fn execute_local_call<Output>(&self, call_input: CallInput, point_in_time: PointInTime, skip_transient_lock: bool) -> Result<Output, StratusError>
     where
         Output: TryFrom<RevmResultAndState, Error = StratusError>,
     {
@@ -488,7 +492,7 @@ impl Executor {
         let (function, contract) = { (codegen::function_sig(&call_input.data), codegen::contract_name(&call_input.to)) };
 
         // execute
-        let evm_input = match point_in_time {
+        let mut evm_input = match point_in_time {
             PointInTime::Pending => {
                 let pending_header = self.storage.read_pending_block_header();
                 CallExecutionInput::from_pending_block(call_input, pending_header)
@@ -500,6 +504,12 @@ impl Executor {
                 CallExecutionInput::from_mined_block(call_input, block.header, point_in_time)
             }
         };
+
+        // access-list calls only need the set of touched keys, not their values: use the lock-free
+        // RPC read kind so they do not wait on the transient state lock held while saving a block
+        if skip_transient_lock {
+            evm_input.kind = ExecutionKind::RPC(PointInTime::Latest);
+        }
 
         let evm_route = match point_in_time {
             PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input),

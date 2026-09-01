@@ -72,7 +72,7 @@ pub trait Consensus: Send + Sync {
 
         let access_list = self
             .get_executor()
-            .execute_local_call::<AccessListOutput>(tx.into(), crate::eth::types::PointInTime::Latest)?;
+            .execute_local_call::<AccessListOutput>(tx.into(), crate::eth::types::PointInTime::Latest, true)?;
 
         let hash = self.get_client().send_raw_transaction_to_leader(tx_data.into(), Some(access_list)).await?;
 

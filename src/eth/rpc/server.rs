@@ -1146,7 +1146,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
             .executor
             .validate_to_is_contract(to_address, ExecutionKind::RPC(PointInTime::Latest))?;
     }
-    match ctx.server.executor.execute_local_call::<CallExecutionOutput>(call, PointInTime::Latest) {
+    match ctx.server.executor.execute_local_call::<CallExecutionOutput>(call, PointInTime::Latest, false) {
         // result is success
         Ok(result) if result.success => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");
@@ -1199,7 +1199,7 @@ fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<CallExecutionOut
     {
         ctx.server.executor.validate_to_is_contract(to_address, ExecutionKind::RPC(point_in_time))?;
     }
-    ctx.server.executor.execute_local_call(call, point_in_time)
+    ctx.server.executor.execute_local_call(call, point_in_time, false)
 }
 
 fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
@@ -1309,7 +1309,7 @@ fn stratus_access_list(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
 
     ctx.server
         .executor
-        .execute_local_call::<AccessListOutput>(call, PointInTime::Latest)
+        .execute_local_call::<AccessListOutput>(call, PointInTime::Latest, true)
         .map(to_json_value)
         .inspect(|_| tracing::info!("executed stratus_accessList with success"))
         .inspect_err(|e| tracing::warn!(reason = ?e, "failed to execute stratus_accessList"))
