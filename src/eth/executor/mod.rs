@@ -12,6 +12,7 @@ use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::bail;
 pub use config::ExecutorConfig;
+use derive_more::Deref;
 pub use evm::types::AccessListOutput;
 pub use evm::types::CallExecutionOutput;
 pub use evm::types::EvmExecutionMetrics;
@@ -19,6 +20,7 @@ pub use evm::types::EvmKind;
 pub use evm::types::TransactionExecutionInput;
 pub use evm::types::TransactionExecutionOutput;
 pub use evm::types::TransactionExecutionResult;
+use parking_lot::Condvar;
 use parking_lot::Mutex;
 use tracing::Span;
 use tracing::debug_span;
@@ -66,10 +68,56 @@ use crate::infra::tracing::SpanExt;
 // Executor
 // -----------------------------------------------------------------------------
 
+#[derive(Deref, Default)]
+struct Semaphore {
+    #[deref]
+    sem: Arc<SemaphoreInner>,
+}
+
+#[derive(Default)]
+struct SemaphoreInner {
+    permits: Mutex<usize>,
+    cvar: Condvar,
+}
+
+struct Permit {
+    sem: Arc<SemaphoreInner>,
+}
+
+impl Semaphore {
+    fn new(permits: usize) -> Self {
+        Self {
+            sem: Arc::new(SemaphoreInner {
+                permits: Mutex::new(permits),
+                cvar: Condvar::new(),
+            }),
+        }
+    }
+
+    fn acquire(&self) -> Permit {
+        let mut permits = self.permits.lock();
+        while *permits == 0 {
+            self.cvar.wait(&mut permits);
+        }
+        *permits -= 1;
+        drop(permits);
+        Permit { sem: self.sem.clone() }
+    }
+}
+
+impl Drop for Permit {
+    fn drop(&mut self) {
+        let mut permits = self.sem.permits.lock();
+        *permits += 1;
+        self.sem.cvar.notify_one();
+    }
+}
+
 /// Locks used for local execution.
 #[derive(Default)]
 pub struct ExecutorLocks {
     transaction: Mutex<()>,
+    transaction_warmup: Semaphore,
 }
 
 pub struct Executor {
@@ -95,7 +143,10 @@ impl Executor {
         let reject_not_contract = config.executor_reject_not_contract;
         let evms = EvmWorkerPool::spawn(Arc::clone(&storage), &config);
         Self {
-            locks: ExecutorLocks::default(),
+            locks: ExecutorLocks {
+                transaction_warmup: Semaphore::new(100),
+                ..Default::default()
+            },
             evms,
             miner,
             storage,
@@ -289,6 +340,7 @@ impl Executor {
             s.rec_str("tx_nonce", &tx.execution_info.nonce);
         });
 
+        let _permit = self.locks.transaction_warmup.acquire();
         if let Some(access_list) = access_list {
             self.storage.load_access_list(access_list);
         }
@@ -300,11 +352,11 @@ impl Executor {
         // * Uses a Mutex, so a new transactions starts executing only after the previous one is executed and persisted.
         // * Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.
         #[cfg(feature = "metrics")]
-        let lock_wait_start = metrics::now();
+        metrics::inc_executor_local_transaction_lock_waiting(1);
         let transaction_lock = self.locks.transaction.lock();
-
         #[cfg(feature = "metrics")]
-        let lock_wait = lock_wait_start.elapsed();
+        metrics::dec_executor_local_transaction_lock_waiting(1);
+
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -316,8 +368,6 @@ impl Executor {
 
         drop(transaction_lock);
 
-        #[cfg(feature = "metrics")]
-        metrics::inc_executor_local_transaction_lock_wait(lock_wait);
         #[cfg(feature = "metrics")]
         metrics::inc_executor_local_transaction(execution_elapsed, tx_execution.is_ok(), contract, function);
 
