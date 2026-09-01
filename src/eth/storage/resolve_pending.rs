@@ -106,7 +106,7 @@ impl StratusStorage {
         match kind {
             ExecutionKind::RPC(PointInTime::Past(number)) | ExecutionKind::CallPast(number) => MinedPointInTime::past(number),
             ExecutionKind::CallLatest(block_number) => self.resolve_call_point(block_number),
-            ExecutionKind::Transaction | ExecutionKind::RPC(_) => MinedPointInTime::latest(None),
+            ExecutionKind::Transaction | ExecutionKind::RPC(_) | ExecutionKind::AccessList => MinedPointInTime::latest(None),
         }
     }
 }

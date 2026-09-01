@@ -9,6 +9,7 @@ pub enum ExecutionKind {
     #[default]
     Transaction,
     RPC(PointInTime),
+    AccessList,
 }
 
 impl ExecutionKind {
@@ -21,7 +22,7 @@ impl From<&ExecutionKind> for PointInTime {
     fn from(value: &ExecutionKind) -> Self {
         match value {
             ExecutionKind::RPC(pit) => *pit,
-            ExecutionKind::Transaction => PointInTime::Pending,
+            ExecutionKind::Transaction | ExecutionKind::AccessList => PointInTime::Pending,
             ExecutionKind::CallPast(number) => PointInTime::Past(*number),
             ExecutionKind::CallLatest(_) => PointInTime::Latest,
         }

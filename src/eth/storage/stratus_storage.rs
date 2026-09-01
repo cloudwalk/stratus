@@ -94,6 +94,8 @@ pub(super) trait EntityRead: Sized + Clone {
     type Key: Copy;
     /// Reads the latest (mined tip) value from the cache, if present.
     fn read_latest_cache(s: &StratusStorage, key: &Self::Key) -> Option<Self>;
+    /// Tries to read from the latest cache, if it gets a lock contention error from the cache, returns None
+    fn try_read_latest_cache(s: &StratusStorage, key: &Self::Key) -> Option<Self>;
     /// Retains only the keys that are missing from both the temporary storage and the latest cache.
     ///
     /// Batched: the temporary-storage locks are acquired once for the whole key set, instead of
@@ -126,6 +128,10 @@ impl EntityRead for Account {
                 metrics::inc_storage_read_account(m.elapsed, label::CACHE, PointInTime::Latest, true);
             }
         })
+    }
+
+    fn try_read_latest_cache(s: &StratusStorage, address: &Address) -> Option<Self> {
+        s.cache.try_get_account_latest(address).ok().flatten()
     }
 
     fn retain_missing_keys(s: &StratusStorage, keys: &mut Vec<Self::Key>) {
@@ -182,6 +188,11 @@ impl EntityRead for Slot {
                 metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Latest, true);
             }
         })
+    }
+
+    fn try_read_latest_cache(s: &StratusStorage, key: &Self::Key) -> Option<Self> {
+        let (address, index) = key;
+        s.cache.try_get_slot_latest(address, index).ok().flatten()
     }
 
     fn retain_missing_keys(s: &StratusStorage, keys: &mut Vec<Self::Key>) {
@@ -382,7 +393,12 @@ impl StratusStorage {
                         MinedPointInTime::Latest(_, _) =>
                         // Latest: try latest cache while guard is held, then fall through to perm.
                         {
-                            if let Some(value) = E::read_latest_cache(self, &key) {
+                            let cached_value = if matches!(kind, ExecutionKind::AccessList) {
+                                E::try_read_latest_cache(self, &key)
+                            } else {
+                                E::read_latest_cache(self, &key)
+                            };
+                            if let Some(value) = cached_value {
                                 break 'query (value, FoundAt::Cache);
                             }
                             // If it wasnt found in the cache and we still have the guard the value can only be read in perm latest
@@ -397,13 +413,10 @@ impl StratusStorage {
 
         // Cache non-historical reads according to the point-in-time and where the value came from.
         match (kind, found_at) {
-            (ExecutionKind::Transaction, _) => (),
-            // A pending read that hit perm (i.e. not in any cache/temp) is already mined, so cache latest.
-            // OR A mined read that hit perm is the latest state, so populate the latest cache.
-            (_, FoundAt::PermLatest) => {
+            // Reads that held the transient state lock and were found at perm can be cached
+            (ExecutionKind::CallLatest(_) | ExecutionKind::CallPast(_), FoundAt::PermLatest) => {
                 E::cache_latest_if_missing(self, key, value.clone());
             }
-            // Cache / Historical / (Mined, Temp): nothing to cache.
             _ => {}
         }
         Ok(value)

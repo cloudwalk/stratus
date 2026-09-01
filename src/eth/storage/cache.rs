@@ -7,6 +7,7 @@ use indexmap::Equivalent;
 use quick_cache::UnitWeighter;
 use quick_cache::sync::Cache;
 use quick_cache::sync::GuardResult;
+use quick_cache::sync::LockContention;
 
 use crate::eth::executor::State;
 use crate::eth::executor::types::state::Change;
@@ -93,6 +94,16 @@ impl StorageCache {
         self.slot_latest_cache
             .get(&SlotKeyRef(address, index))
             .map(|value| Slot { value, index: *index })
+    }
+
+    pub fn try_get_account_latest(&self, address: &Address) -> Result<Option<Account>, LockContention> {
+        self.account_latest_cache.try_get(address)
+    }
+
+    pub fn try_get_slot_latest(&self, address: &Address, index: &SlotIndex) -> Result<Option<Slot>, LockContention> {
+        self.slot_latest_cache
+            .try_get(&SlotKeyRef(address, index))
+            .map(|value| value.map(|value| Slot { value, index: *index }))
     }
 
     pub fn contains_account(&self, address: &Address) -> bool {
