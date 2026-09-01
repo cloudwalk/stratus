@@ -45,7 +45,14 @@ pub struct RpcServerConfig {
 impl RpcServerConfig {
     /// Parses a response size limit, rejecting values too small for importer pagination.
     fn parse_max_response_size_bytes(input: &str) -> Result<u32, String> {
-        clap_num::number_range(input, pagination::MIN_RESPONSE_SIZE_BYTES, u32::MAX)
+        let value = input.parse::<u32>().map_err(|error| error.to_string())?;
+        if value < pagination::MIN_RESPONSE_SIZE_BYTES {
+            return Err(format!(
+                "must be at least {} bytes, otherwise importer pagination cannot fit a chunk",
+                pagination::MIN_RESPONSE_SIZE_BYTES
+            ));
+        }
+        Ok(value)
     }
 
     pub fn parse_rpc_client_app_hashset(input: &str) -> anyhow::Result<HashSet<RpcClientApp>> {
@@ -69,8 +76,10 @@ mod tests {
     #[test]
     fn rpc_max_response_size_bytes_must_be_at_least_the_pagination_floor() {
         // below the floor: pagination could not fit a chunk in a response
-        let error = RpcServerConfig::try_parse_from(["stratus", "--max-response-size-bytes", "300"]);
-        assert!(error.is_err());
+        let error = RpcServerConfig::try_parse_from(["stratus", "--max-response-size-bytes", "300"])
+            .err()
+            .expect("below the floor should be rejected");
+        assert!(error.to_string().contains("must be at least 704 bytes"));
 
         // at the floor and above: accepted
         RpcServerConfig::try_parse_from(["stratus", "--max-response-size-bytes", &MIN_RESPONSE_SIZE_BYTES.to_string()]).expect("floor should be accepted");

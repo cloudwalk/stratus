@@ -129,7 +129,6 @@ sasl2-sys = { version = "=0.1.22", features = ["vendored"] }
 
 # Data migration
 indicatif = { version = "=0.18.3", optional = true }
-clap-num = "=1.2.0"
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies
