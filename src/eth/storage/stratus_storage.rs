@@ -126,7 +126,7 @@ impl EntityRead for Account {
     }
 
     fn cache_contains_key(s: &StratusStorage, key: &Self::Key) -> bool {
-        s.cache.contains_account(key)
+        s.temp.transaction_storage.contains_account(key) || s.cache.contains_account(key)
     }
 
     fn read_perm(s: &StratusStorage, address: Address, point: MinedPointInTime<'_>) -> Result<Self, StorageError> {
@@ -181,7 +181,7 @@ impl EntityRead for Slot {
     }
 
     fn cache_contains_key(s: &StratusStorage, key: &Self::Key) -> bool {
-        s.cache.contains_slot(&key.0, &key.1)
+        s.temp.transaction_storage.contains_slot(key) || s.cache.contains_slot(&key.0, &key.1)
     }
 
     fn read_perm(s: &StratusStorage, key: (Address, SlotIndex), point: MinedPointInTime<'_>) -> Result<Self, StorageError> {

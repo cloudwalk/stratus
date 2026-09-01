@@ -178,6 +178,30 @@ impl InmemoryTransactionTemporaryStorage {
         }
     }
 
+    pub fn contains_account(&self, address: &Address) -> bool {
+        match self.pending_block.read().state.accounts.contains_key(&address) {
+            true => true,
+            false => self
+                .latest_block
+                .read()
+                .as_ref()
+                .map(|latest| latest.state.accounts.contains_key(&address))
+                .unwrap_or(false),
+        }
+    }
+
+    pub fn contains_slot(&self, slot_key: &(Address, SlotIndex)) -> bool {
+        match self.pending_block.read().state.slots.contains_key(slot_key) {
+            true => true,
+            false => self
+                .latest_block
+                .read()
+                .as_ref()
+                .map(|latest| latest.state.slots.contains_key(slot_key))
+                .unwrap_or(false),
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Direct state manipulation (for testing)
     // -------------------------------------------------------------------------
