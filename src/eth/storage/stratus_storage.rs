@@ -93,7 +93,9 @@ enum FoundAt {
 pub(super) trait EntityRead: Sized + Clone {
     type Key: Copy;
     /// Reads the latest (mined tip) value from the cache, if present.
-    fn read_latest_cache(s: &StratusStorage, key: Self::Key) -> Option<Self>;
+    fn read_latest_cache(s: &StratusStorage, key: &Self::Key) -> Option<Self>;
+    /// Checks if the latest cache contains the given key.
+    fn cache_contains_key(s: &StratusStorage, key: &Self::Key) -> bool;
     /// Reads from temporary (pending) storage.
     fn read_temp(s: &StratusStorage, key: Self::Key) -> Option<Self>;
     /// Reads from permanent storage at the resolved mined point.
@@ -114,13 +116,17 @@ impl EntityRead for Account {
         })
     }
 
-    fn read_latest_cache(s: &StratusStorage, address: Address) -> Option<Self> {
+    fn read_latest_cache(s: &StratusStorage, address: &Address) -> Option<Self> {
         timed(|| s.cache.get_account_latest(address)).with(|m| {
             if m.result.is_some() {
                 tracing::debug!(storage = %label::CACHE, %address, "account found in cache");
                 metrics::inc_storage_read_account(m.elapsed, label::CACHE, PointInTime::Latest, true);
             }
         })
+    }
+
+    fn cache_contains_key(s: &StratusStorage, key: &Self::Key) -> bool {
+        s.cache.contains_account(key)
     }
 
     fn read_perm(s: &StratusStorage, address: Address, point: MinedPointInTime<'_>) -> Result<Self, StorageError> {
@@ -164,7 +170,7 @@ impl EntityRead for Slot {
         })
     }
 
-    fn read_latest_cache(s: &StratusStorage, key: (Address, SlotIndex)) -> Option<Self> {
+    fn read_latest_cache(s: &StratusStorage, key: &(Address, SlotIndex)) -> Option<Self> {
         let (address, index) = key;
         timed(|| s.cache.get_slot_latest(address, index)).with(|m| {
             if m.result.is_some() {
@@ -172,6 +178,10 @@ impl EntityRead for Slot {
                 metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Latest, true);
             }
         })
+    }
+
+    fn cache_contains_key(s: &StratusStorage, key: &Self::Key) -> bool {
+        s.cache.contains_slot(&key.0, &key.1)
     }
 
     fn read_perm(s: &StratusStorage, key: (Address, SlotIndex), point: MinedPointInTime<'_>) -> Result<Self, StorageError> {
@@ -367,7 +377,7 @@ impl StratusStorage {
                         MinedPointInTime::Latest(_, _) =>
                         // Latest: try latest cache while guard is held, then fall through to perm.
                         {
-                            if let Some(value) = E::read_latest_cache(self, key) {
+                            if let Some(value) = E::read_latest_cache(self, &key) {
                                 break 'query (value, FoundAt::Cache);
                             }
                             // If it wasnt found in the cache and we still have the guard the value can only be read in perm latest
@@ -813,9 +823,13 @@ impl StratusStorage {
         let mut account_addresses = vec![];
         let mut slot_keys = vec![];
         for (address, slots) in access_list {
-            account_addresses.push(address);
+            if !Account::cache_contains_key(self, &address) {
+                account_addresses.push(address);
+            }
             for slot_index in slots {
-                slot_keys.push((address, slot_index));
+                if !Slot::cache_contains_key(self, &(address, slot_index)) {
+                    slot_keys.push((address, slot_index));
+                }
             }
         }
         self.load_accounts_to_cache(account_addresses);

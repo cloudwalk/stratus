@@ -85,12 +85,35 @@ impl StorageCache {
         self.slot_latest_cache.insert_if_missing((address, slot.index), slot.value);
     }
 
-    pub fn get_account_latest(&self, address: Address) -> Option<Account> {
-        self.account_latest_cache.get(&address)
+    pub fn get_account_latest(&self, address: &Address) -> Option<Account> {
+        self.account_latest_cache.get(address)
     }
 
-    pub fn get_slot_latest(&self, address: Address, index: SlotIndex) -> Option<Slot> {
-        self.slot_latest_cache.get(&(address, index)).map(|value| Slot { value, index })
+    pub fn get_slot_latest(&self, address: &Address, index: &SlotIndex) -> Option<Slot> {
+        self.slot_latest_cache
+            .get(&SlotKeyRef(address, index))
+            .map(|value| Slot { value, index: *index })
+    }
+
+    pub fn contains_account(&self, address: &Address) -> bool {
+        self.account_latest_cache.contains_key(address)
+    }
+
+    pub fn contains_slot(&self, address: &Address, index: &SlotIndex) -> bool {
+        self.slot_latest_cache.contains_key(&SlotKeyRef(address, index))
+    }
+}
+
+// Borrowed lookup key for `slot_latest_cache`. `std` provides no `Borrow<(&A, &B)>` impl for `(A, B)`, so a tuple of
+// references cannot be used directly with `get`/`contains_key`; and the orphan rule (E0117) forbids implementing
+// `Equivalent` for `(&Address, &SlotIndex)` directly because tuples are always foreign. The derived `Hash` hashes the
+// fields in the same order as the `(Address, SlotIndex)` tuple, which is required for the lookups to match.
+#[derive(Hash)]
+struct SlotKeyRef<'a>(&'a Address, &'a SlotIndex);
+
+impl Equivalent<(Address, SlotIndex)> for SlotKeyRef<'_> {
+    fn equivalent(&self, key: &(Address, SlotIndex)) -> bool {
+        self.0 == &key.0 && self.1 == &key.1
     }
 }
 
@@ -118,5 +141,38 @@ where
                 let _ = g.insert(val);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn new_cache() -> StorageCache {
+        CacheConfig {
+            account_history_cache_capacity: 16,
+            slot_history_cache_capacity: 16,
+        }
+        .init()
+    }
+
+    #[test]
+    fn contains_slot_finds_cached_slots() {
+        let cache = new_cache();
+        let address = Address::new([0xAA; 20]);
+        let index = SlotIndex::from([7u64, 0, 0, 0]);
+        let other_index = SlotIndex::from([8u64, 0, 0, 0]);
+        let other_address = Address::new([0xBB; 20]);
+
+        cache.cache_slot_latest_if_missing(address, Slot::new(index, SlotValue::from([42u64, 0, 0, 0])));
+
+        let expected_slot = Slot::new(index, SlotValue::from([42u64, 0, 0, 0]));
+        assert_eq!(cache.get_slot_latest(&address, &index), Some(expected_slot));
+        assert_eq!(cache.get_slot_latest(&address, &other_index), None);
+        assert_eq!(cache.get_slot_latest(&other_address, &index), None);
+
+        assert!(cache.contains_slot(&address, &index));
+        assert!(!cache.contains_slot(&address, &other_index));
+        assert!(!cache.contains_slot(&other_address, &index));
     }
 }
