@@ -340,8 +340,8 @@ impl Executor {
             s.rec_str("tx_nonce", &tx.execution_info.nonce);
         });
 
+        metrics::inc_executor_local_transaction_semaphore_waiting(1);
         #[cfg(feature = "metrics")]
-        metrics::inc_executor_local_transaction_lock_waiting(1);
         let permit = self.locks.transaction_warmup.acquire();
         if let Some(access_list) = access_list {
             self.storage.load_access_list(access_list);
@@ -353,8 +353,10 @@ impl Executor {
         // Executes transactions serially:
         // * Uses a Mutex, so a new transactions starts executing only after the previous one is executed and persisted.
         // * Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.
+        metrics::inc_executor_local_transaction_lock_waiting(1);
         let transaction_lock = self.locks.transaction.lock();
         drop(permit);
+        metrics::dec_executor_local_transaction_semaphore_waiting(1);
         #[cfg(feature = "metrics")]
         metrics::dec_executor_local_transaction_lock_waiting(1);
 
