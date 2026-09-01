@@ -573,6 +573,12 @@ criteria = "safe-to-deploy"
 delta = "4.5.51 -> 4.5.60"
 notes = "Thin facade crate re-exporting clap_builder/clap_derive. Diff is version+pin bumps and a CHANGELOG URL update. No unsafe, no logic, build=false, MSRV unchanged (1.74). cargo audit clean for clap. Backward-compatible PATCH releases."
 
+[[audits.clap-num]]
+who = "Gustavo Ventino <gustavo.ventino@cloudwalk.io> (audited by pi with cloudwalk/glm-5.3-pegasus)"
+criteria = "safe-to-deploy"
+version = "1.2.0"
+notes = "New crate, full source review. Single-file (&str -> T) clap value_parser helpers (number_range, si_number(_range), maybe_hex/bin(_range)). Zero unsafe, build=false, no proc-macro, no FFI, no env/fs/net/process. Arithmetic is all checked (checked_mul/add/sub, TryFrom<u128> overflow mapped to error); number_range itself is only FromStr + Ord compare, cannot panic. Sole runtime dep is num-traits 0.2.19 (already vetted), reachable only from the maybe_hex/maybe_bin paths Stratus does not use. Stratus uses number_range solely to floor --max-response-size-bytes."
+
 [[audits.clap_builder]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
