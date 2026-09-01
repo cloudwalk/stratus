@@ -384,7 +384,7 @@ impl StratusStorage {
     }
 
     /// Generic read algorithm shared by [`read_account`] and [`read_slot`].
-    fn read<E: resolve_pending::Resolve>(&self, key: E::Key, kind: ExecutionKind) -> Result<E, StorageError> {
+    fn read<E: resolve_pending::Resolve + Default>(&self, key: E::Key, kind: ExecutionKind) -> Result<E, StorageError> {
         let (value, found_at) = 'query: {
             match E::resolve(self, key, kind) {
                 resolve_pending::Resolved::Temp(value) => break 'query (value, FoundAt::Temp),

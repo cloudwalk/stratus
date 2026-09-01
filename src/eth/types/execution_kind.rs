@@ -22,9 +22,9 @@ impl From<&ExecutionKind> for PointInTime {
     fn from(value: &ExecutionKind) -> Self {
         match value {
             ExecutionKind::RPC(pit) => *pit,
-            ExecutionKind::Transaction | ExecutionKind::AccessList => PointInTime::Pending,
+            ExecutionKind::Transaction => PointInTime::Pending,
             ExecutionKind::CallPast(number) => PointInTime::Past(*number),
-            ExecutionKind::CallLatest(_) => PointInTime::Latest,
+            ExecutionKind::CallLatest(_) | ExecutionKind::AccessList => PointInTime::Latest,
         }
     }
 }
