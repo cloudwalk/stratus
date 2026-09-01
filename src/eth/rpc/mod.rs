@@ -1,6 +1,5 @@
 //! Ethereum JSON-RPC server.
 
-pub mod blockchain_client;
 mod config;
 mod context;
 pub mod middleware;
@@ -10,7 +9,6 @@ mod server;
 mod subscriptions;
 pub mod types;
 
-pub use blockchain_client::BlockchainClient;
 pub use config::RpcServerConfig;
 pub use context::RpcContext;
 pub use middleware::RpcHttpMiddleware;
@@ -286,13 +284,13 @@ mod wire_tests {
     use jsonrpsee::server::Server;
     use serde_json::json;
 
-    use super::blockchain_client::BlockchainClient;
     use super::pagination::MAX_REASSEMBLY_TOTAL;
     use super::pagination::parse_request;
     use super::pagination::respond;
     use super::parser::next_rpc_param;
     use super::types::BlockFilter;
     use crate::alias::JsonValue;
+    use crate::eth::follower::importer::BlockchainClient;
     use crate::eth::types::BlockNumber;
     use crate::eth::types::ExternalBlockWithReceipts;
     use crate::eth::types::ExternalReceipt;
