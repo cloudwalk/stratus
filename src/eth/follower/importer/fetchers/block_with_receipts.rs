@@ -5,9 +5,9 @@ use anyhow::anyhow;
 use anyhow::bail;
 use async_trait::async_trait;
 
+use crate::eth::follower::importer::BlockchainClient;
 use crate::eth::follower::importer::fetch_with_retry;
 use crate::eth::follower::importer::fetchers::DataFetcher;
-use crate::eth::rpc::BlockchainClient;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::ExternalBlock;
 use crate::eth::types::ExternalReceipt;

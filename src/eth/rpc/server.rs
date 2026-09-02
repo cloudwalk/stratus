@@ -28,6 +28,8 @@ use jsonrpsee::types::Params;
 use jsonrpsee::ws_client::RpcServiceBuilder;
 use parking_lot::RwLock;
 use serde_json::json;
+use serde_json::value::RawValue;
+use serde_json::value::to_raw_value;
 use tokio::runtime::Handle;
 use tokio::select;
 use tokio::sync::Semaphore;
@@ -69,6 +71,7 @@ use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::rpc::middleware::decode_input_arguments;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
+use crate::eth::rpc::pagination;
 use crate::eth::rpc::parser::RpcExtensionsExt;
 use crate::eth::rpc::subscriptions::RpcSubscriptionsHandles;
 use crate::eth::storage::ExecutionKind;
@@ -600,8 +603,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     let (params, external_rpc) = next_rpc_param::<String>(params.sequence())?;
     let (params, external_rpc_ws) = next_rpc_param::<String>(params)?;
     let (params, raw_external_rpc_timeout) = next_rpc_param::<String>(params)?;
-    let (params, raw_sync_interval) = next_rpc_param::<String>(params)?;
-    let (_, raw_external_rpc_max_response_size_bytes) = next_rpc_param::<String>(params)?;
+    let (_, raw_sync_interval) = next_rpc_param::<String>(params)?;
 
     let external_rpc_timeout = parse_duration(&raw_external_rpc_timeout).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse external_rpc_timeout");
@@ -613,17 +615,11 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         ImporterError::ConfigParseError
     })?;
 
-    let external_rpc_max_response_size_bytes = raw_external_rpc_max_response_size_bytes.parse::<u32>().map_err(|e| {
-        tracing::error!(reason = ?e, "failed to parse external_rpc_max_response_size_bytes");
-        ImporterError::ConfigParseError
-    })?;
-
     let importer_config = ImporterConfig {
         external_rpc,
         external_rpc_ws: Some(external_rpc_ws),
         external_rpc_timeout,
         sync_interval,
-        external_rpc_max_response_size_bytes,
         enable_block_changes_replication: std::env::var("ENABLE_BLOCK_CHANGES_REPLICATION")
             .ok()
             .is_some_and(|val| val == "1" || val == "true"),
@@ -893,50 +889,54 @@ fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) 
     Ok(to_json_value(block_number))
 }
 
-fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<Box<RawValue>, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::stratus_getBlockAndReceipts").entered();
 
     // parse params
-    let (_, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let (sequence, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let pagination = pagination::parse_request(sequence)?;
 
     // track
     tracing::info!(%filter, "reading block and receipts");
 
     let Some(block) = ctx.server.storage.read_block(filter)? else {
         tracing::info!(%filter, "block not found");
-        return Ok(JsonValue::Null);
+        return Ok(to_raw_value(&JsonValue::Null).expect_infallible());
     };
 
     tracing::info!(%filter, "block with transactions found");
     let receipts = block.transactions.iter().cloned().map(AlloyReceipt::from).collect::<Vec<_>>();
 
-    Ok(json!({
+    let value = json!({
         "block": block.to_json_rpc_with_full_transactions(),
         "receipts": receipts,
-    }))
+    });
+
+    pagination::respond(value, pagination, ctx.server.rpc_config.rpc_max_response_size_bytes)
 }
 
-fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<Box<RawValue>, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::stratus_getBlockWithChanges").entered();
 
     // parse params
-    let (_, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let (sequence, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let pagination = pagination::parse_request(sequence)?;
 
     // track
     tracing::info!(%filter, "reading block and changes");
 
     let Some(block) = ctx.server.storage.read_block_with_changes(filter)? else {
         tracing::info!(%filter, "block not found");
-        return Ok(JsonValue::Null);
+        return Ok(to_raw_value(&JsonValue::Null).expect_infallible());
     };
 
     tracing::info!(%filter, "block with changes found");
 
-    Ok(json!(block))
+    pagination::respond(json!(block), pagination, ctx.server.rpc_config.rpc_max_response_size_bytes)
 }
 
 fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {

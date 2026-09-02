@@ -10,9 +10,12 @@ use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
 use crate::infra::metrics;
 use crate::infra::tracing::warn_task_tx_closed;
 
+pub mod blockchain_client;
 pub mod execution;
 pub mod fake_leader;
 pub mod replication;
+
+pub use blockchain_client::BlockchainClient;
 
 pub trait ImportData {
     fn block_number(&self) -> BlockNumber;

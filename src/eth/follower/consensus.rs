@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use strum::AsRefStr;
 
-use crate::eth::rpc::BlockchainClient;
+use crate::eth::follower::importer::BlockchainClient;
 use crate::eth::types::Bytes;
 use crate::eth::types::Hash;
 use crate::eth::types::StratusError;
