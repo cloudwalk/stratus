@@ -20,9 +20,10 @@
 //! {"stratus_paginated": {"total": 12345, "chunk": "eyJibG9jayI6..."}}
 //! ```
 //!
-//! The `chunk` string is the base64 of a raw slice of the serialized response. Base64 is pure
-//! ASCII and needs no JSON escaping, so the chunk size is plain arithmetic (3 response bytes per
-//! 4 wire characters), and slices may cut anywhere in the response — including in the middle of a
+//! The `chunk` string is the base64 of a raw slice of the serialized response. The base64
+//! alphabet (letters, digits, `+`, `/`, `=`) contains only characters that a JSON string carries
+//! without escaping, so the chunk size is plain arithmetic (3 response bytes per 4 wire
+//! characters), and slices may cut anywhere in the response — including in the middle of a
 //! multi-byte UTF-8 character — since the follower reassembles opaque bytes and parses the JSON
 //! only once at the end. The envelope has exactly one top-level key, which always serializes
 //! first, allowing O(1) prefix detection ([`is_envelope`]) on the follower side without parsing the
