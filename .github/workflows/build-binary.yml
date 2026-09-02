@@ -68,7 +68,7 @@ jobs:
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/llvm-snapshot.gpg
           echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-22 main" | sudo tee /etc/apt/sources.list.d/llvm-22.list
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends llvm-22-dev
+          sudo apt-get install -y --no-install-recommends llvm-22-dev libpolly-22-dev
 
       - name: Build Release binaries
         run: |
