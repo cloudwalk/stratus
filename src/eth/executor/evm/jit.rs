@@ -48,6 +48,7 @@ impl JitHandle {
         let mut runtime = revmc::runtime::RuntimeConfig {
             enabled: true,
             aot: config.executor_jit_aot,
+            blocking: config.executor_jit_blocking,
             on_compilation: Some(std::sync::Arc::new(|event| {
                 tracing::info!(
                     code_hash = ?event.code_hash,
@@ -68,7 +69,10 @@ impl JitHandle {
         // the store directory can actually be created.
         if config.executor_jit_aot {
             match FileArtifactStore::new(config.executor_jit_store_path.clone()) {
-                Ok(store) => runtime.store = Some(std::sync::Arc::new(store)),
+                Ok(store) => {
+                    warn_if_linker_tools_missing();
+                    runtime.store = Some(std::sync::Arc::new(store));
+                }
                 Err(err) => {
                     tracing::warn!(
                         ?err,
@@ -132,6 +136,37 @@ impl JitHandle {
         }
         revmc::revm_evm::JitEvm::new(evm, self.backend.clone())
     }
+
+    /// Interval between JIT dispatch-cache refreshes.
+    const LOOKUP_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_millis(250);
+
+    /// Clears the EVM's JIT dispatch cache when due, so contracts compiled after their first
+    /// execution on that EVM are adopted.
+    ///
+    /// revmc pins each code hash's first dispatch decision in a per-EVM cache
+    /// (`revmc::revm_evm::JitEvm::lookup_cache`): a contract first executed before its
+    /// compilation finished would stay interpreted for that EVM's lifetime. Reinstalling the
+    /// backend is the supported way to reset the cache; the next execution re-dispatches and
+    /// picks up the compiled program.
+    pub fn refresh_if_due<Input: crate::eth::executor::evm::types::EvmInput>(
+        &self,
+        evm: &mut crate::eth::executor::evm::Evm<Input>,
+        kind: EvmKind,
+        last_refresh: &mut std::time::Instant,
+    ) {
+        if matches!(kind, EvmKind::Inspect) {
+            // Inspections must always run the interpreter.
+            return;
+        }
+        if !self.backend.enabled() {
+            return;
+        }
+        if last_refresh.elapsed() < Self::LOOKUP_REFRESH_INTERVAL {
+            return;
+        }
+        *last_refresh = std::time::Instant::now();
+        evm.set_jit_backend(self.backend.clone());
+    }
 }
 
 #[cfg(not(feature = "revmc"))]
@@ -145,6 +180,39 @@ impl JitHandle {
     /// Returns the EVM unchanged (the `revmc` feature is disabled).
     pub fn wrap<DB: Database>(&self, evm: GeneralRevm<DB>, _kind: EvmKind) -> ExecutorRevm<DB> {
         evm
+    }
+
+    /// No-op (the `revmc` feature is disabled).
+    #[allow(clippy::unused_self, reason = "mirrors the revmc-enabled signature")]
+    pub fn refresh_if_due<Input: crate::eth::executor::evm::types::EvmInput>(
+        &self,
+        _evm: &mut crate::eth::executor::evm::Evm<Input>,
+        _kind: EvmKind,
+        _last_refresh: &mut std::time::Instant,
+    ) {
+    }
+}
+
+/// Warns when the tools AOT needs at runtime are missing from `PATH`.
+///
+/// AOT links each compiled contract into a shared library via `cc` (plus `ld.lld` on
+/// non-Apple platforms); without them every compilation fails and execution silently stays on
+/// the interpreter.
+#[cfg(feature = "revmc")]
+fn warn_if_linker_tools_missing() {
+    let cc = std::env::var_os("CC").unwrap_or_else(|| "cc".into());
+    let mut missing = Vec::new();
+    if std::process::Command::new(&cc).arg("--version").output().is_err() {
+        missing.push(cc.to_string_lossy().into_owned());
+    }
+    if !cfg!(target_vendor = "apple") && std::process::Command::new("ld.lld").arg("--version").output().is_err() {
+        missing.push("ld.lld".into());
+    }
+    if !missing.is_empty() {
+        tracing::warn!(
+            ?missing,
+            "revmc AOT links artifacts at runtime with these tools; every compilation will fail until they are installed"
+        );
     }
 }
 

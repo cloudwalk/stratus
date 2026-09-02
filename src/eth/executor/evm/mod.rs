@@ -106,6 +106,15 @@ impl<Input: EvmInput> Evm<Input> {
                 (execution, metrics)
             })
     }
+
+    /// Re-installs the JIT backend, clearing the per-EVM code dispatch cache.
+    ///
+    /// revmc caches each code hash's first dispatch decision per EVM instance; reinstalling
+    /// the backend is the supported way to reset it so newly compiled code is adopted.
+    #[cfg(feature = "revmc")]
+    pub(crate) fn set_jit_backend(&mut self, backend: revmc::runtime::JitBackend) {
+        self.evm.set_backend(backend);
+    }
 }
 
 impl Evm<TransactionExecutionInput> {
