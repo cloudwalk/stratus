@@ -51,6 +51,9 @@ jobs:
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
+      - name: Install LLVM 22
+        uses: ./.github/actions/install-llvm-22
+
       - name: Set up dependencies
         uses: taiki-e/install-action@cfdb446e391c69574ebc316dfb7d7849ec12b940 # v2.68.8
         with:
