@@ -411,14 +411,14 @@ impl StratusStorage {
             }
         };
 
-        // Cache non-historical reads according to the point-in-time and where the value came from.
-        match (kind, found_at) {
-            // Reads that held the transient state lock and were found at perm can be cached
-            (ExecutionKind::CallLatest(_) | ExecutionKind::CallPast(_), FoundAt::PermLatest) => {
-                E::cache_latest_if_missing(self, key, value.clone());
-            }
-            _ => {}
+        // Reads that held the transient state lock and were found at perm can be cached
+        if matches!(
+            (kind, found_at),
+            (ExecutionKind::CallLatest(_) | ExecutionKind::CallPast(_), FoundAt::PermLatest)
+        ) {
+            E::cache_latest_if_missing(self, key, value.clone());
         }
+
         Ok(value)
     }
 
@@ -828,7 +828,7 @@ impl StratusStorage {
             BlockFilter::Hash(_) | BlockFilter::Timestamp(_) => {
                 let number = self.read_block(block_filter)?.map(|b| b.number()).unwrap_or_default(); // should err
                 Ok(number)
-            },
+            }
             BlockFilter::Earliest => Ok(BlockNumber::ZERO),
             BlockFilter::Number(number) => Ok(number),
         }

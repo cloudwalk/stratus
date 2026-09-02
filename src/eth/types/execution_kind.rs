@@ -20,7 +20,7 @@ impl ExecutionKind {
     pub fn call_from_pit(pit: PointInTime, block_number: BlockNumber) -> Self {
         match pit {
             PointInTime::Latest | PointInTime::Pending => Self::CallLatest(block_number),
-            PointInTime::Past(number) => Self::CallPast(number)
+            PointInTime::Past(number) => Self::CallPast(number),
         }
     }
 }

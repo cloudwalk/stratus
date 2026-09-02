@@ -178,6 +178,7 @@ impl RocksPermanentStorage {
             })
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn read_slots(&self, slot_keys: Vec<(Address, SlotIndex)>) -> anyhow::Result<Vec<((Address, SlotIndex), SlotValue)>, StorageError> {
         self.state.read_slots(slot_keys).map_err(|err| StorageError::RocksError { err })
     }

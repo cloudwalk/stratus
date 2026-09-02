@@ -101,7 +101,7 @@ impl Semaphore {
         }
         *permits -= 1;
         drop(permits);
-        Permit { sem: self.sem.clone() }
+        Permit { sem: Arc::clone(&self.sem) }
     }
 }
 
@@ -502,10 +502,13 @@ impl Executor {
             }
             ExecutionKind::CallLatest(block_number) | ExecutionKind::CallPast(block_number) => {
                 let Some(block) = self.storage.read_block(crate::eth::rpc::BlockFilter::Number(block_number))? else {
-                    return Err(RpcError::BlockFilterInvalid { filter: crate::eth::rpc::BlockFilter::Number(block_number) }.into());
+                    return Err(RpcError::BlockFilterInvalid {
+                        filter: crate::eth::rpc::BlockFilter::Number(block_number),
+                    }
+                    .into());
                 };
                 CallExecutionInput::from_mined_block(call_input, block.header, kind)
-            },
+            }
             ExecutionKind::RPC(pit) => {
                 let Some(block) = self.storage.read_block(pit.into())? else {
                     return Err(RpcError::BlockFilterInvalid { filter: pit.into() }.into());
