@@ -4,9 +4,9 @@ use async_trait::async_trait;
 
 use crate::eth::executor::State;
 use crate::eth::executor::types::state::Incomplete;
+use crate::eth::follower::importer::BlockchainClient;
 use crate::eth::follower::importer::fetch_with_retry;
 use crate::eth::follower::importer::fetchers::DataFetcher;
-use crate::eth::rpc::BlockchainClient;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::types::Block;

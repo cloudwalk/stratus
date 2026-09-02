@@ -4,7 +4,7 @@ use strum::AsRefStr;
 
 use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::Executor;
-use crate::eth::rpc::BlockchainClient;
+use crate::eth::follower::importer::BlockchainClient;
 use crate::eth::types::Bytes;
 use crate::eth::types::ExecutionKind;
 use crate::eth::types::Hash;
