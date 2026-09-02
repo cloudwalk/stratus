@@ -349,13 +349,12 @@ impl RocksStorageState {
     }
 
     pub fn read_slots(&self, slot_keys: Vec<(Address, SlotIndex)>) -> Result<Vec<((Address, SlotIndex), SlotValue)>> {
-        self.account_slots
-            .multi_get(slot_keys.into_iter().map(|(address, index)| (address.into(), index.into())))
-            .map(|vec| {
-                vec.into_iter()
-                    .map(|((address, index), slot_value)| ((address.into(), index.into()), slot_value.into_inner().into()))
-                    .collect_vec()
-            })
+        Ok(self
+            .account_slots
+            .multi_get(slot_keys.into_iter().map(|(address, index)| (address.into(), index.into())))?
+            .into_iter()
+            .map(|((address, index), slot_value)| ((address.into(), index.into()), slot_value.into_inner().into()))
+            .collect_vec())
     }
 
     pub fn read_account(&self, address: Address, point: &MinedPointInTime<'_>) -> Result<Option<Account>> {
@@ -392,9 +391,12 @@ impl RocksStorageState {
     }
 
     pub fn read_accounts(&self, addresses: Vec<Address>) -> Result<Vec<(Address, Account)>> {
-        self.accounts
-            .multi_get(addresses.into_iter().map_into())
-            .map(|vec| vec.into_iter().map(|(addr, acc)| (addr.into(), acc.to_account(addr.into()))).collect_vec())
+        Ok(self
+            .accounts
+            .multi_get(addresses.into_iter().map_into())?
+            .into_iter()
+            .map(|(addr, acc)| (addr.into(), acc.to_account(addr.into())))
+            .collect_vec())
     }
 
     pub fn read_block(&self, selection: BlockFilter) -> Result<Option<Block>> {
@@ -411,12 +413,13 @@ impl RocksStorageState {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&block_number.into()),
-            BlockFilter::Hash(block_hash) =>
+            BlockFilter::Hash(block_hash) => {
                 if let Some(block_number) = self.blocks_by_hash.get(&block_hash.into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
-                },
+                }
+            }
             BlockFilter::Timestamp(timestamp) => self
                 .blocks_by_timestamp
                 .iter_from(timestamp.timestamp.into(), timestamp.mode.into())?
