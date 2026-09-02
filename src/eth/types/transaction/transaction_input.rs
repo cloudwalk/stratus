@@ -788,7 +788,7 @@ mod tests {
             .recover_address_from_prehash(&signing_hash)
             .expect("test signature should be recoverable");
 
-        let signed = Signed::new_unchecked(tx, signature, Default::default());
+        let signed = Signed::new_unchecked(tx, signature, B256::default());
 
         let mut raw_bytes = Vec::new();
         signed.encode_2718(&mut raw_bytes);
@@ -826,7 +826,7 @@ mod tests {
             .recover_address_from_prehash(&signing_hash)
             .expect("test signature should be recoverable");
 
-        let signed = Signed::new_unchecked(tx, signature, Default::default());
+        let signed = Signed::new_unchecked(tx, signature, B256::default());
 
         let mut raw_bytes = Vec::new();
         signed.encode_2718(&mut raw_bytes);
@@ -856,7 +856,7 @@ mod tests {
             to: TxKind::Call(AlloyAddress::default()),
             value: U256::from(100),
             input: AlloyBytes::new(),
-            access_list: Default::default(),
+            access_list: AccessList::default(),
         };
         assert_direct_decode(tx, 1);
     }
@@ -872,7 +872,7 @@ mod tests {
             to: TxKind::Call(AlloyAddress::default()),
             value: U256::from(100),
             input: AlloyBytes::new(),
-            access_list: Default::default(),
+            access_list: AccessList::default(),
         };
         assert_direct_decode(tx, 2);
     }
@@ -888,7 +888,7 @@ mod tests {
             to: AlloyAddress::default(),
             value: U256::from(100),
             input: AlloyBytes::new(),
-            access_list: Default::default(),
+            access_list: AccessList::default(),
             blob_versioned_hashes: Vec::new(),
             max_fee_per_blob_gas: 0,
         };
@@ -906,7 +906,7 @@ mod tests {
             to: AlloyAddress::default(),
             value: U256::from(100),
             input: AlloyBytes::new(),
-            access_list: Default::default(),
+            access_list: AccessList::default(),
             authorization_list: Vec::new(),
         };
         assert_direct_decode(tx, 4);
