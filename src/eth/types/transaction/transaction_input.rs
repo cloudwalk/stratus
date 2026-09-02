@@ -8,7 +8,6 @@ use alloy_consensus::TxEip7702;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
 use alloy_consensus::transaction::Recovered;
-use alloy_primitives::keccak256;
 use alloy_primitives::Address as AlloyAddress;
 use alloy_primitives::B256;
 use alloy_primitives::Bytes as AlloyBytes;
@@ -16,11 +15,12 @@ use alloy_primitives::Signature as AlloySignature;
 use alloy_primitives::TxKind;
 use alloy_primitives::U64;
 use alloy_primitives::U256;
-use alloy_rpc_types_eth::AccessList;
+use alloy_primitives::keccak256;
 use alloy_rlp::Decodable as RlpDecodable;
 use alloy_rlp::Encodable as RlpEncodable;
 use alloy_rlp::Header as RlpHeader;
 use alloy_rlp::length_of_length;
+use alloy_rpc_types_eth::AccessList;
 use anyhow::Context;
 use display_json::DebugAsJson;
 
@@ -233,7 +233,7 @@ impl TransactionInput {
                     &value,
                     &input.as_slice(),
                     &AccessList::default(),
-                    &0u128,          // max_fee_per_blob_gas
+                    &0u128,              // max_fee_per_blob_gas
                     &Vec::<B256>::new(), // blob_versioned_hashes
                 ]);
                 let mut out = Vec::with_capacity(1 + encoded.len());
@@ -265,27 +265,10 @@ impl TransactionInput {
             // Legacy (default)
             _ => {
                 if self.execution_info.chain_id.is_some() {
-                    let encoded = Self::encode_rlp_list(&[
-                        &nonce,
-                        &gas_price,
-                        &gas_limit,
-                        &to.as_slice(),
-                        &value,
-                        &input.as_slice(),
-                        &chain_id,
-                        &0u8,
-                        &0u8,
-                    ]);
+                    let encoded = Self::encode_rlp_list(&[&nonce, &gas_price, &gas_limit, &to.as_slice(), &value, &input.as_slice(), &chain_id, &0u8, &0u8]);
                     B256::from(keccak256(encoded))
                 } else {
-                    let encoded = Self::encode_rlp_list(&[
-                        &nonce,
-                        &gas_price,
-                        &gas_limit,
-                        &to.as_slice(),
-                        &value,
-                        &input.as_slice(),
-                    ]);
+                    let encoded = Self::encode_rlp_list(&[&nonce, &gas_price, &gas_limit, &to.as_slice(), &value, &input.as_slice()]);
                     B256::from(keccak256(encoded))
                 }
             }
@@ -443,10 +426,7 @@ impl TransactionInput {
         let (chain_id, parity) = Self::decode_legacy_v(v)?;
 
         let mut tx = Self {
-            transaction_info: TransactionInfo {
-                tx_type: None,
-                hash,
-            },
+            transaction_info: TransactionInfo { tx_type: None, hash },
             execution_info: ExecutionInfo {
                 chain_id,
                 nonce: Nonce::from(nonce),
@@ -457,11 +437,7 @@ impl TransactionInput {
                 gas_limit: Gas::from(gas_limit),
                 gas_price,
             },
-            signature: Signature {
-                v: U64::from(parity),
-                r,
-                s,
-            },
+            signature: Signature { v: U64::from(parity), r, s },
         };
 
         let signer = tx.recover_signer_address()?;
@@ -491,7 +467,8 @@ impl TransactionInput {
         let to = Self::decode_to(&to_bytes)?;
         let hash = Hash::from(keccak256(raw_bytes));
 
-        Self::build_legacy(nonce, gas_price, gas_limit, to, value, input.to_vec(), v, r, s, hash).map_err(|_| alloy_rlp::Error::Custom("failed to recover legacy signer"))
+        Self::build_legacy(nonce, gas_price, gas_limit, to, value, input.to_vec(), v, r, s, hash)
+            .map_err(|_| alloy_rlp::Error::Custom("failed to recover legacy signer"))
     }
 
     /// Decodes a typed transaction (EIP-2718) from raw bytes.
@@ -606,14 +583,12 @@ impl TransactionInput {
                 gas_limit: Gas::from(gas_limit),
                 gas_price,
             },
-            signature: Signature {
-                v: U64::from(v),
-                r,
-                s,
-            },
+            signature: Signature { v: U64::from(v), r, s },
         };
 
-        let signer = tx.recover_signer_address().map_err(|_| alloy_rlp::Error::Custom("failed to recover typed signer"))?;
+        let signer = tx
+            .recover_signer_address()
+            .map_err(|_| alloy_rlp::Error::Custom("failed to recover typed signer"))?;
         tx.execution_info.signer = Signer::Recovered(signer);
 
         Ok(tx)
@@ -757,13 +732,13 @@ mod tests {
     use alloy_consensus::TxEip7702;
     use alloy_consensus::TxLegacy;
     use alloy_eips::eip2718::Encodable2718;
-    use alloy_primitives::keccak256;
     use alloy_primitives::Address as AlloyAddress;
     use alloy_primitives::Bytes as AlloyBytes;
     use alloy_primitives::Signature as AlloySignature;
     use alloy_primitives::TxKind;
     use alloy_primitives::U64;
     use alloy_primitives::U256;
+    use alloy_primitives::keccak256;
 
     use super::*;
 
@@ -805,13 +780,13 @@ mod tests {
     /// `TransactionInput`, comparing the recovered fields and signer with the source transaction.
     fn assert_direct_decode<T>(tx: T, tx_type: u8)
     where
-        T: alloy_consensus::SignableTransaction<AlloySignature>
-            + alloy_consensus::transaction::RlpEcdsaEncodableTx
-            + alloy_eips::Typed2718,
+        T: alloy_consensus::SignableTransaction<AlloySignature> + alloy_consensus::transaction::RlpEcdsaEncodableTx + alloy_eips::Typed2718,
     {
         let signature = AlloySignature::test_signature();
         let signing_hash = tx.signature_hash();
-        let expected_signer = signature.recover_address_from_prehash(&signing_hash).expect("test signature should be recoverable");
+        let expected_signer = signature
+            .recover_address_from_prehash(&signing_hash)
+            .expect("test signature should be recoverable");
 
         let signed = Signed::new_unchecked(tx, signature, Default::default());
 
@@ -847,7 +822,9 @@ mod tests {
 
         let signature = AlloySignature::test_signature();
         let signing_hash = tx.signature_hash();
-        let expected_signer = signature.recover_address_from_prehash(&signing_hash).expect("test signature should be recoverable");
+        let expected_signer = signature
+            .recover_address_from_prehash(&signing_hash)
+            .expect("test signature should be recoverable");
 
         let signed = Signed::new_unchecked(tx, signature, Default::default());
 
