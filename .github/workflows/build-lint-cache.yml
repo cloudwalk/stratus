@@ -56,6 +56,9 @@ jobs:
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
+      - name: Install LLVM 22
+        uses: ./.github/actions/install-llvm-22
+
       - name: Prime lint cache
         # Mirrors the clippy invocation in `just lint-check` (justfile_helpers: _lint) so the
         # fingerprints produced here are reused by the PR lint job that restores this cache.
