@@ -71,7 +71,7 @@ pub trait Consensus: Send + Sync {
 
         tracing::info!(%tx_hash, "forwarding transaction to leader");
 
-        let access_list = self
+        let access_list = self // make this configurable (?)
             .get_executor()
             .execute_local_call::<AccessListOutput>(tx.into(), ExecutionKind::AccessList)?;
 

@@ -16,7 +16,6 @@ pub use middleware::RpcHttpMiddleware;
 pub use middleware::RpcMiddleware;
 use parser::next_rpc_param;
 use parser::next_rpc_param_or_default;
-use parser::parse_rpc_rlp;
 pub use server::Server;
 pub use subscriptions::RpcSubscriptions;
 pub use types::BlockFilter;

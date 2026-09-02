@@ -29,15 +29,14 @@ use crate::alias::JsonValue;
 use crate::eth::codegen;
 use crate::eth::codegen::ContractName;
 use crate::eth::codegen::SoliditySignature;
-use crate::eth::executor::AccessListOutput;
 use crate::eth::rpc::RpcClientApp;
+use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
 use crate::eth::rpc::middleware::multicall::MulticallInfo;
 use crate::eth::rpc::next_rpc_param;
-use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::parser::RpcExtensionsExt;
+use crate::eth::rpc::server::eth_send_raw_transaction;
 use crate::eth::types::Address;
-use crate::eth::types::Bytes;
 use crate::eth::types::CallInput;
 #[cfg(feature = "metrics")]
 use crate::eth::types::ErrorCode;
@@ -62,11 +61,15 @@ use crate::infra::tracing::new_cid;
 #[derive(Debug, Clone)]
 pub struct RpcMiddleware {
     service: Arc<RpcService>,
+    ctx: Arc<RpcContext>,
 }
 
 impl RpcMiddleware {
-    pub fn new(service: RpcService) -> Self {
-        Self { service: Arc::new(service) }
+    pub fn new(service: RpcService, ctx: Arc<RpcContext>) -> Self {
+        Self {
+            service: Arc::new(service),
+            ctx,
+        }
     }
 }
 
@@ -163,13 +166,24 @@ impl RpcServiceT for RpcMiddleware {
 
     fn call<'a>(&self, mut request: jsonrpsee::types::Request<'a>) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
         let request_type = request.extensions().get::<RequestType>().copied().unwrap_or_default();
+        let is_admin = request.extensions.is_admin();
+        let client = request.extensions.rpc_client().to_owned();
+        let request_id = request.id();
+        let method = request.method_name().to_owned();
+        let request_params_str = to_json_string(&request.params);
+        #[cfg(feature = "metrics")]
+        if let Some(guard) = request.extensions.get::<ConnectionGuard>() {
+            let active = guard.max_connections() - guard.available_connections();
+            metrics::set_rpc_requests_active(active as u64);
+        }
+
         let span = info_span!(
             parent: None,
             "rpc::request",
             cid = %new_cid(),
-            rpc_client = field::Empty,
-            rpc_id = field::Empty,
-            rpc_method = field::Empty,
+            rpc_client = %client,
+            rpc_id = %request_id,
+            rpc_method = %method,
             rpc_tx_hash = field::Empty,
             rpc_tx_from = field::Empty,
             rpc_tx_to = field::Empty,
@@ -182,78 +196,36 @@ impl RpcServiceT for RpcMiddleware {
         );
         let middleware_enter = span.enter();
 
-        // extract request data
-        let method = request.method_name().to_owned();
-        let mut tx = None;
-
-        let params_clone = request.params().clone();
-
-        if method == "eth_sendRawTransaction" {
-            let tx_data_result = next_rpc_param::<Bytes>(params_clone.sequence());
-
-            if let Ok((next_param, tx_data)) = tx_data_result {
-                let access_list = next_rpc_param::<Option<AccessListOutput>>(next_param)
-                    .map(|(_params, access_list)| access_list)
-                    .inspect_err(|err| tracing::warn!(?err, "failed to deserialize access list"))
-                    .ok()
-                    .flatten();
-                let decoded_tx_result = parse_rpc_rlp::<TransactionInput>(&tx_data);
-
-                if let Ok(decoded_tx) = decoded_tx_result {
-                    tx = TransactionTracingIdentifiers::from_raw_transaction(&decoded_tx).ok();
-
-                    request.extensions_mut().insert(tx_data);
-                    request.extensions_mut().insert(decoded_tx);
-                    request.extensions_mut().insert(access_list);
-                }
-            }
-        } else {
-            tx = match method.as_str() {
-                "eth_call" | "eth_estimateGas" => TransactionTracingIdentifiers::from_call(params_clone.clone()).ok(),
-                "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TransactionTracingIdentifiers::from_transaction_query(params_clone.clone()).ok(),
-                _ => None,
-            };
-        }
-
-        let is_admin = request.extensions.is_admin();
-
-        let client = if let Some(tx_client) = tx.as_ref().and_then(|tx| tx.client.as_ref()) {
-            request.extensions_mut().insert(tx_client.clone());
-            tx_client
-        } else {
-            request.extensions.rpc_client()
-        }
-        .to_owned();
-
         // trace event
         Span::with(|s| {
-            s.rec_str("rpc_id", &request.id);
+            s.rec_str("rpc_id", &request_id);
             s.rec_str("rpc_client", &client);
             s.rec_str("rpc_method", &method);
-            if let Some(ref tx) = tx {
-                tx.record_span(s);
-            }
         });
 
-        let tx_ref = tx.as_ref();
-        let multicall_ref = tx_ref.and_then(|tx| tx.multicall.as_ref());
+        let (future, tracing_identifiers) = if method == "eth_sendRawTransaction" {
+            drop(middleware_enter);
+            eth_send_raw_transaction(request, Arc::clone(&self.ctx), span).unwrap()
+        } else {
+            let tracing_identifiers = match method.as_str() {
+                "eth_call" | "eth_estimateGas" => TransactionTracingIdentifiers::from_call(request.params()).ok(),
+                "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TransactionTracingIdentifiers::from_transaction_query(request.params()).ok(),
+                _ => None,
+            };
+            Span::with(|s| {
+                if let Some(ref tx) = tracing_identifiers {
+                    tx.record_span(s);
+                }
+            });
+            // make span available to rpc-server
+            drop(middleware_enter);
+            request.extensions_mut().insert(span);
+            let future: BoxFuture<'a, MethodResponse> = Box::pin(self.service.call(request));
+            (future, tracing_identifiers)
+        };
 
-        tracing::info!(
-            rpc_client = %client,
-            rpc_id = %request.id,
-            rpc_method = %method,
-            rpc_params = %to_json_string(&request.params),
-            rpc_tx_hash = %tx_ref.and_then(|tx| tx.hash).or_empty(),
-            rpc_tx_contract = %tx_ref.map(|tx| tx.contract).or_empty(),
-            rpc_tx_function = %tx_ref.map(|tx| tx.function).or_empty(),
-            rpc_tx_from = %tx_ref.and_then(|tx| tx.from).or_empty(),
-            rpc_tx_to = %tx_ref.and_then(|tx| tx.to).or_empty(),
-            rpc_tx_multicall_total = %multicall_ref.map(|multicall| multicall.total_subcalls).or_empty(),
-            rpc_tx_multicall_logged = %multicall_ref.map(|multicall| multicall.logged_subcalls_count()).or_empty(),
-            rpc_tx_multicall_subcalls = %multicall_ref.map(|multicall| to_json_string(&multicall.logged_subcalls())).or_empty(),
-            is_admin = %is_admin,
-            "rpc request"
-        );
+        let tx_ref = tracing_identifiers.as_ref();
+        let multicall_ref = tx_ref.and_then(|tx| tx.multicall.as_ref());
 
         // track metrics
         #[cfg(feature = "metrics")]
@@ -266,26 +238,33 @@ impl RpcServiceT for RpcMiddleware {
             {
                 multicall.record_rpc_requests_started(&client, &method, request_type);
             }
-
-            // active requests
-            if let Some(guard) = request.extensions.get::<ConnectionGuard>() {
-                let active = guard.max_connections() - guard.available_connections();
-                metrics::set_rpc_requests_active(active as u64);
-            }
         }
 
-        // make span available to rpc-server
-        drop(middleware_enter);
-        request.extensions_mut().insert(span);
+        tracing::info!(
+            rpc_client = %client,
+            rpc_id = %request_id,
+            rpc_method = %method,
+            rpc_params = %request_params_str,
+            rpc_tx_hash = %tx_ref.and_then(|tx| tx.hash).or_empty(),
+            rpc_tx_contract = %tx_ref.map(|tx| tx.contract).or_empty(),
+            rpc_tx_function = %tx_ref.map(|tx| tx.function).or_empty(),
+            rpc_tx_from = %tx_ref.and_then(|tx| tx.from).or_empty(),
+            rpc_tx_to = %tx_ref.and_then(|tx| tx.to).or_empty(),
+            rpc_tx_multicall_total = %multicall_ref.map(|multicall| multicall.total_subcalls).or_empty(),
+            rpc_tx_multicall_logged = %multicall_ref.map(|multicall| multicall.logged_subcalls_count()).or_empty(),
+            rpc_tx_multicall_subcalls = %multicall_ref.map(|multicall| to_json_string(&multicall.logged_subcalls())).or_empty(),
+            is_admin = %is_admin,
+            "rpc request"
+        );
 
-        let id = request.id.to_string();
+        let id = request_id.to_string();
 
-        let future_response = reject_client(&client, request.id.clone()).unwrap_or(Box::pin(self.service.call(request)));
+        let future_response = reject_client(&client, request_id.clone()).unwrap_or(future);
         RpcResponse {
             client,
             id,
             method: method.to_string(),
-            tx,
+            tx: tracing_identifiers,
             start: Instant::now(),
             future_response,
         }
@@ -433,8 +412,7 @@ impl Future for RpcResponse<'_> {
 // Helpers
 // -----------------------------------------------------------------------------
 
-struct TransactionTracingIdentifiers {
-    pub client: Option<RpcClientApp>,
+pub struct TransactionTracingIdentifiers {
     pub hash: Option<Hash>,
     pub contract: ContractName,
     pub function: SoliditySignature,
@@ -446,16 +424,15 @@ struct TransactionTracingIdentifiers {
 
 impl TransactionTracingIdentifiers {
     /// eth_sendRawTransaction
-    fn from_raw_transaction(decoded_tx: &TransactionInput) -> anyhow::Result<Self> {
+    pub fn from_transaction_input(input: &TransactionInput) -> anyhow::Result<Self> {
         Ok(Self {
-            client: None,
-            hash: Some(decoded_tx.transaction_info.hash),
-            contract: codegen::contract_name(&decoded_tx.execution_info.to),
-            function: codegen::function_sig(&decoded_tx.execution_info.input),
-            from: decoded_tx.execution_info.signer.address(),
-            to: decoded_tx.execution_info.to,
-            nonce: Some(decoded_tx.execution_info.nonce),
-            multicall: MulticallInfo::decode_opt(decoded_tx.execution_info.to, &decoded_tx.execution_info.input),
+            hash: Some(input.transaction_info.hash),
+            contract: codegen::contract_name(&input.execution_info.to),
+            function: codegen::function_sig(&input.execution_info.input),
+            from: input.execution_info.signer.address(),
+            to: input.execution_info.to,
+            nonce: Some(input.execution_info.nonce),
+            multicall: MulticallInfo::decode_opt(input.execution_info.to, &input.execution_info.input),
         })
     }
 
@@ -463,7 +440,6 @@ impl TransactionTracingIdentifiers {
     fn from_call(params: Params) -> anyhow::Result<Self> {
         let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
         Ok(Self {
-            client: None,
             hash: None,
             contract: codegen::contract_name(&call.to),
             function: codegen::function_sig(&call.data),
@@ -478,7 +454,6 @@ impl TransactionTracingIdentifiers {
     fn from_transaction_query(params: Params) -> anyhow::Result<Self> {
         let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
         Ok(Self {
-            client: None,
             hash: Some(hash),
             contract: metrics::LABEL_MISSING,
             function: metrics::LABEL_MISSING,
