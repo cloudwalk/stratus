@@ -71,7 +71,10 @@ impl From<Account> for RevmAccountInfo {
             account_id: None,
             nonce: value.nonce.into(),
             balance: value.balance.into(),
-            code_hash: KECCAK_EMPTY,
+            // The code hash is the contract's identity: revm 43 propagates it into the frame's
+            // precomputed bytecode hash, and consumers dispatch on it (revmc JIT/AOT code cache,
+            // EXTCODEHASH). It must be the real keccak of the code, not the empty hash.
+            code_hash: value.bytecode.as_ref().map_or(KECCAK_EMPTY, Bytecode::hash_slow),
             code: value.bytecode,
         }
     }
