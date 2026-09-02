@@ -205,7 +205,14 @@ impl RpcServiceT for RpcMiddleware {
 
         let (future, tracing_identifiers) = if method == "eth_sendRawTransaction" {
             drop(middleware_enter);
-            eth_send_raw_transaction(request, Arc::clone(&self.ctx), span).unwrap()
+            match eth_send_raw_transaction(request, Arc::clone(&self.ctx), span) {
+                Ok(result) => result,
+                Err(err) => {
+                    tracing::warn!(?err, "failed to parse eth_sendRawTransaction request");
+                    let future: BoxFuture<'a, MethodResponse> = Box::pin(err.to_response_future(request_id.clone()));
+                    (future, None)
+                }
+            }
         } else {
             let tracing_identifiers = match method.as_str() {
                 "eth_call" | "eth_estimateGas" => TransactionTracingIdentifiers::from_call(request.params()).ok(),

@@ -1326,12 +1326,12 @@ pub fn eth_send_raw_transaction<'a>(
     mut request: Request<'a>,
     ctx: Arc<RpcContext>,
     span: Span,
-) -> Result<(BoxFuture<'a, MethodResponse>, Option<TransactionTracingIdentifiers>)> {
+) -> Result<(BoxFuture<'a, MethodResponse>, Option<TransactionTracingIdentifiers>), StratusError> {
     let enter = span.enter();
     let params = request.params();
     let id = request.id().into_owned();
     let (params, data) = next_rpc_param::<Bytes>(params.sequence())?;
-    let (_, access_list) = next_rpc_param::<Option<AccessListOutput>>(params)?;
+    let (_, access_list) = next_rpc_param_or_default::<Option<AccessListOutput>>(params)?;
     let input = parse_rpc_rlp::<TransactionInput>(&data)?;
     let tracing_identifiers = TransactionTracingIdentifiers::from_transaction_input(&input).ok();
 
