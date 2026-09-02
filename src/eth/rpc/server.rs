@@ -50,7 +50,6 @@ use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::CallExecutionOutput;
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorError;
-use crate::eth::executor::TransactionExecutionOutput;
 use crate::eth::follower::ConsensusError;
 use crate::eth::follower::ImporterError;
 use crate::eth::follower::consensus::Consensus;
@@ -429,6 +428,9 @@ async fn stratus_health(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> R
 
 #[cfg(feature = "dev")]
 fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    // make the reset exclusive with transaction execution, mining and commit, otherwise a concurrent mine can
+    // permanently desync the pending and mined block numbers
+    let _mining_locks = ctx.server.miner.lock_state_for_reset();
     ctx.server.storage.reset_to_genesis()?;
     Ok(to_json_value(true))
 }
@@ -1166,7 +1168,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     }
 }
 
-fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<TransactionExecutionOutput, StratusError> {
+fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<CallExecutionOutput, StratusError> {
     // parse params
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
     let (_, filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
@@ -1358,7 +1360,7 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
             }
         },
         NodeMode::Follower => match &ctx.server.read_importer() {
-            Some(importer) => match Handle::current().block_on(importer.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
+            Some(importer) => match Handle::current().block_on(importer.forward_to_leader(tx_hash, tx_data)) {
                 Ok(hash) => Ok(hex_data(hash)),
                 Err(e) => Err(e),
             },
