@@ -169,6 +169,44 @@ metrics! {
     gauge executor_workers_busy{pool}
 }
 
+// revmc JIT/AOT runtime statistics.
+//
+// revmc only exposes pull-based counters, so these are sampled every few seconds by a
+// dedicated reporter thread (see `spawn_metrics_reporter`) and exported as gauges.
+metrics! {
+    group: executor_jit,
+
+    "Number of contract executions that ran compiled (JIT/AOT) native code."
+    gauge executor_jit_lookup_hits{mode},
+
+    "Number of contract executions that fell back to the interpreter (no compiled code ready)."
+    gauge executor_jit_lookup_misses{mode},
+
+    "Total revmc compilations dispatched after contracts became hot."
+    gauge executor_jit_compilations_dispatched{mode},
+
+    "Total revmc compilations that succeeded."
+    gauge executor_jit_compilations_succeeded{mode},
+
+    "Total revmc compilations that failed."
+    gauge executor_jit_compilations_failed{mode},
+
+    "revmc compilation jobs currently in flight."
+    gauge executor_jit_compilations_pending{mode},
+
+    "Compiled contracts currently resident in the JIT code cache."
+    gauge executor_jit_resident_entries{mode},
+
+    "Compiled entries evicted from the JIT code cache (idle or budget)."
+    gauge executor_jit_evictions{mode},
+
+    "Hot-counter events dropped because the revmc event queue was full."
+    gauge executor_jit_events_dropped{mode},
+
+    "Bytes allocated by LLVM for executable JIT code sections."
+    gauge executor_jit_code_bytes{mode}
+}
+
 metrics! {
     group: rocks,
 

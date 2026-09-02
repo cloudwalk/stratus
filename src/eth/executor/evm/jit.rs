@@ -81,13 +81,45 @@ impl JitHandle {
         }
 
         match revmc::runtime::JitBackend::new(runtime) {
-            Ok(backend) => Self { backend },
+            Ok(backend) => {
+                let mode = if config.executor_jit_aot { "aot" } else { "jit" };
+                Self::spawn_metrics_reporter(backend.clone(), mode);
+                Self { backend }
+            }
             Err(err) => {
                 tracing::warn!(?err, "failed to create revmc JIT backend; falling back to the interpreter");
                 Self {
                     backend: revmc::runtime::JitBackend::disabled(),
                 }
             }
+        }
+    }
+
+    /// Periodically exports revmc runtime statistics as metrics.
+    ///
+    /// revmc only exposes pull-based counters, so a dedicated thread samples
+    /// [`revmc::runtime::JitBackend::stats`] every few seconds and sets gauges. The gauges hold
+    /// monotonic counter values (Prometheus `rate()` derives per-second rates from them).
+    fn spawn_metrics_reporter(backend: revmc::runtime::JitBackend, mode: &'static str) {
+        let spawned = std::thread::Builder::new().name("revmc-metrics".to_string()).spawn(move || {
+            use crate::infra::metrics;
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                let stats = backend.stats();
+                metrics::set_executor_jit_lookup_hits(stats.lookup_hits, mode);
+                metrics::set_executor_jit_lookup_misses(stats.lookup_misses, mode);
+                metrics::set_executor_jit_compilations_dispatched(stats.compilations_dispatched, mode);
+                metrics::set_executor_jit_compilations_succeeded(stats.compilations_succeeded, mode);
+                metrics::set_executor_jit_compilations_failed(stats.compilations_failed, mode);
+                metrics::set_executor_jit_compilations_pending(stats.pending_jobs, mode);
+                metrics::set_executor_jit_resident_entries(stats.resident_entries, mode);
+                metrics::set_executor_jit_evictions(stats.evictions, mode);
+                metrics::set_executor_jit_events_dropped(stats.events_dropped, mode);
+                metrics::set_executor_jit_code_bytes(stats.jit_code_bytes, mode);
+            }
+        });
+        if spawned.is_err() {
+            tracing::warn!("failed to spawn the revmc metrics reporter thread");
         }
     }
 
