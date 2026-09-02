@@ -38,12 +38,12 @@ pub struct ExecutorConfig {
 
     /// Enable revmc JIT compilation of hot contract bytecode. Requires the `revmc` cargo feature.
     #[cfg(feature = "revmc")]
-    #[arg(long = "executor-jit", env = "EXECUTOR_JIT", default_value = "false")]
+    #[arg(long = "executor-jit", env = "EXECUTOR_JIT", default_value = "true")]
     pub executor_jit: bool,
 
     /// Compile to AOT shared-library artifacts instead of in-memory JIT modules.
     #[cfg(feature = "revmc")]
-    #[arg(long = "executor-jit-aot", env = "EXECUTOR_JIT_AOT", default_value = "false")]
+    #[arg(long = "executor-jit-aot", env = "EXECUTOR_JIT_AOT", default_value = "true")]
     pub executor_jit_aot: bool,
 
     /// Directory where AOT-compiled artifacts are persisted so they survive restarts.
