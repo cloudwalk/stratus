@@ -293,11 +293,8 @@ impl Executor {
             s.rec_opt("tx_to", &tx.execution_info.to);
             s.rec_str("tx_nonce", &tx.execution_info.nonce);
         });
-        #[cfg(feature = "metrics")]
-        metrics::inc_executor_local_transaction_semaphore_waiting(1);
+
         let permit = self.locks.transaction_warmup.acquire();
-        #[cfg(feature = "metrics")]
-        metrics::dec_executor_local_transaction_semaphore_waiting(1);
 
         if let Some(access_list) = access_list {
             self.storage.load_access_list(access_list);
