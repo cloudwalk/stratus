@@ -34,6 +34,12 @@ fn main() {
     generate_contracts_structs();
     generate_signatures_structs();
     generate_client_scopes_matcher();
+
+    // Export the `__revmc_builtin_*` symbols required by JIT/AOT-compiled EVM bytecode.
+    // Only needed when the `revmc` feature is enabled.
+    if env::var_os("CARGO_FEATURE_REVMC").is_some() {
+        revmc_build::emit();
+    }
 }
 
 // -----------------------------------------------------------------------------

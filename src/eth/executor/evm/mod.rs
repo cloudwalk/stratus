@@ -1,3 +1,4 @@
+mod jit;
 mod session;
 pub mod types;
 mod util;
@@ -12,6 +13,7 @@ use alloy_rpc_types_trace::geth::GethDebugTracerType;
 use alloy_rpc_types_trace::geth::GethTrace;
 use alloy_rpc_types_trace::geth::NoopFrame;
 use anyhow::anyhow;
+pub use jit::JitHandle;
 use log::log_enabled;
 use revm::ExecuteCommitEvm;
 use revm::ExecuteEvm;
@@ -26,6 +28,7 @@ use revm_inspectors::tracing::TracingInspectorConfig;
 use revm_inspectors::tracing::js::JsInspector;
 use session::RevmSession;
 pub use types::EvmKind;
+pub use types::ExecutorRevm;
 pub use types::GeneralRevm;
 use util::default_trace;
 use util::enhance_trace_with_decoded_errors;
@@ -50,21 +53,22 @@ pub type RevmResultAndState = ExecResultAndState<RevmExecResult>;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Evm<Input: EvmInput> {
-    evm: GeneralRevm<RevmSession>,
+    evm: ExecutorRevm<RevmSession>,
     kind: EvmKind,
     _input_type: PhantomData<Input>,
 }
 
 impl<Input: EvmInput> Evm<Input> {
     /// Creates a new instance of the Evm.
-    pub fn new(storage: Arc<StratusStorage>, config: &ExecutorConfig, kind: EvmKind) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, config: &ExecutorConfig, kind: EvmKind, jit: JitHandle) -> Self {
         tracing::info!(?config, "creating revm");
 
         // configure revm
         let chain_id = config.executor_chain_id;
 
+        let evm = create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage), kind);
         Self {
-            evm: create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage), kind),
+            evm: jit.wrap(evm, kind),
             kind,
             _input_type: PhantomData,
         }
@@ -101,6 +105,15 @@ impl<Input: EvmInput> Evm<Input> {
                 };
                 (execution, metrics)
             })
+    }
+
+    /// Re-installs the JIT backend, clearing the per-EVM code dispatch cache.
+    ///
+    /// revmc caches each code hash's first dispatch decision per EVM instance; reinstalling
+    /// the backend is the supported way to reset it so newly compiled code is adopted.
+    #[cfg(feature = "revmc")]
+    pub(crate) fn set_jit_backend(&mut self, backend: revmc::runtime::JitBackend) {
+        self.evm.set_backend(backend);
     }
 }
 

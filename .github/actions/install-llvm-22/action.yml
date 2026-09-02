@@ -1,0 +1,14 @@
+name: Install LLVM 22
+description: Install LLVM 22 (llvm-config and static libraries) from apt.llvm.org, required by the revmc feature (llvm-sys crate)
+
+runs:
+  using: composite
+  steps:
+    - name: Install LLVM 22
+      shell: bash
+      run: |
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/llvm-snapshot.gpg
+        CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME}")"
+        echo "deb http://apt.llvm.org/${CODENAME}/ llvm-toolchain-${CODENAME}-22 main" | sudo tee /etc/apt/sources.list.d/llvm-22.list
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends llvm-22-dev libpolly-22-dev

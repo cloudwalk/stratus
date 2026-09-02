@@ -35,6 +35,33 @@ pub struct ExecutorConfig {
 
     #[arg(long = "executor-evm-spec", env = "EXECUTOR_EVM_SPEC", default_value = "Prague", value_parser = parse_evm_spec)]
     pub executor_evm_spec: SpecId,
+
+    /// Enable revmc JIT compilation of hot contract bytecode. Requires the `revmc` cargo feature.
+    #[cfg(feature = "revmc")]
+    #[arg(long = "executor-jit", env = "EXECUTOR_JIT", default_value = "true")]
+    pub executor_jit: bool,
+
+    /// Compile to AOT shared-library artifacts instead of in-memory JIT modules.
+    #[cfg(feature = "revmc")]
+    #[arg(long = "executor-jit-aot", env = "EXECUTOR_JIT_AOT", default_value = "true")]
+    pub executor_jit_aot: bool,
+
+    /// Compile synchronously on the first execution of each contract, instead of asynchronously
+    /// after it becomes hot. Guarantees compiled execution from the second execution on, at the
+    /// cost of a one-time compile stall on the first execution of every contract.
+    #[cfg(feature = "revmc")]
+    #[arg(long = "executor-jit-blocking", env = "EXECUTOR_JIT_BLOCKING", default_value = "false")]
+    pub executor_jit_blocking: bool,
+
+    /// Directory where AOT-compiled artifacts are persisted so they survive restarts.
+    #[cfg(feature = "revmc")]
+    #[arg(long = "executor-jit-store-path", env = "EXECUTOR_JIT_STORE_PATH", default_value = "/tmp/stratus-revmc-aot")]
+    pub executor_jit_store_path: std::path::PathBuf,
+
+    /// Number of executions before a contract is considered hot and compiled.
+    #[cfg(feature = "revmc")]
+    #[arg(long = "executor-jit-hot-threshold", env = "EXECUTOR_JIT_HOT_THRESHOLD")]
+    pub executor_jit_hot_threshold: Option<usize>,
 }
 
 fn parse_evm_spec(input: &str) -> anyhow::Result<SpecId> {

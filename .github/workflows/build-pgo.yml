@@ -52,6 +52,9 @@ jobs:
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
+      - name: Install LLVM 22
+        uses: ./.github/actions/install-llvm-22
+
       - name: Install cargo-pgo
         run: cargo install --vers 0.3.0 cargo-pgo
 

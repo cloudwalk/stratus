@@ -33,6 +33,15 @@ pub const GAS_MAX_LIMIT: u64 = 100_000_000;
 pub type ContextWithDB<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB, Journal<DB>>;
 pub type GeneralRevm<DB, I = ()> = RevmEvm<ContextWithDB<DB>, I, EthInstructions<EthInterpreter, ContextWithDB<DB>>, EthPrecompiles, EthFrame>;
 
+/// The revm instance used by the executor: a plain [`GeneralRevm`], or a JIT-dispatching
+/// wrapper over it when the `revmc` feature is enabled.
+#[cfg(feature = "revmc")]
+pub type ExecutorRevm<DB> = revmc::revm_evm::JitEvm<GeneralRevm<DB>>;
+/// The revm instance used by the executor: a plain [`GeneralRevm`], or a JIT-dispatching
+/// wrapper over it when the `revmc` feature is enabled.
+#[cfg(not(feature = "revmc"))]
+pub type ExecutorRevm<DB> = GeneralRevm<DB>;
+
 /// Classification of an EVM by the kind of execution it performs. Used to route
 /// work to the right EVM worker pool and as a metrics label.
 #[derive(Clone, Copy)]
