@@ -12,7 +12,6 @@ use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::bail;
 pub use config::ExecutorConfig;
-use derive_more::Deref;
 pub use evm::types::AccessListOutput;
 pub use evm::types::CallExecutionOutput;
 pub use evm::types::EvmExecutionMetrics;
@@ -20,7 +19,6 @@ pub use evm::types::EvmKind;
 pub use evm::types::TransactionExecutionInput;
 pub use evm::types::TransactionExecutionOutput;
 pub use evm::types::TransactionExecutionResult;
-use parking_lot::Condvar;
 use parking_lot::Mutex;
 use tracing::Span;
 use tracing::debug_span;
@@ -63,55 +61,11 @@ use crate::ext::to_json_string;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
 use crate::infra::tracing::SpanExt;
+use crate::utils::Semaphore;
 
 // -----------------------------------------------------------------------------
 // Executor
 // -----------------------------------------------------------------------------
-
-#[derive(Deref, Default)]
-struct Semaphore {
-    #[deref]
-    sem: Arc<SemaphoreInner>,
-}
-
-#[derive(Default)]
-struct SemaphoreInner {
-    permits: Mutex<usize>,
-    cvar: Condvar,
-}
-
-struct Permit {
-    sem: Arc<SemaphoreInner>,
-}
-
-impl Semaphore {
-    fn new(permits: usize) -> Self {
-        Self {
-            sem: Arc::new(SemaphoreInner {
-                permits: Mutex::new(permits),
-                cvar: Condvar::new(),
-            }),
-        }
-    }
-
-    fn acquire(&self) -> Permit {
-        let mut permits = self.permits.lock();
-        while *permits == 0 {
-            self.cvar.wait(&mut permits);
-        }
-        *permits -= 1;
-        drop(permits);
-        Permit { sem: Arc::clone(&self.sem) }
-    }
-}
-
-impl Drop for Permit {
-    fn drop(&mut self) {
-        let mut permits = self.sem.permits.lock();
-        *permits += 1;
-        self.sem.cvar.notify_one();
-    }
-}
 
 /// Locks used for local execution.
 #[derive(Default)]
@@ -339,10 +293,12 @@ impl Executor {
             s.rec_opt("tx_to", &tx.execution_info.to);
             s.rec_str("tx_nonce", &tx.execution_info.nonce);
         });
-
-        metrics::inc_executor_local_transaction_semaphore_waiting(1);
         #[cfg(feature = "metrics")]
+        metrics::inc_executor_local_transaction_semaphore_waiting(1);
         let permit = self.locks.transaction_warmup.acquire();
+        #[cfg(feature = "metrics")]
+        metrics::dec_executor_local_transaction_semaphore_waiting(1);
+
         if let Some(access_list) = access_list {
             self.storage.load_access_list(access_list);
         }
@@ -353,15 +309,13 @@ impl Executor {
         // Executes transactions serially:
         // * Uses a Mutex, so a new transactions starts executing only after the previous one is executed and persisted.
         // * Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.
+        #[cfg(feature = "metrics")]
         metrics::inc_executor_local_transaction_lock_waiting(1);
         let transaction_lock = self.locks.transaction.lock();
-        drop(permit);
-        metrics::dec_executor_local_transaction_semaphore_waiting(1);
-        #[cfg(feature = "metrics")]
-        metrics::dec_executor_local_transaction_lock_waiting(1);
+        let start = metrics::now();
 
         #[cfg(feature = "metrics")]
-        let start = metrics::now();
+        metrics::dec_executor_local_transaction_lock_waiting(1);
 
         // execute transaction
         let tx_execution = self.execute_local_transaction_attempts(tx, INFINITE_ATTEMPTS);
@@ -370,6 +324,7 @@ impl Executor {
         let execution_elapsed = start.elapsed();
 
         drop(transaction_lock);
+        drop(permit);
 
         #[cfg(feature = "metrics")]
         metrics::inc_executor_local_transaction(execution_elapsed, tx_execution.is_ok(), contract, function);
@@ -465,10 +420,6 @@ impl Executor {
     }
 
     /// Executes a read-only call in the local EVM, without persisting state changes.
-    ///
-    /// When `skip_transient_lock` is set, storage reads do not acquire the transient state lock.
-    /// Only meant for access-list computation, where only the set of touched accounts/slots
-    /// matters and not their values, so the call does not have to wait for a block being saved.
     #[tracing::instrument(name = "executor::local_call", skip_all, fields(from, to))]
     pub fn execute_local_call<Output>(&self, call_input: CallInput, kind: ExecutionKind) -> Result<Output, StratusError>
     where
@@ -518,7 +469,7 @@ impl Executor {
         };
 
         let evm_route = match point_in_time {
-            PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input), // route using execution kind rather than pit
+            PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input), // // route using execution kind rather than pit
             PointInTime::Past(_) => EvmRoute::CallPast(evm_input),
         };
         let evm_result = self.evms.execute::<Output>(evm_route);
