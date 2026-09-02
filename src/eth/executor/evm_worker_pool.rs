@@ -56,12 +56,17 @@ impl EvmWorkerPool {
             jit: JitHandle,
         ) {
             let mut evm = Evm::new(Arc::clone(&storage), &config, kind, jit.clone());
+            let mut last_jit_refresh = std::time::Instant::now();
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
                 if GlobalState::is_shutdown_warn(task_name) {
                     return;
                 }
+
+                // adopt contracts compiled after their first execution: revmc pins each code
+                // hash's first dispatch decision, so the dispatch cache must reset periodically
+                jit.refresh_if_due(&mut evm, kind, &mut last_jit_refresh);
 
                 let _guard = kind.mark_executor_pool_busy();
                 if let Err(StratusError::Executor(ExecutorError::Panic { err: panic_err })) = task.execute(&mut evm) {

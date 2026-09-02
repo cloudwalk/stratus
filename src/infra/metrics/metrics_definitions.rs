@@ -176,10 +176,10 @@ metrics! {
 metrics! {
     group: executor_jit,
 
-    "Number of contract executions that ran compiled (JIT/AOT) native code."
+    "Dispatches that found compiled code. Counted once per code hash per EVM (decisions are cached and periodically refreshed), not once per execution."
     gauge executor_jit_lookup_hits{mode},
 
-    "Number of contract executions that fell back to the interpreter (no compiled code ready)."
+    "Dispatches with no compiled code ready yet (warmup or failed compilation). Counted once per code hash per EVM, not once per execution."
     gauge executor_jit_lookup_misses{mode},
 
     "Total revmc compilations dispatched after contracts became hot."
