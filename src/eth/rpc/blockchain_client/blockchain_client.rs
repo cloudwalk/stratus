@@ -21,13 +21,10 @@ use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::ExecutorError;
-use crate::eth::rpc::BlockFilter;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::types::Address;
 use crate::eth::types::BlockNumber;
-use crate::eth::types::Bytes;
-use crate::eth::types::CallInput;
 use crate::eth::types::ExternalBlock;
 use crate::eth::types::ExternalBlockWithReceipts;
 use crate::eth::types::ExternalReceipt;
@@ -299,27 +296,6 @@ impl BlockchainClient {
             Err(ClientError::Call(response)) => Err(ExecutorError::LeaderFailed(response.into_owned()).into()),
             Err(e) => {
                 tracing::error!(reason = ?e, "failed to send raw transaction to leader");
-                Err(ExecutorError::ForwardToLeaderFailed.into())
-            }
-        }
-    }
-
-    /// Forwards an `eth_call` to the leader and returns the executed output.
-    ///
-    /// The current machine name is sent as the `x-client` header on every request (see `client_headers`),
-    /// so the leader attributes the call to this node automatically.
-    pub async fn call_to_leader(&self, call: CallInput, filter: BlockFilter) -> Result<Bytes, StratusError> {
-        tracing::debug!("forwarding eth_call to leader");
-
-        let call = to_json_value(call);
-        let filter = to_json_value(filter.to_string());
-        let result = self.http.request::<Bytes, _>("eth_call", [call, filter]).await;
-
-        match result {
-            Ok(output) => Ok(output),
-            Err(ClientError::Call(response)) => Err(ExecutorError::LeaderFailed(response.into_owned()).into()),
-            Err(e) => {
-                tracing::error!(reason = ?e, "failed to forward eth_call to leader");
                 Err(ExecutorError::ForwardToLeaderFailed.into())
             }
         }
