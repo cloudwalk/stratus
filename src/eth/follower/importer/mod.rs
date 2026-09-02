@@ -12,12 +12,12 @@ use std::time::Duration;
 use anyhow::bail;
 pub use importer_config::ImporterConfig;
 pub use importer_supervisor::ImporterConsensus;
+pub use importers::BlockchainClient;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 use tracing::Span;
 
 use crate::GlobalState;
-use crate::eth::rpc::BlockchainClient;
 use crate::eth::types::Block;
 use crate::eth::types::BlockNumber;
 use crate::ext::DisplayExt;
@@ -270,6 +270,7 @@ mod tests {
 
     use hash_hasher::HashBuildHasher;
 
+    use super::BlockchainClient;
     use crate::eth::executor::ExecutionResult;
     use crate::eth::executor::State;
     use crate::eth::executor::TransactionExecution;
@@ -284,7 +285,6 @@ mod tests {
     use crate::eth::follower::importer::importers::replication::ReplicationWorker;
     use crate::eth::miner::Miner;
     use crate::eth::miner::MinerMode;
-    use crate::eth::rpc::BlockchainClient;
     use crate::eth::storage::ExecutionKind;
     use crate::eth::storage::StratusStorage;
     use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
