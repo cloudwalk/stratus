@@ -8,6 +8,7 @@ use alloy_consensus::TxEip7702;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
 use alloy_consensus::transaction::Recovered;
+use alloy_eips::eip7702::SignedAuthorization;
 use alloy_primitives::Address as AlloyAddress;
 use alloy_primitives::B256;
 use alloy_primitives::Bytes as AlloyBytes;
@@ -254,7 +255,7 @@ impl TransactionInput {
                     &value,
                     &input.as_slice(),
                     &AccessList::default(),
-                    &Vec::<u8>::new(), // authorization list placeholder
+                    &Vec::<SignedAuthorization>::new(), // authorization list placeholder
                 ]);
                 let mut out = Vec::with_capacity(1 + encoded.len());
                 out.push(0x04);
@@ -263,15 +264,14 @@ impl TransactionInput {
             }
 
             // Legacy (default)
-            _ => {
+            _ =>
                 if self.execution_info.chain_id.is_some() {
                     let encoded = Self::encode_rlp_list(&[&nonce, &gas_price, &gas_limit, &to.as_slice(), &value, &input.as_slice(), &chain_id, &0u8, &0u8]);
                     B256::from(keccak256(encoded))
                 } else {
                     let encoded = Self::encode_rlp_list(&[&nonce, &gas_price, &gas_limit, &to.as_slice(), &value, &input.as_slice()]);
                     B256::from(keccak256(encoded))
-                }
-            }
+                },
         }
     }
 
@@ -553,7 +553,7 @@ impl TransactionInput {
                 let input_bytes: AlloyBytes = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing input"))?;
                 input = input_bytes.to_vec();
                 let _: AccessList = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing accessList"))?;
-                let _: Vec<u8> = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing authorizationList"))?;
+                let _: Vec<SignedAuthorization> = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing authorizationList"))?;
                 v = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing v"))?;
                 r = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing r"))?;
                 s = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing s"))?;
