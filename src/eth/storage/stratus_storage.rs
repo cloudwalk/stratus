@@ -821,6 +821,19 @@ impl StratusStorage {
         }
     }
 
+    pub fn translate_to_block_number(&self, block_filter: BlockFilter) -> Result<BlockNumber, StorageError> {
+        match block_filter {
+            BlockFilter::Pending => Ok(self.read_pending_block_header().number),
+            BlockFilter::Latest => Ok(self.read_mined_block_number()),
+            BlockFilter::Hash(_) | BlockFilter::Timestamp(_) => {
+                let number = self.read_block(block_filter)?.map(|b| b.number()).unwrap_or_default(); // should err
+                Ok(number)
+            },
+            BlockFilter::Earliest => Ok(BlockNumber::ZERO),
+            BlockFilter::Number(number) => Ok(number),
+        }
+    }
+
     fn load_slots_to_cache(&self, slots: Vec<(Address, SlotIndex)>) {
         let existing_slots: HashMap<(Address, SlotIndex), SlotValue> = self.perm.read_slots(slots.clone()).unwrap().into_iter().collect();
         for (address, index) in slots {

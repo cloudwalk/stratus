@@ -470,12 +470,13 @@ impl Executor {
     /// Only meant for access-list computation, where only the set of touched accounts/slots
     /// matters and not their values, so the call does not have to wait for a block being saved.
     #[tracing::instrument(name = "executor::local_call", skip_all, fields(from, to))]
-    pub fn execute_local_call<Output>(&self, call_input: CallInput, point_in_time: PointInTime, skip_transient_lock: bool) -> Result<Output, StratusError>
+    pub fn execute_local_call<Output>(&self, call_input: CallInput, kind: ExecutionKind) -> Result<Output, StratusError>
     where
         Output: TryFrom<RevmResultAndState, Error = StratusError>,
     {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
+        let point_in_time = kind.point_in_time();
 
         Span::with(|s| {
             s.rec_opt("from", &call_input.from);
@@ -494,27 +495,27 @@ impl Executor {
         let (function, contract) = { (codegen::function_sig(&call_input.data), codegen::contract_name(&call_input.to)) };
 
         // execute
-        let mut evm_input = match point_in_time {
-            PointInTime::Pending => {
+        let evm_input = match kind {
+            ExecutionKind::Transaction | ExecutionKind::RPC(PointInTime::Pending) | ExecutionKind::AccessList => {
                 let pending_header = self.storage.read_pending_block_header();
-                CallExecutionInput::from_pending_block(call_input, pending_header)
+                CallExecutionInput::from_pending_block(call_input, pending_header, kind)
             }
-            _ => {
-                let Some(block) = self.storage.read_block(point_in_time.into())? else {
-                    return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
+            ExecutionKind::CallLatest(block_number) | ExecutionKind::CallPast(block_number) => {
+                let Some(block) = self.storage.read_block(crate::eth::rpc::BlockFilter::Number(block_number))? else {
+                    return Err(RpcError::BlockFilterInvalid { filter: crate::eth::rpc::BlockFilter::Number(block_number) }.into());
                 };
-                CallExecutionInput::from_mined_block(call_input, block.header, point_in_time)
+                CallExecutionInput::from_mined_block(call_input, block.header, kind)
+            },
+            ExecutionKind::RPC(pit) => {
+                let Some(block) = self.storage.read_block(pit.into())? else {
+                    return Err(RpcError::BlockFilterInvalid { filter: pit.into() }.into());
+                };
+                CallExecutionInput::from_mined_block(call_input, block.header, kind)
             }
         };
 
-        // access-list calls only need the set of touched keys, not their values: use the lock-free
-        // RPC read kind so they do not wait on the transient state lock held while saving a block
-        if skip_transient_lock {
-            evm_input.kind = ExecutionKind::RPC(PointInTime::Latest);
-        }
-
         let evm_route = match point_in_time {
-            PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input),
+            PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input), // route using execution kind rather than pit
             PointInTime::Past(_) => EvmRoute::CallPast(evm_input),
         };
         let evm_result = self.evms.execute::<Output>(evm_route);

@@ -16,6 +16,13 @@ impl ExecutionKind {
     pub fn point_in_time(&self) -> PointInTime {
         self.into()
     }
+
+    pub fn call_from_pit(pit: PointInTime, block_number: BlockNumber) -> Self {
+        match pit {
+            PointInTime::Latest | PointInTime::Pending => Self::CallLatest(block_number),
+            PointInTime::Past(number) => Self::CallPast(number)
+        }
+    }
 }
 
 impl From<&ExecutionKind> for PointInTime {
