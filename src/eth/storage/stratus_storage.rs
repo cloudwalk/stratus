@@ -75,8 +75,8 @@ impl AccountOriginalsReader for StratusStorage {
 pub use resolve_pending::MinedPointInTime;
 
 /// Where a completed read obtained its value. Drives the post-read caching decision.
-#[derive(Debug)]
-enum FoundAt {
+#[derive(Debug, Clone, Copy)]
+pub enum FoundAt {
     /// Hit in a cache (pending or latest). Already cached; nothing to write.
     Cache,
     /// Found in temporary (pending or latest) storage.
@@ -85,6 +85,18 @@ enum FoundAt {
     PermLatest,
     /// Read from permanent storage at a historical block.
     PermHistorical,
+}
+
+impl FoundAt {
+    /// Stable identifier used as metrics label value.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            FoundAt::Cache => "cache",
+            FoundAt::Temp => "temp",
+            FoundAt::PermLatest => "perm_latest",
+            FoundAt::PermHistorical => "perm_historical",
+        }
+    }
 }
 
 /// Abstraction over address-keyed ([`Account`]) and slot-keyed ([`Slot`]) reads
@@ -197,8 +209,8 @@ impl EntityRead for Slot {
     }
 
     fn cache_latest_if_missing(s: &StratusStorage, key: (Address, SlotIndex), slot: Self) {
-        let (address, _) = key;
-        s.cache.cache_slot_latest_if_missing(address, slot);
+        let (address, index) = key;
+        s.cache.cache_slot_latest_if_missing(address, index, slot.value);
     }
 }
 
@@ -355,7 +367,7 @@ impl StratusStorage {
     }
 
     /// Generic read algorithm shared by [`read_account`] and [`read_slot`].
-    fn read<E: resolve_pending::Resolve>(&self, key: E::Key, kind: ExecutionKind) -> Result<E, StorageError> {
+    fn read<E: resolve_pending::Resolve>(&self, key: E::Key, kind: ExecutionKind) -> Result<(E, FoundAt), StorageError> {
         let (value, found_at) = 'query: {
             match E::resolve(self, key, kind) {
                 resolve_pending::Resolved::Temp(value) => break 'query (value, FoundAt::Temp),
@@ -388,16 +400,16 @@ impl StratusStorage {
             // Cache / Historical / (Mined, Temp): nothing to cache.
             _ => {}
         }
-        Ok(value)
+        Ok((value, found_at))
     }
 
-    pub fn read_account(&self, address: Address, kind: ExecutionKind) -> Result<Account, StorageError> {
+    pub fn read_account(&self, address: Address, kind: ExecutionKind) -> Result<(Account, FoundAt), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_account", %address).entered();
         self.read::<Account>(address, kind)
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, kind: ExecutionKind) -> Result<Slot, StorageError> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, kind: ExecutionKind) -> Result<(Slot, FoundAt), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_slot", %address, %index).entered();
         self.read::<Slot>((address, index), kind)
@@ -849,7 +861,7 @@ mod tests {
         assert_ne!(call_block, latest);
 
         // The in-flight call (pinned to the first block) reads the slot.
-        let slot = storage.read_slot(address, index, ExecutionKind::CallLatest(call_block)).expect("read slot");
+        let (slot, _) = storage.read_slot(address, index, ExecutionKind::CallLatest(call_block)).expect("read slot");
 
         // Must reflect the first block (100), not the freshly mined latest (200).
         assert_eq!(slot.value, SlotValue::from([100u64, 0, 0, 0]));
@@ -876,7 +888,7 @@ mod tests {
         let latest = mine_block(&storage, changes2);
         assert_ne!(call_block, latest);
 
-        let account = storage.read_account(address, ExecutionKind::CallLatest(call_block)).expect("read account");
+        let (account, _) = storage.read_account(address, ExecutionKind::CallLatest(call_block)).expect("read account");
 
         // Must reflect the first block (100), not the freshly mined latest (200).
         assert_eq!(account.balance, Wei::from(100u64));

@@ -14,7 +14,7 @@ mod input;
 mod output;
 
 pub use execution_metrics::EvmExecutionMetrics;
-pub use execution_metrics::SlotAccessMetrics;
+pub use execution_metrics::StorageMetrics;
 pub use input::EvmInput;
 pub use input::call_execution::CallExecutionInput;
 pub use input::inspector::InspectorInput;

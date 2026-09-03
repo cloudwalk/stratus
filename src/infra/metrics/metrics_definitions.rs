@@ -117,15 +117,6 @@ metrics! {
     "Time executing an external transaction."
     histogram_duration executor_external_transaction{contract, function},
 
-    "Number of account reads executing an external transaction."
-    histogram_counter executor_external_transaction_account_reads{contract, function},
-
-    "Number of slot reads executing an external transaction."
-    histogram_counter executor_external_transaction_slot_reads{contract, function},
-
-    "Gas spent executing an external transaction."
-    histogram_counter executor_external_transaction_gas{contract, function},
-
     "Number of account reads when importing an external block."
     histogram_counter executor_external_block_account_reads{},
 
@@ -148,7 +139,7 @@ metrics! {
     histogram_counter executor_local_transaction_slot_reads{contract, function},
 
     "Gas spent executing a local transaction."
-    histogram_counter executor_local_transaction_gas{success, contract, function},
+    histogram_counter executor_local_transaction_gas{contract, function},
 
     "Time executing a transaction received with eth_call or eth_estimateGas."
     histogram_duration executor_local_call{success, contract, function},
@@ -161,6 +152,18 @@ metrics! {
 
     "Gas spent executing a local call."
     histogram_counter executor_local_call_gas{contract, function},
+
+    "Number of account reads during EVM execution."
+    counter executor_account_reads{found_at},
+
+    "Total time reading accounts during EVM execution, in microseconds."
+    counter executor_account_read_time{found_at},
+
+    "Number of slot reads during EVM execution."
+    counter executor_slot_reads{found_at},
+
+    "Total time reading slots during EVM execution, in microseconds."
+    counter executor_slot_read_time{found_at},
 
     "Time executing trace_transaction"
     histogram_duration executor_inspect{trace_type},
