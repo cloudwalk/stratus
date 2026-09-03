@@ -887,20 +887,35 @@ impl StratusStorage {
         }
     }
 
-    fn load_slots_to_cache(&self, slots: Vec<(Address, SlotIndex)>) {
-        let existing_slots: HashMap<(Address, SlotIndex), SlotValue> = self.perm.read_slots(slots.clone()).unwrap().into_iter().collect(); //unwrap
+    fn load_slots_to_cache(&self, slots: Vec<(Address, SlotIndex)>) -> Result<(), StorageError> {
+        let existing_slots: HashMap<(Address, SlotIndex), SlotValue> = self
+            .perm
+            .read_slots(slots.clone())
+            .inspect_err(|err| tracing::error!(?err, "reading slots from perm failed"))?
+            .into_iter()
+            .collect();
+
         for (address, index) in slots {
             let value = existing_slots.get(&(address, index)).copied().unwrap_or_default();
             Slot::cache_latest_if_missing(self, (address, index), Slot { index, value });
         }
+
+        Ok(())
     }
 
-    fn load_accounts_to_cache(&self, addresses: Vec<Address>) {
-        let existing_accounts: HashMap<Address, Account> = self.perm.read_accounts(addresses.clone()).unwrap().into_iter().collect(); //unwrap
+    fn load_accounts_to_cache(&self, addresses: Vec<Address>) -> Result<(), StorageError> {
+        let existing_accounts: HashMap<Address, Account> = self
+            .perm
+            .read_accounts(addresses.clone())
+            .inspect_err(|err| tracing::error!(?err, "reading accounts from perm failed"))?
+            .into_iter()
+            .collect();
         for address in addresses {
             let account = existing_accounts.get(&address).cloned().unwrap_or_default();
             Account::cache_latest_if_missing(self, address, account);
         }
+
+        Ok(())
     }
 
     pub fn load_access_list(&self, access_list: AccessListOutput) {
@@ -915,8 +930,8 @@ impl StratusStorage {
         } // skip each step if prev empty
         Account::retain_missing_keys(self, &mut account_addresses);
         Slot::retain_missing_keys(self, &mut slot_keys);
-        self.load_accounts_to_cache(account_addresses);
-        self.load_slots_to_cache(slot_keys);
+        self.load_accounts_to_cache(account_addresses).ok();
+        self.load_slots_to_cache(slot_keys).ok();
     }
 }
 
