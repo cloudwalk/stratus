@@ -75,7 +75,7 @@ impl EvmWorkerPool {
             storage: &Arc<StratusStorage>,
             config: &ExecutorConfig,
         ) -> crossbeam_channel::Sender<EvmTask<T>> {
-            let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask<T>>();
+            let (evm_tx, evm_rx) = crossbeam_channel::bounded::<EvmTask<T>>(4096);
 
             for evm_index in 1..=num_evms {
                 let evm_task_name = format!("{task_name}-{evm_index}");
