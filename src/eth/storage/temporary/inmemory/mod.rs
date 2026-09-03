@@ -60,7 +60,7 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.finish_pending_block()
     }
 
-    pub fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
+    pub fn read_pending_execution(&self, hash: Hash) -> Option<TransactionExecution> {
         self.transaction_storage.read_pending_execution(hash)
     }
 
@@ -92,8 +92,9 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.save_account_code(address, code)
     }
 
-    pub fn reset(&self) -> anyhow::Result<(), StorageError> {
-        self.transaction_storage.reset()
+    #[cfg(feature = "dev")]
+    pub fn reset(&self) {
+        self.transaction_storage.reset();
     }
 }
 

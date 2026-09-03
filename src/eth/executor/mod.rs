@@ -5,6 +5,7 @@ pub mod types;
 
 use std::mem;
 use std::sync::Arc;
+use std::time::Instant;
 
 #[cfg(feature = "metrics")]
 use alloy_consensus::Transaction;
@@ -56,7 +57,6 @@ use crate::eth::types::TransactionInput;
 use crate::ext::OptionExt;
 use crate::ext::to_json_string;
 use crate::infra::metrics;
-use crate::infra::metrics::timed;
 use crate::infra::tracing::SpanExt;
 
 // -----------------------------------------------------------------------------
@@ -415,17 +415,16 @@ impl Executor {
             s.rec_str("tx_hash", &tx_hash);
         });
 
-        tracing::info!("inspecting transaction");
         let opts = opts.unwrap_or_default();
         let tracer_type = opts.tracer.clone();
 
-        timed(|| {
-            self.evms.inspect(InspectorInput {
-                tx_hash,
-                opts,
-                trace_unsuccessful_only,
-            })
-        })
-        .with(|m| metrics::inc_executor_inspect(m.elapsed, serde_json::to_string(&tracer_type).unwrap_or_else(|_| "unkown".to_owned())))
+        let start = Instant::now();
+        let result = self.evms.inspect(InspectorInput {
+            tx_hash,
+            opts,
+            trace_unsuccessful_only,
+        });
+        metrics::inc_executor_inspect(start.elapsed(), serde_json::to_string(&tracer_type).unwrap_or_else(|_| "unkown".to_owned()));
+        result
     }
 }

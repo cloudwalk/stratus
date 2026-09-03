@@ -181,14 +181,7 @@ impl KafkaConnector {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        let futures: Vec<DeliveryFuture> = events
-            .into_iter()
-            .map(|event| {
-                metrics::timed(|| self.queue_event(event)).with(|m| {
-                    metrics::inc_kafka_queue_event(m.elapsed);
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?; // This could fail because the queue is full (?)
+        let futures: Vec<DeliveryFuture> = events.into_iter().map(|event| self.queue_event(event)).collect::<Result<Vec<_>, _>>()?; // This could fail because the queue is full (?)
 
         #[cfg(feature = "metrics")]
         metrics::inc_kafka_create_buffer(start.elapsed());
