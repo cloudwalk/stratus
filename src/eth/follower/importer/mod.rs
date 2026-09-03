@@ -1,8 +1,8 @@
+pub(crate) mod config;
 mod fetchers;
-pub(crate) mod importer_config;
-#[allow(clippy::module_inception)]
-mod importer_supervisor;
 mod importers;
+#[allow(clippy::module_inception)]
+mod supervisor;
 use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
@@ -10,9 +10,9 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::bail;
-pub use importer_config::ImporterConfig;
-pub use importer_supervisor::ImporterConsensus;
+pub use config::ImporterConfig;
 pub use importers::BlockchainClient;
+pub use supervisor::ImporterConsensus;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 use tracing::Span;

@@ -152,9 +152,14 @@ pub struct ImporterConsensus {
     pub storage: Arc<StratusStorage>,
     pub chain: Arc<BlockchainClient>,
     pub executor: Arc<Executor>,
+    pub forward_access_list: bool,
 }
 
 impl Consensus for ImporterConsensus {
+    fn forward_access_list(&self) -> bool {
+        self.forward_access_list
+    }
+
     async fn lag(&self) -> anyhow::Result<LagStatus> {
         let last_fetched_time = LATEST_FETCHED_BLOCK_TIME.load(Ordering::Relaxed);
 

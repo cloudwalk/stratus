@@ -61,6 +61,9 @@ pub trait Consensus: Send + Sync {
         !(lag.is_far_behind() || lag.is_ahead())
     }
 
+    /// Whether transactions forwarded to the leader should carry a pre-computed access list.
+    fn forward_access_list(&self) -> bool;
+
     /// Forwards a transaction to leader.
     ///
     /// The current machine name is sent as the `x-client` header by `BlockchainClient`, so the leader
@@ -71,11 +74,16 @@ pub trait Consensus: Send + Sync {
 
         tracing::info!(%tx_hash, "forwarding transaction to leader");
 
-        let access_list = self // make this configurable (?)
-            .get_executor()
-            .execute_local_call::<AccessListOutput>(tx.into(), ExecutionKind::AccessList)?;
+        let access_list = if self.forward_access_list() {
+            Some(
+                self.get_executor()
+                    .execute_local_call::<AccessListOutput>(tx.into(), ExecutionKind::AccessList)?,
+            )
+        } else {
+            None
+        };
 
-        let hash = self.get_client().send_raw_transaction_to_leader(tx_data.into(), Some(access_list)).await?;
+        let hash = self.get_client().send_raw_transaction_to_leader(tx_data.into(), access_list).await?;
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_forward(start.elapsed());
