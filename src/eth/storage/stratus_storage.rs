@@ -277,15 +277,13 @@ impl StratusStorage {
         cache: StorageCache,
         #[cfg(feature = "dev")] perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
     ) -> Result<Self, StorageError> {
-        let latest_block = perm
-            .read_block(BlockFilter::Latest)?
-            .ok_or(StorageError::BlockNotFound { filter: BlockFilter::Latest })?;
+        let latest_block_info = perm.read_block(BlockFilter::Latest)?.map(|block| block.header.into()).unwrap_or_default();
 
         let this = Self {
             temp,
             cache,
             perm,
-            latest_state_lock: LatestStateLock::new(latest_block.header.into()),
+            latest_state_lock: LatestStateLock::new(latest_block_info),
             #[cfg(feature = "dev")]
             perm_config,
         };
