@@ -177,6 +177,17 @@ impl RpcServiceT for RpcMiddleware {
             metrics::set_rpc_requests_active(active as u64);
         }
 
+        if let Some(future_response) = reject_client(&client, request_id.clone()) {
+            return RpcResponse {
+                client,
+                id: request_id.to_string(),
+                method: method.to_string(),
+                tx: None,
+                start: Instant::now(),
+                future_response,
+            };
+        }
+
         let span = info_span!(
             parent: None,
             "rpc::request",
@@ -203,7 +214,7 @@ impl RpcServiceT for RpcMiddleware {
             s.rec_str("rpc_method", &method);
         });
 
-        let (future, tracing_identifiers) = if method == "eth_sendRawTransaction" {
+        let (future_response, tracing_identifiers) = if method == "eth_sendRawTransaction" {
             drop(middleware_enter);
             match eth_send_raw_transaction(request, Arc::clone(&self.ctx), span) {
                 Ok(result) => result,
@@ -264,12 +275,9 @@ impl RpcServiceT for RpcMiddleware {
             "rpc request"
         );
 
-        let id = request_id.to_string();
-
-        let future_response = reject_client(&client, request_id.clone()).unwrap_or(future);
         RpcResponse {
             client,
-            id,
+            id: request_id.to_string(),
             method: method.to_string(),
             tx: tracing_identifiers,
             start: Instant::now(),

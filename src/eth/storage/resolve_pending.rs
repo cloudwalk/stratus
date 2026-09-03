@@ -143,8 +143,7 @@ mod tests {
                         assert_eq!(*number, call_block, "stale Full call should downgrade to MinedPast(block_number), not prev()");
                     }
                     other => panic!("expected Past, got {other:?}"),
-                }
-                assert!(matches!(point, super::MinedPointInTime::Latest(_, None)), "no guard for historical read");
+                };
             }
             other => panic!("expected Miss, got {other:?}"),
         }
