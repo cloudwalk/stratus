@@ -601,12 +601,18 @@ impl StratusStorage {
 
     pub fn read_block_info(&self, filter: BlockFilter) -> Result<Option<BlockInfo>, StorageError> {
         let latest_state = self.latest_state_lock.read();
-        match filter {
+        let mined = latest_state.number;
+
+        let reduced_filter = match filter {
+            BlockFilter::Number(n) if n == mined.next_block_number() => BlockFilter::Pending,
+            BlockFilter::Number(n) if n == mined => BlockFilter::Latest,
+            filter => filter,
+        };
+
+        match reduced_filter {
             BlockFilter::Pending => Ok(Some(self.read_pending_block_header())),
             BlockFilter::Latest => Ok(Some(*latest_state)),
-            BlockFilter::Number(number) if number == self.read_mined_block_number() => self.read_block_info(BlockFilter::Latest),
-            BlockFilter::Number(number) if number == self.read_mined_block_number().next_block_number() => self.read_block_info(BlockFilter::Pending),
-            _ => {
+            filter => {
                 drop(latest_state);
                 Ok(self.read_block(filter)?.map(|block| block.header.into()))
             }
