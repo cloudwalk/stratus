@@ -315,7 +315,7 @@ mod tests {
     /// Mines a block applying `changes` (mirrors the helper in `stratus_storage` tests).
     fn mine_block(storage: &StratusStorage, state: State<Complete>) {
         let header = storage.read_pending_block_header();
-        let evm_input = TransactionExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
+        let evm_input = TransactionExecutionInput::create(&TransactionInput::default(), header);
 
         let result = TransactionExecutionResult {
             result: ExecutionResult::Success,

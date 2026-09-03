@@ -23,6 +23,7 @@ use crate::eth::storage::resolve_pending;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::Block;
+use crate::eth::types::BlockInfo;
 use crate::eth::types::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::types::Bytes;
@@ -32,7 +33,6 @@ use crate::eth::types::LogMessage;
 #[cfg(feature = "dev")]
 use crate::eth::types::Nonce;
 use crate::eth::types::PendingBlock;
-use crate::eth::types::PendingBlockHeader;
 use crate::eth::types::PointInTime;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
@@ -54,6 +54,48 @@ mod label {
     pub(super) const CACHE: &str = "cache";
 }
 
+pub struct LatestStateLock(parking_lot::RwLock<BlockInfo>);
+// could use ManuallyDrop instead
+#[derive(Debug)]
+pub struct LatestStateReadGuard<'a>(Option<parking_lot::RwLockReadGuard<'a, BlockInfo>>);
+pub struct LatestStateWriteGuard<'a>(parking_lot::RwLockWriteGuard<'a, BlockInfo>);
+
+impl<'a> LatestStateWriteGuard<'a> {
+    fn set_latest_block_info(&mut self, block_info: BlockInfo) {
+        (*self.0) = block_info;
+    }
+}
+
+impl LatestStateLock {
+    fn new(block_info: BlockInfo) -> Self {
+        Self(parking_lot::RwLock::new(block_info))
+    }
+
+    pub fn read<'a>(&'a self) -> LatestStateReadGuard<'a> {
+        LatestStateReadGuard(Some(self.0.read()))
+    }
+
+    pub fn write<'a>(&'a self) -> LatestStateWriteGuard<'a> {
+        LatestStateWriteGuard(self.0.write())
+    }
+}
+
+impl std::ops::Deref for LatestStateReadGuard<'_> {
+    type Target = BlockInfo;
+    fn deref(&self) -> &BlockInfo {
+        #[allow(clippy::expect_used)]
+        self.0.as_ref().expect("guard present until dropped")
+    }
+}
+
+impl Drop for LatestStateReadGuard<'_> {
+    fn drop(&mut self) {
+        if let Some(guard) = self.0.take() {
+            parking_lot::RwLockReadGuard::unlock_fair(guard);
+        }
+    }
+}
+
 /// Proxy that simplifies interaction with permanent and temporary storages.
 ///
 /// Additionaly it tracks metrics that are independent of the storage implementation.
@@ -61,9 +103,9 @@ pub struct StratusStorage {
     temp: InMemoryTemporaryStorage,
     cache: StorageCache,
     pub perm: RocksPermanentStorage,
-    // CONTRACT: Always acquire a lock when reading slots or accounts from latest (cache OR perm) and when saving a block
-    // TODO: store latest mined block header in this lock
-    pub(super) transient_state_lock: parking_lot::RwLock<()>,
+    // CONTRACT: Always acquire a lock when reading slots or accounts from latest (cache OR perm) and when saving a block.
+    // The value in the lock is the latest block execution information.
+    pub(super) latest_state_lock: LatestStateLock,
     #[cfg(feature = "dev")]
     perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
 }
@@ -235,11 +277,15 @@ impl StratusStorage {
         cache: StorageCache,
         #[cfg(feature = "dev")] perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
     ) -> Result<Self, StorageError> {
+        let latest_block = perm
+            .read_block(BlockFilter::Latest)?
+            .ok_or(StorageError::BlockNotFound { filter: BlockFilter::Latest })?;
+
         let this = Self {
             temp,
             cache,
             perm,
-            transient_state_lock: parking_lot::RwLock::new(()),
+            latest_state_lock: LatestStateLock::new(latest_block.header.into()),
             #[cfg(feature = "dev")]
             perm_config,
         };
@@ -319,24 +365,12 @@ impl StratusStorage {
         Ok(number)
     }
 
-    pub fn read_pending_block_header(&self) -> PendingBlockHeader {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::read_pending_block_number").entered();
-        tracing::debug!(storage = %label::TEMP, "reading pending block number");
-
-        timed(|| self.temp.read_pending_block_header()).with(|m| {
-            metrics::inc_storage_read_pending_block_number(m.elapsed, label::TEMP, true);
-        })
+    pub fn read_pending_block_header(&self) -> BlockInfo {
+        self.temp.read_pending_block_header()
     }
 
     pub fn read_mined_block_number(&self) -> BlockNumber {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::read_mined_block_number").entered();
-        tracing::debug!(storage = %label::PERM, "reading mined block number");
-
-        timed(|| self.perm.read_mined_block_number()).with(|m| {
-            metrics::inc_storage_read_mined_block_number(m.elapsed, label::PERM, true);
-        })
+        self.perm.read_mined_block_number()
     }
 
     pub fn set_pending_from_external(&self, block: &ExternalBlock) {
@@ -534,8 +568,10 @@ impl StratusStorage {
         let tens_of_millions_gas_used = block.header.gas_used.as_u64() / 10_000_000;
 
         timed(|| {
-            let guard = self.transient_state_lock.write();
+            let mut guard = self.latest_state_lock.write();
+            let block_info = (&block.header).into();
             self.perm.save_block(block, changes.finalize())?;
+            guard.set_latest_block_info(block_info);
             self.cache.cache_account_and_slots_latest_from_changes(changes);
             drop(guard);
             Ok(())
@@ -563,6 +599,20 @@ impl StratusStorage {
                 tracing::error!(reason = ?e, "failed to read block");
             }
         })
+    }
+
+    pub fn read_block_info(&self, filter: BlockFilter) -> Result<Option<BlockInfo>, StorageError> {
+        let latest_state = self.latest_state_lock.read();
+        match filter {
+            BlockFilter::Pending => Ok(Some(self.read_pending_block_header())),
+            BlockFilter::Latest => Ok(Some(*latest_state)),
+            BlockFilter::Number(number) if number == self.read_mined_block_number() => self.read_block_info(BlockFilter::Latest),
+            BlockFilter::Number(number) if number == self.read_mined_block_number().next_block_number() => self.read_block_info(BlockFilter::Pending),
+            _ => {
+                drop(latest_state);
+                Ok(self.read_block(filter)?.map(|block| block.header.into()))
+            }
+        }
     }
 
     pub fn read_block_with_changes(&self, filter: BlockFilter) -> Result<Option<(BlockRocksdb, BlockChangesRocksdb)>, StorageError> {
@@ -811,6 +861,7 @@ impl StratusStorage {
             BlockFilter::Pending => Ok(PointInTime::Pending),
             BlockFilter::Latest => Ok(PointInTime::Latest),
             BlockFilter::Earliest => Ok(PointInTime::Past(BlockNumber::ZERO)),
+            // if number == latest (/pending) should we return PointInTime::Latest (/Pending) ?
             BlockFilter::Number(number) => Ok(PointInTime::Past(number)),
             BlockFilter::Hash(_) | BlockFilter::Timestamp(_) => self
                 .read_block(block_filter)?
@@ -882,7 +933,7 @@ mod tests {
     /// Saves an execution applying `changes` to the pending block, without finishing it.
     fn save_execution(storage: &StratusStorage, changes: State<Complete>) {
         let header = storage.read_pending_block_header();
-        let evm_input = TransactionExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
+        let evm_input = TransactionExecutionInput::create(&TransactionInput::default(), header);
 
         let result = TransactionExecutionResult {
             result: ExecutionResult::Success,

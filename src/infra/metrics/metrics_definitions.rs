@@ -24,12 +24,6 @@ metrics! {
 metrics! {
     group: storage_read,
 
-    "Time executing storage read_pending_block_number operation."
-    histogram_duration storage_read_pending_block_number{storage, success},
-
-    "Time executing storage read_mined_block_number operation."
-    histogram_duration storage_read_mined_block_number{storage, success},
-
     "Time executing storage read_account operation."
     histogram_duration storage_read_account{storage, point_in_time, hit},
 

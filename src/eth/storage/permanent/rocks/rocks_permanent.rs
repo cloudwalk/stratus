@@ -140,11 +140,11 @@ impl RocksPermanentStorage {
     // -------------------------------------------------------------------------
 
     pub fn read_mined_block_number(&self) -> BlockNumber {
-        self.block_number.load(Ordering::SeqCst).into()
+        self.block_number.load(Ordering::Acquire).into()
     }
 
     pub fn set_mined_block_number(&self, number: BlockNumber) {
-        self.block_number.store(number.as_u32(), Ordering::SeqCst);
+        self.block_number.store(number.as_u32(), Ordering::Release);
     }
 
     pub fn has_genesis(&self) -> Result<bool, StorageError> {

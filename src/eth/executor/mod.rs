@@ -40,7 +40,6 @@ use crate::eth::executor::evm::types::SlotAccessMetrics;
 use crate::eth::executor::evm_worker_pool::EvmWorkerPool;
 use crate::eth::executor::types::EvmRoute;
 use crate::eth::miner::Miner;
-use crate::eth::rpc::RpcError;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
@@ -177,8 +176,8 @@ impl Executor {
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
         let tx_input: TransactionInput = tx.try_into()?;
-        let pending_block = self.storage.read_pending_block_header();
-        let mut evm_input = TransactionExecutionInput::from_eth_transaction(&tx_input, pending_block.number, *pending_block.timestamp);
+        let pending_header = self.storage.read_pending_block_header();
+        let mut evm_input = TransactionExecutionInput::create(&tx_input, pending_header);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         let (tx_execution, state) = match receipt.is_success() {
@@ -357,7 +356,7 @@ impl Executor {
 
             // prepare evm input
             let pending_header = self.storage.read_pending_block_header();
-            let evm_input = TransactionExecutionInput::from_eth_transaction(&tx_input, pending_header.number, *pending_header.timestamp);
+            let evm_input = TransactionExecutionInput::create(&tx_input, pending_header);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
             tracing::debug!(
@@ -424,8 +423,6 @@ impl Executor {
     {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
-        let point_in_time = kind.point_in_time();
-
         Span::with(|s| {
             s.rec_opt("from", &call_input.from);
             s.rec_opt("to", &call_input.to);
@@ -435,40 +432,25 @@ impl Executor {
             to = ?call_input.to,
             data_len = call_input.data.len(),
             data = %call_input.data,
-            %point_in_time,
+            ?kind,
             "executing read-only local transaction"
         );
 
         #[cfg(feature = "metrics")]
         let (function, contract) = { (codegen::function_sig(&call_input.data), codegen::contract_name(&call_input.to)) };
 
-        // execute
-        let evm_input = match kind {
-            ExecutionKind::Transaction | ExecutionKind::RPC(PointInTime::Pending) | ExecutionKind::AccessList => {
-                let pending_header = self.storage.read_pending_block_header();
-                CallExecutionInput::from_pending_block(call_input, pending_header, kind)
-            }
-            ExecutionKind::CallLatest(block_number) | ExecutionKind::CallPast(block_number) => {
-                let Some(block) = self.storage.read_block(crate::eth::rpc::BlockFilter::Number(block_number))? else {
-                    return Err(RpcError::BlockFilterInvalid {
-                        filter: crate::eth::rpc::BlockFilter::Number(block_number),
-                    }
-                    .into());
-                };
-                CallExecutionInput::from_mined_block(call_input, block.header, kind)
-            }
-            ExecutionKind::RPC(pit) => {
-                let Some(block) = self.storage.read_block(pit.into())? else {
-                    return Err(RpcError::BlockFilterInvalid { filter: pit.into() }.into());
-                };
-                CallExecutionInput::from_mined_block(call_input, block.header, kind)
-            }
+        let filter = kind.into();
+        let Some(block_info) = self.storage.read_block_info(filter)? else {
+            return Err(StorageError::BlockNotFound { filter }.into());
         };
 
-        let evm_route = match point_in_time {
-            PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input), // // route using execution kind rather than pit
+        let evm_input = CallExecutionInput::create(call_input, block_info, kind);
+
+        let evm_route = match kind.point_in_time() {
+            PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input),
             PointInTime::Past(_) => EvmRoute::CallPast(evm_input),
         };
+
         let evm_result = self.evms.execute::<Output>(evm_route);
 
         // track metrics
