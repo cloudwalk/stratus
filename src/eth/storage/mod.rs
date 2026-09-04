@@ -5,17 +5,18 @@ pub use cache::StorageCache;
 pub use error::StorageError;
 pub use permanent::PermanentStorageConfig;
 pub use permanent::RocksPermanentStorage;
-pub use stratus_storage::FoundAt;
 pub use stratus_storage::MinedPointInTime;
 pub use stratus_storage::StratusStorage;
 pub use temporary::InMemoryTemporaryStorage;
 pub use temporary::TemporaryStorageConfig;
+pub use types::FoundAt;
 mod cache;
 mod error;
 pub mod permanent;
 mod resolve_pending;
 mod stratus_storage;
 mod temporary;
+mod types;
 
 use std::sync::Arc;
 

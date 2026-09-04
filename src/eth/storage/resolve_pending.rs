@@ -1,7 +1,7 @@
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StratusStorage;
-use crate::eth::storage::stratus_storage::EntityRead;
-use crate::eth::storage::stratus_storage::LatestStateReadGuard;
+use crate::eth::storage::types::entity::EntityRead;
+use crate::eth::storage::types::state_lock::LatestStateReadGuard;
 use crate::eth::types::Account;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::PointInTime;

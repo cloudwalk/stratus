@@ -20,6 +20,9 @@ use crate::eth::storage::StorageError;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::storage::resolve_pending;
+use crate::eth::storage::types::FoundAt;
+use crate::eth::storage::types::entity::EntityRead;
+use crate::eth::storage::types::state_lock::LatestStateLock;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::Block;
@@ -52,54 +55,12 @@ mod label {
     pub(super) const PERM: &str = "permanent";
 }
 
-pub struct LatestStateLock(parking_lot::RwLock<BlockInfo>);
-// could use ManuallyDrop instead
-#[derive(Debug)]
-pub struct LatestStateReadGuard<'a>(Option<parking_lot::RwLockReadGuard<'a, BlockInfo>>);
-pub struct LatestStateWriteGuard<'a>(parking_lot::RwLockWriteGuard<'a, BlockInfo>);
-
-impl<'a> LatestStateWriteGuard<'a> {
-    fn set_latest_block_info(&mut self, block_info: BlockInfo) {
-        (*self.0) = block_info;
-    }
-}
-
-impl LatestStateLock {
-    fn new(block_info: BlockInfo) -> Self {
-        Self(parking_lot::RwLock::new(block_info))
-    }
-
-    pub fn read<'a>(&'a self) -> LatestStateReadGuard<'a> {
-        LatestStateReadGuard(Some(self.0.read()))
-    }
-
-    pub fn write<'a>(&'a self) -> LatestStateWriteGuard<'a> {
-        LatestStateWriteGuard(self.0.write())
-    }
-}
-
-impl std::ops::Deref for LatestStateReadGuard<'_> {
-    type Target = BlockInfo;
-    fn deref(&self) -> &BlockInfo {
-        #[allow(clippy::expect_used)]
-        self.0.as_ref().expect("guard present until dropped")
-    }
-}
-
-impl Drop for LatestStateReadGuard<'_> {
-    fn drop(&mut self) {
-        if let Some(guard) = self.0.take() {
-            parking_lot::RwLockReadGuard::unlock_fair(guard);
-        }
-    }
-}
-
 /// Proxy that simplifies interaction with permanent and temporary storages.
 ///
 /// Additionaly it tracks metrics that are independent of the storage implementation.
 pub struct StratusStorage {
-    temp: InMemoryTemporaryStorage,
-    cache: StorageCache,
+    pub temp: InMemoryTemporaryStorage,
+    pub cache: StorageCache,
     pub perm: RocksPermanentStorage,
     // CONTRACT: Always acquire a lock when reading slots or accounts from latest (cache OR perm) and when saving a block.
     // The value in the lock is the latest block execution information.
@@ -115,114 +76,6 @@ impl AccountOriginalsReader for StratusStorage {
 }
 
 pub use resolve_pending::MinedPointInTime;
-
-/// Where a completed read obtained its value. Drives the post-read caching decision.
-#[derive(Debug, Clone, Copy)]
-pub enum FoundAt {
-    /// Hit in a cache (pending or latest). Already cached; nothing to write.
-    Cache,
-    /// Found in temporary (pending or latest) storage.
-    Temp,
-    /// Read from permanent storage at the latest mined point.
-    PermLatest,
-    /// Read from permanent storage at a historical block.
-    PermHistorical,
-}
-
-impl FoundAt {
-    /// Stable identifier used as metrics label value.
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            FoundAt::Cache => "cache",
-            FoundAt::Temp => "temp",
-            FoundAt::PermLatest => "perm_latest",
-            FoundAt::PermHistorical => "perm_historical",
-        }
-    }
-}
-
-/// Abstraction over address-keyed ([`Account`]) and slot-keyed ([`Slot`]) reads
-pub(super) trait EntityRead: Sized + Clone {
-    type Key: Copy;
-    /// Reads the latest (mined tip) value from the cache, if present.
-    fn read_latest_cache(s: &StratusStorage, key: &Self::Key) -> Option<Self>;
-    /// Tries to read from the latest cache, if it gets a lock contention error from the cache, returns None
-    fn try_read_latest_cache(s: &StratusStorage, key: &Self::Key) -> Option<Self>;
-    /// Retains only the keys that are missing from both the temporary storage and the latest cache.
-    fn retain_missing_keys(s: &StratusStorage, keys: &mut Vec<Self::Key>);
-    /// Reads from temporary (pending) storage.
-    fn read_temp(s: &StratusStorage, key: Self::Key) -> Option<Self>;
-    /// Reads from permanent storage at the resolved mined point.
-    fn read_perm(s: &StratusStorage, key: Self::Key, point: MinedPointInTime<'_>) -> Result<Self, StorageError>;
-    /// Caches the value as a latest (mined tip) entry, if not already cached.
-    fn cache_latest_if_missing(s: &StratusStorage, key: Self::Key, value: Self);
-}
-
-impl EntityRead for Account {
-    type Key = Address;
-
-    fn read_temp(s: &StratusStorage, address: Address) -> Option<Self> {
-        s.temp.read_account(address)
-    }
-
-    fn read_latest_cache(s: &StratusStorage, address: &Address) -> Option<Self> {
-        s.cache.get_account_latest(address)
-    }
-
-    fn try_read_latest_cache(s: &StratusStorage, address: &Address) -> Option<Self> {
-        s.cache.try_get_account_latest(address).ok().flatten()
-    }
-
-    fn retain_missing_keys(s: &StratusStorage, keys: &mut Vec<Self::Key>) {
-        s.temp.transaction_storage.retain_missing_accounts(keys);
-        keys.retain(|address| !s.cache.contains_account(address));
-    }
-
-    fn read_perm(s: &StratusStorage, address: Address, point: MinedPointInTime<'_>) -> Result<Self, StorageError> {
-        s.perm
-            .read_account(address, &point)
-            .map(|acc_opt| acc_opt.unwrap_or_else(|| Account::new_empty(address)))
-    }
-
-    fn cache_latest_if_missing(s: &StratusStorage, address: Address, account: Self) {
-        s.cache.cache_account_latest_if_missing(address, account);
-    }
-}
-
-impl EntityRead for Slot {
-    type Key = (Address, SlotIndex);
-
-    fn read_temp(s: &StratusStorage, (address, index): (Address, SlotIndex)) -> Option<Self> {
-        s.temp.read_slot(address, index)
-    }
-
-    fn read_latest_cache(s: &StratusStorage, key: &(Address, SlotIndex)) -> Option<Self> {
-        let (address, index) = key;
-        s.cache.get_slot_latest(address, index)
-    }
-
-    fn try_read_latest_cache(s: &StratusStorage, key: &Self::Key) -> Option<Self> {
-        let (address, index) = key;
-        s.cache.try_get_slot_latest(address, index).ok().flatten()
-    }
-
-    fn retain_missing_keys(s: &StratusStorage, keys: &mut Vec<Self::Key>) {
-        s.temp.transaction_storage.retain_missing_slots(keys);
-        keys.retain(|(address, index)| !s.cache.contains_slot(address, index));
-    }
-
-    fn read_perm(s: &StratusStorage, key: (Address, SlotIndex), point: MinedPointInTime<'_>) -> Result<Self, StorageError> {
-        let (address, index) = key;
-        s.perm
-            .read_slot(address, index, &point)
-            .map(|slot_opt| slot_opt.unwrap_or_else(|| Slot::new_empty(index)))
-    }
-
-    fn cache_latest_if_missing(s: &StratusStorage, key: (Address, SlotIndex), slot: Self) {
-        let (address, index) = key;
-        s.cache.cache_slot_latest_if_missing(address, index, slot.value);
-    }
-}
 
 impl StratusStorage {
     /// Creates a new storage with the specified temporary and permanent implementations.
