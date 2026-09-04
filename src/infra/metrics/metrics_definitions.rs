@@ -84,12 +84,6 @@ metrics! {
     "Time executing an external transaction."
     histogram_duration executor_external_transaction{contract, function},
 
-    "Number of account reads when importing an external block."
-    histogram_counter executor_external_block_account_reads{},
-
-    "Number of slot reads when importing an external block."
-    histogram_counter executor_external_block_slot_reads{},
-
     "Time executing a local transaction."
     histogram_duration executor_local_transaction{success, contract, function},
 
@@ -102,44 +96,23 @@ metrics! {
     "Time executing a local transaction."
     counter executor_local_transaction_reverts{contract, function, reason},
 
-    "Number of account reads when executing a local transaction."
-    histogram_counter executor_local_transaction_account_reads{contract, function},
-
-    "Number of slot reads when executing a local transaction."
-    histogram_counter executor_local_transaction_slot_reads{contract, function},
-
-    "Gas spent executing a local transaction."
-    histogram_counter executor_local_transaction_gas{contract, function},
-
     "Time executing a transaction received with eth_call or eth_estimateGas."
     histogram_duration executor_local_call{success, contract, function},
 
-    "Number of account reads when executing a local call."
-    histogram_counter executor_local_call_account_reads{contract, function},
+    "Number of account reads from one storage location during an EVM execution."
+    histogram_counter evm_execution_account_reads{execution_kind, found_at, contract, function},
 
-    "Number of slot reads when executing a local call."
-    histogram_counter executor_local_call_slot_reads{contract, function},
+    "Total time spent reading accounts from one storage location during an EVM execution."
+    histogram_duration evm_execution_account_read_time{execution_kind, found_at, contract, function},
 
-    "Gas spent executing a local call."
-    histogram_counter executor_local_call_gas{contract, function},
+    "Number of slot reads from one storage location during an EVM execution."
+    histogram_counter evm_execution_slot_reads{execution_kind, found_at, contract, function},
 
-    "Number of account reads during EVM execution."
-    counter executor_account_reads{found_at},
+    "Total time spent reading slots from one storage location during an EVM execution."
+    histogram_duration evm_execution_slot_read_time{execution_kind, found_at, contract, function},
 
-    "Total time reading accounts during EVM execution, in nanoseconds."
-    counter executor_account_read_time{found_at},
-
-    "Slowest account read per execution, over a rolling window."
-    histogram_duration executor_account_read_time_max{found_at},
-
-    "Number of slot reads during EVM execution."
-    counter executor_slot_reads{found_at},
-
-    "Total time reading slots during EVM execution, in nanoseconds."
-    counter executor_slot_read_time{found_at},
-
-    "Slowest slot read per execution, over a rolling window."
-    histogram_duration executor_slot_read_time_max{found_at},
+    "Gas spent during an EVM execution."
+    histogram_counter evm_execution_gas{execution_kind, contract, function},
 
     "Time executing trace_transaction"
     histogram_duration executor_inspect{trace_type},

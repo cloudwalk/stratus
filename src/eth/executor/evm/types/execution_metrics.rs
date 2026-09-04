@@ -11,16 +11,15 @@ use crate::eth::codegen::SoliditySignature;
 use crate::eth::storage::FoundAt;
 use crate::eth::types::Address;
 use crate::eth::types::Bytes;
-#[cfg(feature = "metrics")]
 use crate::eth::types::ExecutionKind;
 use crate::eth::types::Gas;
+#[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ReadStats {
     pub count: usize,
     pub total_time: Duration,
-    pub max_time: Duration,
 }
 
 impl Add for ReadStats {
@@ -30,7 +29,6 @@ impl Add for ReadStats {
         Self {
             count: self.count + rhs.count,
             total_time: self.total_time + rhs.total_time,
-            max_time: self.max_time.max(rhs.max_time),
         }
     }
 }
@@ -84,6 +82,7 @@ impl ExecutionMetricsContext {
     }
 }
 
+/// Stores execution metrics, when this struct is dropped the metrics are recorded.
 #[derive(Debug)]
 pub struct ExecutionMetrics {
     storage_metrics: StorageMetrics,
@@ -103,20 +102,8 @@ impl ExecutionMetrics {
     #[cfg(feature = "metrics")]
     fn publish(&self) {
         let context = &self.context;
-        match context.kind {
-            ExecutionKind::CallPast(_) | ExecutionKind::CallLatest(_) | ExecutionKind::AccessList => {
-                metrics::inc_executor_local_call_account_reads(self.storage_metrics.account_reads.total_count(), context.contract, context.function);
-                metrics::inc_executor_local_call_slot_reads(self.storage_metrics.slot_reads.total_count(), context.contract, context.function);
-                metrics::inc_executor_local_call_gas(self.gas_used.as_u64() as usize, context.contract, context.function);
-            }
-            ExecutionKind::Transaction => {
-                metrics::inc_executor_local_transaction_account_reads(self.storage_metrics.account_reads.total_count(), context.contract, context.function);
-                metrics::inc_executor_local_transaction_slot_reads(self.storage_metrics.slot_reads.total_count(), context.contract, context.function);
-                metrics::inc_executor_local_transaction_gas(self.gas_used.as_u64() as usize, context.contract, context.function);
-            }
-            ExecutionKind::RPC(_) => (),
-        }
-        self.storage_metrics.publish();
+        self.storage_metrics.publish(context);
+        metrics::inc_evm_execution_gas(self.gas_used.as_u64() as usize, context.kind.as_ref(), context.contract, context.function);
     }
 }
 
@@ -128,19 +115,19 @@ impl Drop for ExecutionMetrics {
 }
 
 impl StorageMetrics {
-    fn publish(&self) {
+    #[cfg(feature = "metrics")]
+    fn publish(&self, context: &ExecutionMetricsContext) {
+        let execution_kind = context.kind.as_ref();
         for (found_at, stats) in self.account_reads.iter() {
             if stats.count > 0 {
-                metrics::inc_n_executor_account_reads(stats.count as u64, found_at.as_str());
-                metrics::inc_n_executor_account_read_time(stats.total_time.as_nanos() as u64, found_at.as_str());
-                metrics::inc_executor_account_read_time_max(stats.max_time, found_at.as_str());
+                metrics::inc_evm_execution_account_reads(stats.count, execution_kind, found_at.as_str(), context.contract, context.function);
+                metrics::inc_evm_execution_account_read_time(stats.total_time, execution_kind, found_at.as_str(), context.contract, context.function);
             }
         }
         for (found_at, stats) in self.slot_reads.iter() {
             if stats.count > 0 {
-                metrics::inc_n_executor_slot_reads(stats.count as u64, found_at.as_str());
-                metrics::inc_n_executor_slot_read_time(stats.total_time.as_nanos() as u64, found_at.as_str());
-                metrics::inc_executor_slot_read_time_max(stats.max_time, found_at.as_str());
+                metrics::inc_evm_execution_slot_reads(stats.count, execution_kind, found_at.as_str(), context.contract, context.function);
+                metrics::inc_evm_execution_slot_read_time(stats.total_time, execution_kind, found_at.as_str(), context.contract, context.function);
             }
         }
     }
@@ -149,11 +136,7 @@ impl StorageMetrics {
 impl StorageStats {
     #[inline]
     pub fn record(&mut self, found_at: FoundAt, elapsed: Duration) {
-        let stat = ReadStats {
-            count: 1,
-            total_time: elapsed,
-            max_time: elapsed,
-        };
+        let stat = ReadStats { count: 1, total_time: elapsed };
         let stats = match found_at {
             FoundAt::Cache => &mut self.cache,
             FoundAt::Temp => &mut self.temp,
@@ -170,10 +153,6 @@ impl StorageStats {
             FoundAt::PermLatest => self.perm_latest,
             FoundAt::PermHistorical => self.perm_historical,
         }
-    }
-
-    fn total_count(&self) -> usize {
-        self.cache.count + self.perm_historical.count + self.perm_latest.count + self.temp.count
     }
 
     /// Iterates over all read locations with their accumulated stats.
