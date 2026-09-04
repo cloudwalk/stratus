@@ -33,8 +33,8 @@ jobs:
     timeout-minutes: 45
 
     concurrency:
-      group: ${{ github.workflow }}-${{ github.run_id }}
-      cancel-in-progress: false
+      group: ${{ github.workflow }}-${{ github.event.inputs.commit_sha || github.sha }}-${{ github.event.inputs.features || 'default' }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout code
