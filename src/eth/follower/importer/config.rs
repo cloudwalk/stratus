@@ -12,8 +12,8 @@ use crate::eth::follower::ConsensusError;
 use crate::eth::follower::ImporterError;
 use crate::eth::follower::importer::BlockchainClient;
 use crate::eth::follower::importer::ImporterMode;
-use crate::eth::follower::importer::importer_supervisor::ImporterConsensus;
-use crate::eth::follower::importer::importer_supervisor::start_importer;
+use crate::eth::follower::importer::supervisor::ImporterConsensus;
+use crate::eth::follower::importer::supervisor::start_importer;
 use crate::eth::miner::Miner;
 use crate::eth::rpc::RpcContext;
 use crate::eth::storage::StratusStorage;
@@ -46,6 +46,10 @@ pub struct ImporterConfig {
     /// Enable replication of block changes
     #[arg(long = "enable-block-changes-replication", env = "ENABLE_BLOCK_CHANGES_REPLICATION", default_value = "false")]
     pub enable_block_changes_replication: bool,
+
+    /// Compute an access list for transactions before forwarding them to the leader.
+    #[arg(long = "forward-access-list", env = "FORWARD_ACCESS_LIST", default_value = "true", required = false)]
+    pub forward_access_list: bool,
 
     /// Specify the block to stop importing. (useful for validating a follower db against a fake leader)
     #[arg(long = "stop-at-block", env = "STOP_AT_BLOCK")]
@@ -94,6 +98,8 @@ impl ImporterConfig {
         let consensus = Arc::new(ImporterConsensus {
             storage: Arc::clone(&storage),
             chain: Arc::clone(&chain),
+            executor: Arc::clone(&executor),
+            forward_access_list: self.forward_access_list,
         });
 
         spawn(

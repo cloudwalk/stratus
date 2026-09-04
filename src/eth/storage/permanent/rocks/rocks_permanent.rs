@@ -29,6 +29,7 @@ use crate::eth::types::LogMessage;
 use crate::eth::types::Nonce;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
+use crate::eth::types::SlotValue;
 use crate::eth::types::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
@@ -139,11 +140,11 @@ impl RocksPermanentStorage {
     // -------------------------------------------------------------------------
 
     pub fn read_mined_block_number(&self) -> BlockNumber {
-        self.block_number.load(Ordering::SeqCst).into()
+        self.block_number.load(Ordering::Acquire).into()
     }
 
     pub fn set_mined_block_number(&self, number: BlockNumber) {
-        self.block_number.store(number.as_u32(), Ordering::SeqCst);
+        self.block_number.store(number.as_u32(), Ordering::Release);
     }
 
     pub fn has_genesis(&self) -> Result<bool, StorageError> {
@@ -175,6 +176,11 @@ impl RocksPermanentStorage {
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to read slot in RocksPermanent");
             })
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub fn read_slots(&self, slot_keys: Vec<(Address, SlotIndex)>) -> anyhow::Result<Vec<((Address, SlotIndex), SlotValue)>, StorageError> {
+        self.state.read_slots(slot_keys).map_err(|err| StorageError::RocksError { err })
     }
 
     pub fn read_block(&self, selection: BlockFilter) -> anyhow::Result<Option<Block>, StorageError> {

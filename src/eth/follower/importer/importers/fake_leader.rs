@@ -36,7 +36,7 @@ impl ImporterWorker for FakeLeaderWorker {
         self.storage.set_pending_from_external(&block);
         for tx in block.0.transactions.into_transactions() {
             tracing::info!(?tx, "executing tx as fake miner");
-            if let Err(e) = self.executor.execute_local_transaction(tx.try_into()?) {
+            if let Err(e) = self.executor.execute_local_transaction(tx.try_into()?, None) {
                 match e {
                     StratusError::Executor(ExecutorError::Nonce { transaction: _, account: _ }) => {
                         tracing::warn!(reason = ?e, "transaction failed, was this node restarted?");

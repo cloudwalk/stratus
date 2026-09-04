@@ -1,8 +1,7 @@
-use parking_lot::RwLockReadGuard;
-
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::stratus_storage::EntityRead;
+use crate::eth::storage::stratus_storage::LatestStateReadGuard;
 use crate::eth::types::Account;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::PointInTime;
@@ -27,41 +26,24 @@ struct SealPrivate;
 #[derive(Debug, strum::Display)]
 pub enum MinedPointInTime<'a> {
     #[strum(to_string = "latest")]
-    Latest(Seal, Option<RwLockReadGuard<'a, ()>>),
+    Latest(Seal, Option<LatestStateReadGuard<'a>>),
     #[strum(to_string = "past")]
     Past(Seal, BlockNumber),
 }
 
 impl<'a> MinedPointInTime<'a> {
-    fn latest(guard: Option<RwLockReadGuard<'a, ()>>) -> Self {
+    fn latest(guard: Option<LatestStateReadGuard<'a>>) -> Self {
         Self::Latest(Seal(SealPrivate), guard)
     }
 
     fn past(number: BlockNumber) -> Self {
         Self::Past(Seal(SealPrivate), number)
     }
-
-    /// Extracts the read guard if present, leaving `Mined(None)` in its place.
-    fn take_guard(&mut self) -> Option<RwLockReadGuard<'a, ()>> {
-        match self {
-            Self::Latest(_, guard) => guard.take(),
-            Self::Past(_, _) => None,
-        }
-    }
 }
 
 impl From<MinedPointInTime<'_>> for MetricLabelValue {
     fn from(value: MinedPointInTime<'_>) -> Self {
         Self::Some(value.to_string())
-    }
-}
-
-/// Unlocks the guard fairly when dropped.
-impl<'a> Drop for MinedPointInTime<'a> {
-    fn drop(&mut self) {
-        if let Some(guard) = self.take_guard() {
-            RwLockReadGuard::unlock_fair(guard);
-        }
     }
 }
 
@@ -92,9 +74,8 @@ impl Resolve for Slot {}
 
 impl StratusStorage {
     fn resolve_call_point(&self, block_number: BlockNumber) -> MinedPointInTime<'_> {
-        let guard = self.transient_state_lock.read();
-        let mined = self.read_mined_block_number();
-        if block_number >= mined {
+        let guard = self.latest_state_lock.read();
+        if block_number >= guard.number {
             MinedPointInTime::latest(Some(guard))
         } else {
             MinedPointInTime::past(block_number)
@@ -106,7 +87,7 @@ impl StratusStorage {
         match kind {
             ExecutionKind::RPC(PointInTime::Past(number)) | ExecutionKind::CallPast(number) => MinedPointInTime::past(number),
             ExecutionKind::CallLatest(block_number) => self.resolve_call_point(block_number),
-            ExecutionKind::Transaction | ExecutionKind::RPC(_) => MinedPointInTime::latest(None),
+            ExecutionKind::Transaction | ExecutionKind::RPC(_) | ExecutionKind::AccessList => MinedPointInTime::latest(None),
         }
     }
 }
@@ -136,12 +117,15 @@ mod tests {
 
         let resolved = Slot::resolve(&storage, (address, index), kind);
         match resolved {
-            super::Resolved::Miss(mut point) => {
+            super::Resolved::Miss(point) => {
                 assert!(
                     matches!(point, super::MinedPointInTime::Latest(_, _)),
                     "Full call should read latest while block is the mined tip"
                 );
-                assert!(point.take_guard().is_some(), "guard should be held for valid latest read");
+                assert!(
+                    matches!(point, super::MinedPointInTime::Latest(_, Some(_))),
+                    "guard should be held for valid latest read"
+                );
             }
             other => panic!("expected Miss, got {other:?}"),
         }
@@ -152,15 +136,14 @@ mod tests {
         // Stale: b=5 < mined=6. Full → MinedPast(5), NOT MinedPast(4).
         let resolved = Slot::resolve(&storage, (address, index), kind);
         match resolved {
-            super::Resolved::Miss(mut point) => {
+            super::Resolved::Miss(point) => {
                 assert!(!matches!(point, super::MinedPointInTime::Latest(_, _)), "stale call should not read latest");
                 match &point {
                     super::MinedPointInTime::Past(_, number) => {
                         assert_eq!(*number, call_block, "stale Full call should downgrade to MinedPast(block_number), not prev()");
                     }
                     other => panic!("expected Past, got {other:?}"),
-                }
-                assert!(point.take_guard().is_none(), "no guard for historical read");
+                };
             }
             other => panic!("expected Miss, got {other:?}"),
         }

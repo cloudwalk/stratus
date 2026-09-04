@@ -40,7 +40,6 @@ use crate::eth::executor::evm::types::SlotAccessMetrics;
 use crate::eth::executor::evm_worker_pool::EvmWorkerPool;
 use crate::eth::executor::types::EvmRoute;
 use crate::eth::miner::Miner;
-use crate::eth::rpc::RpcError;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
@@ -61,6 +60,7 @@ use crate::ext::to_json_string;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
 use crate::infra::tracing::SpanExt;
+use crate::utils::Semaphore;
 
 // -----------------------------------------------------------------------------
 // Executor
@@ -70,6 +70,7 @@ use crate::infra::tracing::SpanExt;
 #[derive(Default)]
 pub struct ExecutorLocks {
     transaction: Mutex<()>,
+    transaction_warmup: Semaphore,
 }
 
 pub struct Executor {
@@ -95,7 +96,10 @@ impl Executor {
         let reject_not_contract = config.executor_reject_not_contract;
         let evms = EvmWorkerPool::spawn(Arc::clone(&storage), &config);
         Self {
-            locks: ExecutorLocks::default(),
+            locks: ExecutorLocks {
+                transaction_warmup: Semaphore::new(100),
+                ..Default::default()
+            },
             evms,
             miner,
             storage,
@@ -172,8 +176,8 @@ impl Executor {
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
         let tx_input: TransactionInput = tx.try_into()?;
-        let pending_block = self.storage.read_pending_block_header();
-        let mut evm_input = TransactionExecutionInput::from_eth_transaction(&tx_input, pending_block.number, *pending_block.timestamp);
+        let pending_header = self.storage.read_pending_block_header();
+        let mut evm_input = TransactionExecutionInput::create(&tx_input, pending_header);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         let (tx_execution, state) = match receipt.is_success() {
@@ -273,7 +277,7 @@ impl Executor {
 
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to, tx_nonce))]
-    pub fn execute_local_transaction(&self, tx: TransactionInput) -> Result<(), StratusError> {
+    pub fn execute_local_transaction(&self, tx: TransactionInput, access_list: Option<AccessListOutput>) -> Result<(), StratusError> {
         #[cfg(feature = "metrics")]
         let function = codegen::function_sig(&tx.execution_info.input);
         #[cfg(feature = "metrics")]
@@ -289,6 +293,12 @@ impl Executor {
             s.rec_str("tx_nonce", &tx.execution_info.nonce);
         });
 
+        let permit = self.locks.transaction_warmup.acquire();
+
+        if let Some(access_list) = access_list {
+            self.storage.load_access_list(access_list);
+        }
+
         // execute according to the strategy
         const INFINITE_ATTEMPTS: usize = usize::MAX;
 
@@ -296,13 +306,12 @@ impl Executor {
         // * Uses a Mutex, so a new transactions starts executing only after the previous one is executed and persisted.
         // * Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.
         #[cfg(feature = "metrics")]
-        let lock_wait_start = metrics::now();
+        metrics::inc_executor_local_transaction_lock_waiting(1);
         let transaction_lock = self.locks.transaction.lock();
+        let start = metrics::now();
 
         #[cfg(feature = "metrics")]
-        let lock_wait = lock_wait_start.elapsed();
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
+        metrics::dec_executor_local_transaction_lock_waiting(1);
 
         // execute transaction
         let tx_execution = self.execute_local_transaction_attempts(tx, INFINITE_ATTEMPTS);
@@ -311,9 +320,8 @@ impl Executor {
         let execution_elapsed = start.elapsed();
 
         drop(transaction_lock);
+        drop(permit);
 
-        #[cfg(feature = "metrics")]
-        metrics::inc_executor_local_transaction_lock_wait(lock_wait);
         #[cfg(feature = "metrics")]
         metrics::inc_executor_local_transaction(execution_elapsed, tx_execution.is_ok(), contract, function);
 
@@ -348,7 +356,7 @@ impl Executor {
 
             // prepare evm input
             let pending_header = self.storage.read_pending_block_header();
-            let evm_input = TransactionExecutionInput::from_eth_transaction(&tx_input, pending_header.number, *pending_header.timestamp);
+            let evm_input = TransactionExecutionInput::create(&tx_input, pending_header);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
             tracing::debug!(
@@ -407,15 +415,14 @@ impl Executor {
         }
     }
 
-    /// Executes a transaction without persisting state changes.
+    /// Executes a read-only call in the local EVM, without persisting state changes.
     #[tracing::instrument(name = "executor::local_call", skip_all, fields(from, to))]
-    pub fn execute_local_call<Output>(&self, call_input: CallInput, point_in_time: PointInTime) -> Result<Output, StratusError>
+    pub fn execute_local_call<Output>(&self, call_input: CallInput, kind: ExecutionKind) -> Result<Output, StratusError>
     where
         Output: TryFrom<RevmResultAndState, Error = StratusError>,
     {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
-
         Span::with(|s| {
             s.rec_opt("from", &call_input.from);
             s.rec_opt("to", &call_input.to);
@@ -425,31 +432,25 @@ impl Executor {
             to = ?call_input.to,
             data_len = call_input.data.len(),
             data = %call_input.data,
-            %point_in_time,
+            ?kind,
             "executing read-only local transaction"
         );
 
         #[cfg(feature = "metrics")]
         let (function, contract) = { (codegen::function_sig(&call_input.data), codegen::contract_name(&call_input.to)) };
 
-        // execute
-        let evm_input = match point_in_time {
-            PointInTime::Pending => {
-                let pending_header = self.storage.read_pending_block_header();
-                CallExecutionInput::from_pending_block(call_input, pending_header)
-            }
-            _ => {
-                let Some(block) = self.storage.read_block(point_in_time.into())? else {
-                    return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
-                };
-                CallExecutionInput::from_mined_block(call_input, block.header, point_in_time)
-            }
+        let filter = kind.into();
+        let Some(block_info) = self.storage.read_block_info(filter)? else {
+            return Err(StorageError::BlockNotFound { filter }.into());
         };
 
-        let evm_route = match point_in_time {
+        let evm_input = CallExecutionInput::create(call_input, block_info, kind);
+
+        let evm_route = match kind.point_in_time() {
             PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input),
             PointInTime::Past(_) => EvmRoute::CallPast(evm_input),
         };
+
         let evm_result = self.evms.execute::<Output>(evm_route);
 
         // track metrics

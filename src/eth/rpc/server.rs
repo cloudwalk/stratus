@@ -11,11 +11,15 @@ use alloy_primitives::U256;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::Result;
+use futures::FutureExt;
+use futures::future::BoxFuture;
 use futures::join;
 use http::Method;
 use itertools::Itertools;
 use jsonrpsee::Extensions;
+use jsonrpsee::IntoResponse;
 use jsonrpsee::IntoSubscriptionCloseResponse;
+use jsonrpsee::MethodResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use jsonrpsee::server::BatchRequestConfig;
 use jsonrpsee::server::RandomStringIdProvider;
@@ -24,7 +28,9 @@ use jsonrpsee::server::Server as RpcServer;
 use jsonrpsee::server::ServerConfig;
 use jsonrpsee::server::ServerHandle;
 use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
+use jsonrpsee::types::Id;
 use jsonrpsee::types::Params;
+use jsonrpsee::types::Request;
 use jsonrpsee::ws_client::RpcServiceBuilder;
 use parking_lot::RwLock;
 use serde_json::json;
@@ -68,11 +74,13 @@ use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::rpc::RpcSubscriptions;
+use crate::eth::rpc::middleware::TransactionTracingIdentifiers;
 use crate::eth::rpc::middleware::decode_input_arguments;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::pagination;
 use crate::eth::rpc::parser::RpcExtensionsExt;
+use crate::eth::rpc::parser::parse_rpc_rlp;
 use crate::eth::rpc::subscriptions::RpcSubscriptionsHandles;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
@@ -183,19 +191,19 @@ impl Server {
         );
 
         // configure context
-        let ctx = RpcContext {
+        let ctx = Arc::new(RpcContext {
             server: Arc::new(this.clone()),
             client_version: "stratus",
             subs: Arc::clone(&subs.connected),
-        };
+        });
 
         // configure module
-        let mut module = RpcModule::<RpcContext>::new(ctx);
+        let mut module = RpcModule::<RpcContext>::from_arc(Arc::clone(&ctx));
         module = register_methods(module)?;
 
         // configure middleware
         let cors = CorsLayer::new().allow_methods([Method::POST]).allow_origin(Any).allow_headers(Any);
-        let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
+        let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |service| RpcMiddleware::new(service, Arc::clone(&ctx)));
         let http_middleware = tower::ServiceBuilder::new().layer(cors).layer_fn(RpcHttpMiddleware::new).layer(
             ProxyGetRequestLayer::new([
                 ("/health", "stratus_health"),
@@ -350,7 +358,6 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_blocking_method("eth_getTransactionReceipt", eth_get_transaction_receipt)?;
     module.register_blocking_method("eth_estimateGas", eth_estimate_gas)?;
     module.register_blocking_method("eth_call", eth_call)?;
-    module.register_blocking_method("eth_sendRawTransaction", eth_send_raw_transaction)?;
     module.register_blocking_method("stratus_call", stratus_call)?;
     module.register_blocking_method("stratus_accessList", stratus_access_list)?;
     module.register_blocking_method("stratus_getTransactionResult", stratus_get_transaction_result)?;
@@ -623,6 +630,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         enable_block_changes_replication: std::env::var("ENABLE_BLOCK_CHANGES_REPLICATION")
             .ok()
             .is_some_and(|val| val == "1" || val == "true"),
+        forward_access_list: !matches!(std::env::var("FORWARD_ACCESS_LIST").as_deref(), Ok("0") | Ok("false")),
         stop_at_block: None,
     };
 
@@ -1146,7 +1154,14 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
             .executor
             .validate_to_is_contract(to_address, ExecutionKind::RPC(PointInTime::Latest))?;
     }
-    match ctx.server.executor.execute_local_call::<CallExecutionOutput>(call, PointInTime::Latest) {
+
+    let block_number = ctx.server.storage.read_mined_block_number();
+
+    match ctx
+        .server
+        .executor
+        .execute_local_call::<CallExecutionOutput>(call, ExecutionKind::call_from_pit(PointInTime::Latest, block_number))
+    {
         // result is success
         Ok(result) if result.success => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");
@@ -1183,12 +1198,16 @@ fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<CallExecutionOut
 
     // execute
     let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
+    let block_number = ctx.server.storage.translate_to_block_number(filter)?;
+
     if let Some(to_address) = call.to
         && !call.data.is_empty()
     {
         ctx.server.executor.validate_to_is_contract(to_address, ExecutionKind::RPC(point_in_time))?;
     }
-    ctx.server.executor.execute_local_call(call, point_in_time)
+    ctx.server
+        .executor
+        .execute_local_call(call, ExecutionKind::call_from_pit(point_in_time, block_number))
 }
 
 fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
@@ -1298,13 +1317,63 @@ fn stratus_access_list(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
 
     ctx.server
         .executor
-        .execute_local_call::<AccessListOutput>(call, PointInTime::Latest)
+        .execute_local_call::<AccessListOutput>(call, ExecutionKind::AccessList)
         .map(to_json_value)
         .inspect(|_| tracing::info!("executed stratus_accessList with success"))
         .inspect_err(|e| tracing::warn!(reason = ?e, "failed to execute stratus_accessList"))
 }
 
-fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
+pub fn eth_send_raw_transaction<'a>(
+    mut request: Request<'a>,
+    ctx: Arc<RpcContext>,
+    span: Span,
+) -> Result<(BoxFuture<'a, MethodResponse>, Option<TransactionTracingIdentifiers>), StratusError> {
+    let enter = span.enter();
+    let params = request.params();
+    let id = request.id().into_owned();
+    let (params, data) = next_rpc_param::<Bytes>(params.sequence())?;
+    let (_, access_list) = next_rpc_param_or_default::<Option<AccessListOutput>>(params)?;
+    let input = parse_rpc_rlp::<TransactionInput>(&data)?;
+    let tracing_identifiers = TransactionTracingIdentifiers::from_transaction_input(&input).ok();
+
+    Span::with(|s| {
+        if let Some(ref tx) = tracing_identifiers {
+            tx.record_span(s);
+        }
+    });
+    drop(enter);
+
+    request.extensions_mut().insert(span);
+
+    let ext = request.extensions;
+    let ext_clone = ext.clone();
+
+    let future = tokio::task::spawn_blocking(move || {
+        let rp = _eth_send_raw_transaction_impl(input, data, access_list, ctx, ext).into_response();
+        MethodResponse::response(id, rp, usize::MAX)
+    })
+    .map(|result| match result {
+        Ok(r) => r,
+        Err(err) => {
+            tracing::error!("Join error for blocking RPC method: {:?}", err);
+            MethodResponse::error(
+                Id::Null,
+                StratusError::Unexpected(crate::eth::types::UnexpectedError::Unexpected(anyhow::anyhow!(err))),
+            )
+            .with_extensions(ext_clone)
+        }
+    })
+    .boxed();
+    Ok((future, tracing_identifiers))
+}
+
+fn _eth_send_raw_transaction_impl(
+    tx: TransactionInput,
+    data: Bytes,
+    access_list: Option<AccessListOutput>,
+    ctx: Arc<RpcContext>,
+    ext: Extensions,
+) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!(
@@ -1316,17 +1385,6 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
     )
     .entered();
 
-    // get the pre-decoded transaction from extensions
-    let (tx, tx_data) = match (ext.get::<TransactionInput>(), ext.get::<Bytes>()) {
-        (Some(tx), Some(data)) => (tx.clone(), data.clone()),
-        _ => {
-            tracing::error!("failed to execute eth_sendRawTransaction because transaction input is not available");
-            return Err(RpcError::TransactionInvalid {
-                decode_error: "transaction input is not available".to_string(),
-            }
-            .into());
-        }
-    };
     let tx_hash = tx.transaction_info.hash;
 
     // track
@@ -1352,7 +1410,7 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
 
     // execute locally or forward to leader
     match GlobalState::get_node_mode() {
-        NodeMode::Leader | NodeMode::FakeLeader => match ctx.server.executor.execute_local_transaction(tx) {
+        NodeMode::Leader | NodeMode::FakeLeader => match ctx.server.executor.execute_local_transaction(tx, access_list) {
             Ok(_) => Ok(hex_data(tx_hash)),
             Err(e) => {
                 tracing::warn!(reason = ?e, ?tx_hash, "failed to execute eth_sendRawTransaction");
@@ -1360,7 +1418,7 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
             }
         },
         NodeMode::Follower => match &ctx.server.read_importer() {
-            Some(importer) => match Handle::current().block_on(importer.forward_to_leader(tx_hash, tx_data)) {
+            Some(importer) => match Handle::current().block_on(importer.forward_to_leader(tx, tx_hash, data)) {
                 Ok(hash) => Ok(hex_data(hash)),
                 Err(e) => Err(e),
             },

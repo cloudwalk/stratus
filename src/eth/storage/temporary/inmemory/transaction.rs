@@ -15,6 +15,7 @@ use crate::eth::storage::StorageError;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
+use crate::eth::types::BlockInfo;
 use crate::eth::types::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::types::Bytes;
@@ -22,7 +23,6 @@ use crate::eth::types::Hash;
 #[cfg(feature = "dev")]
 use crate::eth::types::Nonce;
 use crate::eth::types::PendingBlock;
-use crate::eth::types::PendingBlockHeader;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::TransactionInput;
@@ -59,7 +59,7 @@ impl InmemoryTransactionTemporaryStorage {
     // Block number
     // -------------------------------------------------------------------------
 
-    pub fn read_pending_block_header(&self) -> PendingBlockHeader {
+    pub fn read_pending_block_header(&self) -> BlockInfo {
         let pending_block = self.pending_block.read();
         pending_block.block.header
     }
@@ -77,11 +77,10 @@ impl InmemoryTransactionTemporaryStorage {
     pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
         // check conflicts
         let pending_block = self.pending_block.upgradable_read();
-        if tx.input != &pending_block.block.header {
+        if tx.input != pending_block.block.header {
             let actual_input = tx.input.clone();
             let tx_input: TransactionInput = tx.into();
-            let expected_input =
-                TransactionExecutionInput::from_eth_transaction(&tx_input, pending_block.block.header.number, *pending_block.block.header.timestamp);
+            let expected_input = TransactionExecutionInput::create(&tx_input, pending_block.block.header);
             return Err(StorageError::EvmInputMismatch {
                 expected: Box::new(expected_input),
                 actual: Box::new(actual_input),
@@ -175,6 +174,36 @@ impl InmemoryTransactionTemporaryStorage {
                 .read()
                 .as_ref()
                 .and_then(|latest| latest.state.slots.get(&(address, index)).map(|value| Slot::new(index, *value.value()))),
+        }
+    }
+
+    /// Retains only the addresses that are missing from both the pending and latest temporary states.
+    ///
+    /// Batched: each lock is acquired once for the whole key set, instead of once per key,
+    /// to reduce contention with the executor.
+    pub fn retain_missing_accounts(&self, addresses: &mut Vec<Address>) {
+        {
+            let pending_block = self.pending_block.read();
+            addresses.retain(|address| !pending_block.state.accounts.contains_key(address));
+        }
+        let latest_block = self.latest_block.read();
+        if let Some(latest_block) = latest_block.as_ref() {
+            addresses.retain(|address| !latest_block.state.accounts.contains_key(address));
+        }
+    }
+
+    /// Retains only the slot keys that are missing from both the pending and latest temporary states.
+    ///
+    /// Batched: each lock is acquired once for the whole key set, instead of once per key,
+    /// to reduce contention with the executor.
+    pub fn retain_missing_slots(&self, slot_keys: &mut Vec<(Address, SlotIndex)>) {
+        {
+            let pending_block = self.pending_block.read();
+            slot_keys.retain(|slot_key| !pending_block.state.slots.contains_key(slot_key));
+        }
+        let latest_block = self.latest_block.read();
+        if let Some(latest_block) = latest_block.as_ref() {
+            slot_keys.retain(|slot_key| !latest_block.state.slots.contains_key(slot_key));
         }
     }
 

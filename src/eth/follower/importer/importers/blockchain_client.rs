@@ -20,6 +20,7 @@ use crate::GlobalState;
 use crate::alias::AlloyBytes;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
+use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::ExecutorError;
 use crate::eth::rpc::pagination;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
@@ -343,11 +344,12 @@ impl BlockchainClient {
     ///
     /// The current machine name is sent as the `x-client` header on every request (see `client_headers`),
     /// so the leader attributes the transaction to this node automatically.
-    pub async fn send_raw_transaction_to_leader(&self, tx: AlloyBytes) -> Result<Hash, StratusError> {
+    pub async fn send_raw_transaction_to_leader(&self, tx: AlloyBytes, access_list: Option<AccessListOutput>) -> Result<Hash, StratusError> {
         tracing::debug!("sending raw transaction to leader");
 
         let tx = to_json_value(tx);
-        let result = self.http.request::<Hash, _>("eth_sendRawTransaction", [tx]).await;
+        let access_list = to_json_value(access_list);
+        let result = self.http.request::<Hash, _>("eth_sendRawTransaction", [tx, access_list]).await;
 
         match result {
             Ok(hash) => Ok(hash),
