@@ -1,13 +1,34 @@
+use std::ops::Add;
+use std::ops::AddAssign;
 use std::time::Duration;
 
 use crate::eth::storage::FoundAt;
 use crate::eth::types::Gas;
 use crate::infra::metrics;
 
-#[derive(Debug, Default, Clone, Copy, derive_more::Add, derive_more::AddAssign)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct ReadStats {
     pub count: usize,
     pub total_time: Duration,
+    pub max_time: Duration,
+}
+
+impl Add for ReadStats {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self {
+        Self {
+            count: self.count + rhs.count,
+            total_time: self.total_time + rhs.total_time,
+            max_time: self.max_time.max(rhs.max_time),
+        }
+    }
+}
+
+impl AddAssign for ReadStats {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
+    }
 }
 
 /// Read stats per location, for one entity kind.
@@ -61,13 +82,15 @@ impl StorageMetrics {
         for (found_at, stats) in self.account_reads.iter() {
             if stats.count > 0 {
                 metrics::inc_n_executor_account_reads(stats.count as u64, found_at.as_str());
-                metrics::inc_n_executor_account_read_time(stats.total_time.as_micros() as u64, found_at.as_str());
+                metrics::inc_n_executor_account_read_time(stats.total_time.as_nanos() as u64, found_at.as_str());
+                metrics::inc_executor_account_read_time_max(stats.max_time, found_at.as_str());
             }
         }
         for (found_at, stats) in self.slot_reads.iter() {
             if stats.count > 0 {
                 metrics::inc_n_executor_slot_reads(stats.count as u64, found_at.as_str());
-                metrics::inc_n_executor_slot_read_time(stats.total_time.as_micros() as u64, found_at.as_str());
+                metrics::inc_n_executor_slot_read_time(stats.total_time.as_nanos() as u64, found_at.as_str());
+                metrics::inc_executor_slot_read_time_max(stats.max_time, found_at.as_str());
             }
         }
     }
@@ -76,7 +99,11 @@ impl StorageMetrics {
 impl StorageStats {
     #[inline]
     pub fn record(&mut self, found_at: FoundAt, elapsed: Duration) {
-        let stat = ReadStats { count: 1, total_time: elapsed };
+        let stat = ReadStats {
+            count: 1,
+            total_time: elapsed,
+            max_time: elapsed,
+        };
         let stats = match found_at {
             FoundAt::Cache => &mut self.cache,
             FoundAt::Temp => &mut self.temp,

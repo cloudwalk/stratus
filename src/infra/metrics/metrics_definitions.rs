@@ -126,14 +126,20 @@ metrics! {
     "Number of account reads during EVM execution."
     counter executor_account_reads{found_at},
 
-    "Total time reading accounts during EVM execution, in microseconds."
+    "Total time reading accounts during EVM execution, in nanoseconds."
     counter executor_account_read_time{found_at},
+
+    "Slowest account read per execution, over a rolling window."
+    histogram_duration executor_account_read_time_max{found_at},
 
     "Number of slot reads during EVM execution."
     counter executor_slot_reads{found_at},
 
-    "Total time reading slots during EVM execution, in microseconds."
+    "Total time reading slots during EVM execution, in nanoseconds."
     counter executor_slot_read_time{found_at},
+
+    "Slowest slot read per execution, over a rolling window."
+    histogram_duration executor_slot_read_time_max{found_at},
 
     "Time executing trace_transaction"
     histogram_duration executor_inspect{trace_type},
