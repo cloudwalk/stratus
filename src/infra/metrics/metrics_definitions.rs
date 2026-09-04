@@ -100,16 +100,16 @@ metrics! {
     histogram_duration executor_local_call{success, contract, function},
 
     "Number of account reads from one storage location during an EVM execution."
-    histogram_counter evm_execution_account_reads{execution_kind, found_at, contract, function},
+    counter evm_execution_account_reads{execution_kind, found_at, contract, function},
 
-    "Total time spent reading accounts from one storage location during an EVM execution."
-    histogram_duration evm_execution_account_read_time{execution_kind, found_at, contract, function},
+    "Total time spent reading accounts from one storage location during an EVM execution, in nanoseconds."
+    counter evm_execution_account_read_time{execution_kind, found_at, contract, function},
 
     "Number of slot reads from one storage location during an EVM execution."
-    histogram_counter evm_execution_slot_reads{execution_kind, found_at, contract, function},
+    counter evm_execution_slot_reads{execution_kind, found_at, contract, function},
 
-    "Total time spent reading slots from one storage location during an EVM execution."
-    histogram_duration evm_execution_slot_read_time{execution_kind, found_at, contract, function},
+    "Total time spent reading slots from one storage location during an EVM execution, in nanoseconds."
+    counter evm_execution_slot_read_time{execution_kind, found_at, contract, function},
 
     "Gas spent during an EVM execution."
     histogram_counter evm_execution_gas{execution_kind, contract, function},

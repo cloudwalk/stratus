@@ -120,14 +120,26 @@ impl StorageMetrics {
         let execution_kind = context.kind.as_ref();
         for (found_at, stats) in self.account_reads.iter() {
             if stats.count > 0 {
-                metrics::inc_evm_execution_account_reads(stats.count, execution_kind, found_at.as_str(), context.contract, context.function);
-                metrics::inc_evm_execution_account_read_time(stats.total_time, execution_kind, found_at.as_str(), context.contract, context.function);
+                metrics::inc_n_evm_execution_account_reads(stats.count as u64, execution_kind, found_at.as_str(), context.contract, context.function);
+                metrics::inc_n_evm_execution_account_read_time(
+                    stats.total_time.as_nanos() as u64,
+                    execution_kind,
+                    found_at.as_str(),
+                    context.contract,
+                    context.function,
+                );
             }
         }
         for (found_at, stats) in self.slot_reads.iter() {
             if stats.count > 0 {
-                metrics::inc_evm_execution_slot_reads(stats.count, execution_kind, found_at.as_str(), context.contract, context.function);
-                metrics::inc_evm_execution_slot_read_time(stats.total_time, execution_kind, found_at.as_str(), context.contract, context.function);
+                metrics::inc_n_evm_execution_slot_reads(stats.count as u64, execution_kind, found_at.as_str(), context.contract, context.function);
+                metrics::inc_n_evm_execution_slot_read_time(
+                    stats.total_time.as_nanos() as u64,
+                    execution_kind,
+                    found_at.as_str(),
+                    context.contract,
+                    context.function,
+                );
             }
         }
     }
