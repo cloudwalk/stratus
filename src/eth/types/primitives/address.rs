@@ -15,7 +15,7 @@ use crate::alias::RevmAddress;
 use crate::eth::types::LogTopic;
 
 /// Address of an Ethereum account (wallet or contract).
-#[derive(DebugAsJson, Clone, Copy, Default, Eq, PartialEq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, Copy, Default, Eq, PartialEq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize, alloy_rlp::RlpDecodableWrapper)]
 pub struct Address(pub FixedBytes<20>);
 
 impl Address {

@@ -5265,16 +5265,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rlp"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa24e92bb2a83198bb76d661a71df9f7076b8c420b8696e4d3d97d50d94479e3"
-dependencies = [
- "bytes",
- "rustc-hex",
-]
-
-[[package]]
 name = "rocksdb"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5311,7 +5301,7 @@ dependencies = [
  "proptest",
  "rand 0.8.5",
  "rand 0.9.4",
- "rlp 0.5.2",
+ "rlp",
  "ruint-macro",
  "serde_core",
  "valuable",
@@ -6188,6 +6178,7 @@ dependencies = [
  "alloy-eips",
  "alloy-json-abi",
  "alloy-primitives",
+ "alloy-rlp",
  "alloy-rpc-types-eth",
  "alloy-rpc-types-trace",
  "alloy-sol-types",
@@ -6249,7 +6240,6 @@ dependencies = [
  "revm-inspectors",
  "revm-state",
  "ring",
- "rlp 0.6.1",
  "rocksdb",
  "rustc-hash",
  "sasl2-sys",

@@ -84,7 +84,7 @@ alloy-dyn-abi = "=1.6.1"
 alloy-json-abi = "=1.6.1"
 revm-inspectors = { version = "=0.42.0", features = ["js-tracer"] }
 revm-state = "42.0.0"
-rlp = "=0.6.1"
+alloy-rlp = { version = "=0.3.16", features = ["derive"] }
 
 # network
 jsonrpsee = { version = "=0.26.0", features = ["server", "client"] }
