@@ -81,8 +81,11 @@ pub fn parse_rpc_rlp<T: Decodable>(value: &[u8]) -> Result<T, RpcError> {
     let mut buf = value;
     match T::decode(&mut buf) {
         Ok(trx) => Ok(trx),
-        Err(e) => Err(RpcError::TransactionInvalid {
-            decode_error: TransactionDecodeError::Custom(e.to_string()),
-        }),
+        Err(e) => {
+            tracing::error!(reason = %e, raw_bytes = %const_hex::encode_prefixed(value), "failed to decode raw transaction RLP");
+            Err(RpcError::TransactionInvalid {
+                decode_error: TransactionDecodeError::Custom(e.to_string()),
+            })
+        }
     }
 }

@@ -74,7 +74,6 @@ use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::rpc::RpcSubscriptions;
-use crate::eth::rpc::TransactionDecodeError;
 use crate::eth::rpc::middleware::TransactionTracingIdentifiers;
 use crate::eth::rpc::middleware::decode_input_arguments;
 use crate::eth::rpc::next_rpc_param;
@@ -1386,17 +1385,6 @@ fn _eth_send_raw_transaction_impl(
     )
     .entered();
 
-    // get the pre-decoded transaction from extensions
-    let (tx, tx_data) = match (ext.get::<TransactionInput>(), ext.get::<Bytes>()) {
-        (Some(tx), Some(data)) => (tx.clone(), data.clone()),
-        _ => {
-            tracing::error!("failed to execute eth_sendRawTransaction because transaction input is not available");
-            return Err(RpcError::TransactionInvalid {
-                decode_error: TransactionDecodeError::Custom("transaction input is not available".to_string()),
-            }
-            .into());
-        }
-    };
     let tx_hash = tx.transaction_info.hash;
 
     // track
