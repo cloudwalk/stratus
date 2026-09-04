@@ -93,8 +93,11 @@ metrics! {
     "Time executing a local transaction."
     histogram_duration executor_local_transaction{success, contract, function},
 
-    "Time waiting to acquire the local transaction execution lock."
-    histogram_duration executor_local_transaction_lock_wait{},
+    "Number of transactions waiting to acquire the local transaction execution lock."
+    gauge executor_local_transaction_lock_waiting{},
+
+    "Number of transactions waiting to acquire the local transaction execution lock."
+    gauge executor_local_transaction_semaphore_waiting{},
 
     "Time executing a local transaction."
     counter executor_local_transaction_reverts{contract, function, reason},

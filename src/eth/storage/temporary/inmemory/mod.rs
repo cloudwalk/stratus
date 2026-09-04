@@ -7,6 +7,7 @@ use crate::eth::storage::StorageError;
 use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTemporaryStorage;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
+use crate::eth::types::BlockInfo;
 use crate::eth::types::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::types::Bytes;
@@ -14,7 +15,6 @@ use crate::eth::types::Hash;
 #[cfg(feature = "dev")]
 use crate::eth::types::Nonce;
 use crate::eth::types::PendingBlock;
-use crate::eth::types::PendingBlockHeader;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::UnixTime;
@@ -35,7 +35,7 @@ impl InMemoryTemporaryStorage {
         }
     }
 
-    pub fn read_pending_block_header(&self) -> PendingBlockHeader {
+    pub fn read_pending_block_header(&self) -> BlockInfo {
         self.transaction_storage.read_pending_block_header()
     }
 

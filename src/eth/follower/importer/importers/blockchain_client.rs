@@ -12,6 +12,7 @@ use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::http_client::HttpClientBuilder;
 use jsonrpsee::ws_client::WsClient;
 use jsonrpsee::ws_client::WsClientBuilder;
+use serde_json::value::RawValue;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 
@@ -19,7 +20,9 @@ use crate::GlobalState;
 use crate::alias::AlloyBytes;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
+use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::ExecutorError;
+use crate::eth::rpc::pagination;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::types::Address;
@@ -42,8 +45,6 @@ pub struct BlockchainClient {
     ws: Option<RwLock<WsClient>>,
     ws_url: Option<String>,
     timeout: Duration,
-    #[allow(dead_code)]
-    max_response_size_bytes: u32,
 }
 
 /// Builds the HTTP headers sent on every outbound request to the leader.
@@ -72,16 +73,16 @@ fn machine_name() -> String {
 
 impl BlockchainClient {
     /// Creates a new RPC client connected only to HTTP.
-    pub async fn new_http(http_url: &str, timeout: Duration, max_response_size_bytes: u32) -> anyhow::Result<Self> {
-        Self::new_http_ws(http_url, None, timeout, max_response_size_bytes).await
+    pub async fn new_http(http_url: &str, timeout: Duration) -> anyhow::Result<Self> {
+        Self::new_http_ws(http_url, None, timeout).await
     }
 
     /// Creates a new RPC client connected to HTTP and optionally to WS.
-    pub async fn new_http_ws(http_url: &str, ws_url: Option<&str>, timeout: Duration, max_response_size_bytes: u32) -> anyhow::Result<Self> {
+    pub async fn new_http_ws(http_url: &str, ws_url: Option<&str>, timeout: Duration) -> anyhow::Result<Self> {
         tracing::info!(%http_url, "creating blockchain client");
 
         // build http provider
-        let http = Self::build_http_client(http_url, timeout, max_response_size_bytes)?;
+        let http = Self::build_http_client(http_url, timeout)?;
 
         // build ws provider
         let ws = if let Some(ws_url) = ws_url {
@@ -96,7 +97,6 @@ impl BlockchainClient {
             ws,
             ws_url: ws_url.map(|x| x.to_owned()),
             timeout,
-            max_response_size_bytes,
         };
 
         // check health before assuming it is ok
@@ -105,11 +105,11 @@ impl BlockchainClient {
         Ok(client)
     }
 
-    fn build_http_client(url: &str, timeout: Duration, max_response_size_bytes: u32) -> anyhow::Result<HttpClient> {
+    fn build_http_client(url: &str, timeout: Duration) -> anyhow::Result<HttpClient> {
         tracing::info!(%url, timeout = %timeout.to_string_ext(), "creating blockchain http client");
         match HttpClientBuilder::default()
             .request_timeout(timeout)
-            .max_response_size(max_response_size_bytes)
+            .max_response_size(u32::MAX)
             .set_headers(client_headers())
             .build(url)
         {
@@ -187,17 +187,84 @@ impl BlockchainClient {
         }
     }
 
+    /// Fetches importer data from the leader, transparently paginating oversized responses.
+    ///
+    /// Sends the pagination capability parameter so a pagination-aware leader can split
+    /// responses that do not fit in a single message (see `eth::rpc::pagination`). Old leaders
+    /// ignore the extra parameter and answer normally, which is handled transparently.
+    async fn request_importer_data<T: serde::de::DeserializeOwned>(&self, method: &'static str, block_number: BlockNumber) -> anyhow::Result<Option<T>> {
+        let Some(full) = self.fetch_serialized_response(method, block_number).await? else {
+            return Ok(None); // block not available yet
+        };
+        let value = serde_json::from_str(&full).with_context(|| format!("failed to deserialize importer data from {method}"))?;
+        Ok(Some(value))
+    }
+
+    /// Fetches the full serialized response for an importer method, reassembling pagination chunks.
+    async fn fetch_serialized_response(&self, method: &'static str, block_number: BlockNumber) -> anyhow::Result<Option<String>> {
+        tracing::debug!(%block_number, method, "fetching importer data");
+
+        let number = to_json_value(block_number);
+
+        // first request from offset zero
+        let params = [number.clone(), pagination::request_params(0)];
+        let result = self.http.request::<Option<Box<RawValue>>, _>(method, params).await;
+        let raw = match result {
+            Ok(Some(raw)) => raw,
+            Ok(None) => return Ok(None), // block not available yet
+            Err(e) => return log_and_err!(reason = e, "failed to fetch importer data"),
+        };
+
+        // normal response: return the serialized value directly
+        if !pagination::is_envelope(raw.get()) {
+            return Ok(Some(raw.get().to_owned()));
+        }
+
+        // paginated response: fetch and reassemble chunks
+        let first_envelope = pagination::parse_envelope(raw.get())?;
+        if first_envelope.total > pagination::MAX_REASSEMBLY_TOTAL {
+            tracing::error!(
+                total = first_envelope.total,
+                cap = pagination::MAX_REASSEMBLY_TOTAL,
+                method,
+                "paginated response total exceeds the reassembly cap"
+            );
+            anyhow::bail!(
+                "paginated response total of {} bytes exceeds the reassembly cap of {} bytes",
+                first_envelope.total,
+                pagination::MAX_REASSEMBLY_TOTAL
+            );
+        }
+        let mut reassembler = pagination::Reassembler::new(first_envelope.total);
+        tracing::info!(%block_number, method, total = first_envelope.total, "fetching paginated importer data");
+        let mut envelope = first_envelope;
+        loop {
+            if reassembler.push(envelope)? {
+                break;
+            }
+
+            // next chunk from the current offset
+            let params = [number.clone(), pagination::request_params(reassembler.next_offset())];
+            let result = self.http.request::<Box<RawValue>, _>(method, params).await;
+            let raw = match result {
+                Ok(raw) => raw,
+                Err(e) => return log_and_err!(reason = e, "failed to fetch importer data chunk"),
+            };
+            if !pagination::is_envelope(raw.get()) {
+                tracing::error!(payload = raw.get(), "expected paginated chunk but got normal response");
+                anyhow::bail!("expected paginated chunk but got normal response");
+            }
+            envelope = pagination::parse_envelope(raw.get())?;
+        }
+
+        Ok(Some(reassembler.finish()?))
+    }
+
     /// Fetches a block by number with receipts.
     pub async fn fetch_block_and_receipts(&self, block_number: BlockNumber) -> anyhow::Result<Option<ExternalBlockWithReceipts>> {
         tracing::debug!(%block_number, "fetching block");
 
-        let number = to_json_value(block_number);
-        let result = self
-            .http
-            .request::<Option<ExternalBlockWithReceipts>, _>("stratus_getBlockAndReceipts", [number])
-            .await;
-
-        match result {
+        match self.request_importer_data("stratus_getBlockAndReceipts", block_number).await {
             Ok(block) => Ok(block),
             Err(e) => log_and_err!(reason = e, "failed to fetch block with receipts"),
         }
@@ -207,13 +274,7 @@ impl BlockchainClient {
     pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<(BlockRocksdb, BlockChangesRocksdb)>> {
         tracing::debug!(%block_number, "fetching block with changes");
 
-        let number = to_json_value(block_number);
-        let result = self
-            .http
-            .request::<Option<(BlockRocksdb, BlockChangesRocksdb)>, _>("stratus_getBlockWithChanges", [number])
-            .await;
-
-        match result {
+        match self.request_importer_data("stratus_getBlockWithChanges", block_number).await {
             Ok(block) => Ok(block),
             Err(e) => log_and_err!(reason = e, "failed to fetch block with changes"),
         }
@@ -283,11 +344,12 @@ impl BlockchainClient {
     ///
     /// The current machine name is sent as the `x-client` header on every request (see `client_headers`),
     /// so the leader attributes the transaction to this node automatically.
-    pub async fn send_raw_transaction_to_leader(&self, tx: AlloyBytes) -> Result<Hash, StratusError> {
+    pub async fn send_raw_transaction_to_leader(&self, tx: AlloyBytes, access_list: Option<AccessListOutput>) -> Result<Hash, StratusError> {
         tracing::debug!("sending raw transaction to leader");
 
         let tx = to_json_value(tx);
-        let result = self.http.request::<Hash, _>("eth_sendRawTransaction", [tx]).await;
+        let access_list = to_json_value(access_list);
+        let result = self.http.request::<Hash, _>("eth_sendRawTransaction", [tx, access_list]).await;
 
         match result {
             Ok(hash) => Ok(hash),
@@ -357,14 +419,13 @@ impl BlockchainClient {
     #[cfg(test)]
     pub(crate) fn new_without_health_check(http_url: &str) -> anyhow::Result<Self> {
         let timeout = Duration::from_secs(1);
-        let http = Self::build_http_client(http_url, timeout, 1024)?;
+        let http = Self::build_http_client(http_url, timeout)?;
         Ok(Self {
             http,
             http_url: http_url.to_owned(),
             ws: None,
             ws_url: None,
             timeout,
-            max_response_size_bytes: 1024,
         })
     }
 }

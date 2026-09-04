@@ -3,6 +3,7 @@ use serde::Deserialize;
 
 use crate::eth::types::Address;
 use crate::eth::types::Bytes;
+use crate::eth::types::TransactionInput;
 use crate::eth::types::Wei;
 
 #[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize)]
@@ -37,5 +38,16 @@ impl<'de> Deserialize<'de> for CallInput {
         let data = serde_json::from_value(data_value).unwrap_or_default();
 
         Ok(CallInput { from, to, value, data })
+    }
+}
+
+impl From<TransactionInput> for CallInput {
+    fn from(value: TransactionInput) -> Self {
+        Self {
+            from: Some(value.signer()),
+            to: value.execution_info.to,
+            value: value.execution_info.value,
+            data: value.execution_info.input,
+        }
     }
 }

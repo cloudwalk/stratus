@@ -8,12 +8,12 @@ use crate::eth::executor::evm::types::GAS_MAX_LIMIT;
 use crate::eth::executor::evm::types::GeneralRevm;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::types::Address;
+use crate::eth::types::BlockInfo;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::Bytes;
 use crate::eth::types::ChainId;
 use crate::eth::types::Gas;
 use crate::eth::types::Nonce;
-use crate::eth::types::PendingBlockHeader;
 use crate::eth::types::TransactionInput;
 use crate::eth::types::UnixTime;
 use crate::eth::types::Wei;
@@ -81,7 +81,7 @@ pub struct TransactionExecutionInput {
 
 impl TransactionExecutionInput {
     /// Creates from a transaction that was sent to Stratus with `eth_sendRawTransaction` or during Importing.
-    pub fn from_eth_transaction(input: &TransactionInput, block_number: BlockNumber, block_timestamp: UnixTime) -> Self {
+    pub fn create(input: &TransactionInput, block_info: BlockInfo) -> Self {
         Self {
             from: input.signer(),
             to: input.execution_info.to,
@@ -90,16 +90,16 @@ impl TransactionExecutionInput {
             gas_limit: input.execution_info.gas_limit,
             gas_price: input.execution_info.gas_price,
             nonce: input.execution_info.nonce,
-            block_number,
-            block_timestamp,
+            block_number: block_info.number,
+            block_timestamp: *block_info.timestamp,
             chain_id: input.execution_info.chain_id,
             kind: ExecutionKind::Transaction,
         }
     }
 }
 
-impl PartialEq<&PendingBlockHeader> for TransactionExecutionInput {
-    fn eq(&self, other: &&PendingBlockHeader) -> bool {
+impl PartialEq<BlockInfo> for TransactionExecutionInput {
+    fn eq(&self, other: &BlockInfo) -> bool {
         self.block_number == other.number && self.block_timestamp == *other.timestamp
     }
 }

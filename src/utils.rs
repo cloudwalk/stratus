@@ -1,6 +1,13 @@
+use std::sync::Arc;
 use std::time::Duration;
 
+use derive_more::Deref;
+use parking_lot::Condvar;
+use parking_lot::Mutex;
 use tokio::time::Instant;
+
+#[cfg(feature = "metrics")]
+use crate::infra::metrics;
 
 /// Amount of bytes in one GB (technically, GiB).
 pub const GIGABYTE: usize = 1024 * 1024 * 1024;
@@ -105,5 +112,55 @@ pub mod test_utils {
     pub fn fake_uint<const N: usize, const L: usize>() -> Uint<N, L> {
         let mut rng = generate_rng();
         Uint::random_with(&mut rng)
+    }
+}
+
+#[derive(Deref, Default)]
+pub struct Semaphore {
+    // refac to another file
+    #[deref]
+    sem: Arc<SemaphoreInner>,
+}
+
+#[derive(Default)]
+pub struct SemaphoreInner {
+    permits: Mutex<usize>,
+    cvar: Condvar,
+}
+
+pub struct Permit {
+    sem: Arc<SemaphoreInner>,
+}
+
+impl Semaphore {
+    pub fn new(permits: usize) -> Self {
+        Self {
+            sem: Arc::new(SemaphoreInner {
+                permits: Mutex::new(permits),
+                cvar: Condvar::new(),
+            }),
+        }
+    }
+
+    pub fn acquire(&self) -> Permit {
+        #[cfg(feature = "metrics")]
+        metrics::inc_executor_local_transaction_semaphore_waiting(1);
+        let mut permits = self.permits.lock();
+        while *permits == 0 {
+            self.cvar.wait(&mut permits);
+        }
+        *permits -= 1;
+        drop(permits);
+        #[cfg(feature = "metrics")]
+        metrics::dec_executor_local_transaction_semaphore_waiting(1);
+        Permit { sem: Arc::clone(&self.sem) }
+    }
+}
+
+impl Drop for Permit {
+    fn drop(&mut self) {
+        let mut permits = self.sem.permits.lock();
+        *permits += 1;
+        self.sem.cvar.notify_one();
     }
 }

@@ -7,6 +7,7 @@ use indexmap::Equivalent;
 use quick_cache::UnitWeighter;
 use quick_cache::sync::Cache;
 use quick_cache::sync::GuardResult;
+use quick_cache::sync::LockContention;
 
 use crate::eth::executor::State;
 use crate::eth::executor::types::state::Change;
@@ -85,12 +86,42 @@ impl StorageCache {
         self.slot_latest_cache.insert_if_missing((address, slot_index), slot_value);
     }
 
-    pub fn get_account_latest(&self, address: Address) -> Option<Account> {
-        self.account_latest_cache.get(&address)
+    pub fn get_account_latest(&self, address: &Address) -> Option<Account> {
+        self.account_latest_cache.get(address)
     }
 
-    pub fn get_slot_latest(&self, address: Address, index: SlotIndex) -> Option<Slot> {
-        self.slot_latest_cache.get(&(address, index)).map(|value| Slot { value, index })
+    pub fn get_slot_latest(&self, address: &Address, index: &SlotIndex) -> Option<Slot> {
+        self.slot_latest_cache
+            .get(&SlotKeyRef(address, index))
+            .map(|value| Slot { value, index: *index })
+    }
+
+    pub fn try_get_account_latest(&self, address: &Address) -> Result<Option<Account>, LockContention> {
+        self.account_latest_cache.try_get(address)
+    }
+
+    pub fn try_get_slot_latest(&self, address: &Address, index: &SlotIndex) -> Result<Option<Slot>, LockContention> {
+        self.slot_latest_cache
+            .try_get(&SlotKeyRef(address, index))
+            .map(|value| value.map(|value| Slot { value, index: *index }))
+    }
+
+    pub fn contains_account(&self, address: &Address) -> bool {
+        self.account_latest_cache.contains_key(address)
+    }
+
+    pub fn contains_slot(&self, address: &Address, index: &SlotIndex) -> bool {
+        self.slot_latest_cache.contains_key(&SlotKeyRef(address, index))
+    }
+}
+
+/// Borrowed lookup key for `slot_latest_cache`.
+#[derive(Hash)]
+struct SlotKeyRef<'a>(&'a Address, &'a SlotIndex);
+
+impl Equivalent<(Address, SlotIndex)> for SlotKeyRef<'_> {
+    fn equivalent(&self, key: &(Address, SlotIndex)) -> bool {
+        self.0 == &key.0 && self.1 == &key.1
     }
 }
 
