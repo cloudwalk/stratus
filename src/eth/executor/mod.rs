@@ -15,8 +15,8 @@ use anyhow::bail;
 pub use config::ExecutorConfig;
 pub use evm::types::AccessListOutput;
 pub use evm::types::CallExecutionOutput;
-pub use evm::types::EvmExecutionMetrics;
 pub use evm::types::EvmKind;
+pub use evm::types::ExecutionMetrics;
 pub use evm::types::TransactionExecutionInput;
 pub use evm::types::TransactionExecutionOutput;
 pub use evm::types::TransactionExecutionResult;
@@ -160,7 +160,7 @@ impl Executor {
                 let evm_execution = self.evms.execute::<TransactionExecutionOutput>(EvmRoute::Transaction(evm_input.clone()));
 
                 // handle re-execution result
-                let (mut evm_result, evm_metrics) = match evm_execution {
+                let (mut evm_result, _evm_metrics) = match evm_execution {
                     Ok((evm_result, evm_metrics)) => (evm_result, evm_metrics),
                     Err(e) => {
                         let json_tx = to_json_string(&tx_input);
@@ -181,9 +181,6 @@ impl Executor {
                     tracing::error!(reason = ?e, %block_number, tx_hash = %tx_input.transaction_info.hash, %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
                     return Err(e);
                 };
-
-                #[cfg(feature = "metrics")]
-                evm_metrics.publish_storage_metrics();
 
                 (
                     TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result.outcome),
@@ -246,7 +243,7 @@ impl Executor {
         function = |tx| codegen::function_sig(&tx.execution_info.input)
         )
     )]
-    fn execute_local_transaction_impl(&self, tx: TransactionInput, _transaction_guard: MutexGuard<()>) -> Result<EvmExecutionMetrics, StratusError> {
+    fn execute_local_transaction_impl(&self, tx: TransactionInput, _transaction_guard: MutexGuard<()>) -> Result<ExecutionMetrics, StratusError> {
         self.execute_local_transaction_attempts(tx, usize::MAX)
     }
 
@@ -256,9 +253,6 @@ impl Executor {
         if tx.signer().is_zero() {
             return Err(ExecutorError::FromZeroAddress.into());
         }
-
-        #[cfg(feature = "metrics")]
-        let (contract, function) = (codegen::contract_name(&tx.execution_info.to), codegen::function_sig(&tx.execution_info.input));
 
         // track
         Span::with(|s| {
@@ -285,17 +279,13 @@ impl Executor {
 
         // execute transaction
         let result = self.execute_local_transaction_impl(tx, transaction_guard);
-
         drop(permit);
 
-        #[cfg(feature = "metrics")]
-        result?.publish_local_transaction(contract, function);
-
-        Ok(())
+        result.and(Ok(()))
     }
 
     /// Executes a transaction until it reaches the max number of attempts.
-    fn execute_local_transaction_attempts(&self, tx_input: TransactionInput, max_attempts: usize) -> Result<EvmExecutionMetrics, StratusError> {
+    fn execute_local_transaction_attempts(&self, tx_input: TransactionInput, max_attempts: usize) -> Result<ExecutionMetrics, StratusError> {
         // executes transaction until no more conflicts
         let mut attempt = 0;
         #[cfg(feature = "metrics")]
@@ -310,7 +300,7 @@ impl Executor {
             let pending_header = self.storage.read_pending_block_header();
             let evm_input = TransactionExecutionInput::create(&tx_input, pending_header);
 
-            let (evm_result, evm_metrics): (TransactionExecutionOutput, EvmExecutionMetrics) = self.evms.execute(EvmRoute::Transaction(evm_input.clone()))?;
+            let (evm_result, evm_metrics): (TransactionExecutionOutput, ExecutionMetrics) = self.evms.execute(EvmRoute::Transaction(evm_input.clone()))?;
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
@@ -328,20 +318,16 @@ impl Executor {
                 Ok(_) => {
                     return Ok(evm_metrics);
                 }
-                Err(e) => {
-                    #[cfg(feature = "metrics")]
-                    evm_metrics.publish_local_transaction(contract, function);
-                    match e {
-                        StratusError::Storage(StorageError::EvmInputMismatch { ref expected, ref actual }) => {
-                            tracing::warn!(?expected, ?actual, "evm input and block header mismatch");
-                            if attempt >= max_attempts {
-                                return Err(e);
-                            }
-                            continue;
+                Err(e) => match e {
+                    StratusError::Storage(StorageError::EvmInputMismatch { ref expected, ref actual }) => {
+                        tracing::warn!(?expected, ?actual, "evm input and block header mismatch");
+                        if attempt >= max_attempts {
+                            return Err(e);
                         }
-                        _ => return Err(e),
+                        continue;
                     }
-                }
+                    _ => return Err(e),
+                },
             }
         }
     }
@@ -371,9 +357,6 @@ impl Executor {
             "executing read-only local transaction"
         );
 
-        #[cfg(feature = "metrics")]
-        let (function, contract) = { (codegen::function_sig(&call_input.data), codegen::contract_name(&call_input.to)) };
-
         let filter = kind.into();
         let Some(block_info) = self.storage.read_block_info(filter)? else {
             return Err(StorageError::BlockNotFound { filter }.into());
@@ -385,13 +368,8 @@ impl Executor {
             PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input),
             PointInTime::Past(_) => EvmRoute::CallPast(evm_input),
         };
-        let (output, evm_metrics) = self.evms.execute::<Output>(evm_route)?;
 
-        // track metrics
-        #[cfg(feature = "metrics")]
-        evm_metrics.publish_local_call(contract, function);
-
-        Ok(output)
+        self.evms.execute::<Output>(evm_route).map(|(output, _metrics)| output)
     }
 
     #[timed(executor_inspect, labels(

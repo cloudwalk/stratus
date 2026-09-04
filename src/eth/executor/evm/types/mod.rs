@@ -13,7 +13,8 @@ mod execution_metrics;
 mod input;
 mod output;
 
-pub use execution_metrics::EvmExecutionMetrics;
+pub use execution_metrics::ExecutionMetrics;
+pub use execution_metrics::ExecutionMetricsContext;
 pub use execution_metrics::StorageMetrics;
 pub use input::EvmInput;
 pub use input::call_execution::CallExecutionInput;

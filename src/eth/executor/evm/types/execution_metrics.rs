@@ -2,7 +2,17 @@ use std::ops::Add;
 use std::ops::AddAssign;
 use std::time::Duration;
 
+#[cfg(feature = "metrics")]
+use crate::eth::codegen;
+#[cfg(feature = "metrics")]
+use crate::eth::codegen::ContractName;
+#[cfg(feature = "metrics")]
+use crate::eth::codegen::SoliditySignature;
 use crate::eth::storage::FoundAt;
+use crate::eth::types::Address;
+use crate::eth::types::Bytes;
+#[cfg(feature = "metrics")]
+use crate::eth::types::ExecutionKind;
 use crate::eth::types::Gas;
 use crate::infra::metrics;
 
@@ -46,39 +56,79 @@ pub struct StorageMetrics {
     pub slot_reads: StorageStats,
 }
 
-#[derive(Debug, Default)]
-#[must_use]
-pub struct EvmExecutionMetrics {
-    storage_metrics: StorageMetrics,
-    gas_used: Gas,
+#[derive(Debug, Clone, Copy)]
+pub struct ExecutionMetricsContext {
+    #[cfg(feature = "metrics")]
+    kind: ExecutionKind,
+    #[cfg(feature = "metrics")]
+    contract: ContractName,
+    #[cfg(feature = "metrics")]
+    function: SoliditySignature,
 }
 
-impl EvmExecutionMetrics {
-    pub fn new(storage_metrics: StorageMetrics, gas_used: Gas) -> Self {
-        Self { storage_metrics, gas_used }
+impl ExecutionMetricsContext {
+    pub fn new(kind: ExecutionKind, to: &Option<Address>, input: &Bytes) -> Self {
+        #[cfg(feature = "metrics")]
+        {
+            Self {
+                kind,
+                contract: codegen::contract_name(to),
+                function: codegen::function_sig(input),
+            }
+        }
+        #[cfg(not(feature = "metrics"))]
+        {
+            let _ = (kind, to, input);
+            Self {}
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ExecutionMetrics {
+    storage_metrics: StorageMetrics,
+    gas_used: Gas,
+    context: ExecutionMetricsContext,
+}
+
+impl ExecutionMetrics {
+    pub fn new(storage_metrics: StorageMetrics, gas_used: Gas, context: ExecutionMetricsContext) -> Self {
+        Self {
+            storage_metrics,
+            gas_used,
+            context,
+        }
     }
 
-    pub fn publish_local_transaction(self, contract: &str, function: &str) {
-        metrics::inc_executor_local_transaction_account_reads(self.storage_metrics.account_reads.total_count(), contract, function);
-        metrics::inc_executor_local_transaction_slot_reads(self.storage_metrics.slot_reads.total_count(), contract, function);
-        metrics::inc_executor_local_transaction_gas(self.gas_used.as_u64() as usize, contract, function);
+    #[cfg(feature = "metrics")]
+    fn publish(&self) {
+        let context = &self.context;
+        match context.kind {
+            ExecutionKind::CallPast(_) | ExecutionKind::CallLatest(_) | ExecutionKind::AccessList => {
+                metrics::inc_executor_local_call_account_reads(self.storage_metrics.account_reads.total_count(), context.contract, context.function);
+                metrics::inc_executor_local_call_slot_reads(self.storage_metrics.slot_reads.total_count(), context.contract, context.function);
+                metrics::inc_executor_local_call_gas(self.gas_used.as_u64() as usize, context.contract, context.function);
+            }
+            ExecutionKind::Transaction => {
+                metrics::inc_executor_local_transaction_account_reads(self.storage_metrics.account_reads.total_count(), context.contract, context.function);
+                metrics::inc_executor_local_transaction_slot_reads(self.storage_metrics.slot_reads.total_count(), context.contract, context.function);
+                metrics::inc_executor_local_transaction_gas(self.gas_used.as_u64() as usize, context.contract, context.function);
+            }
+            ExecutionKind::RPC(_) => (),
+        }
         self.storage_metrics.publish();
     }
+}
 
-    pub fn publish_local_call(self, contract: &str, function: &str) {
-        metrics::inc_executor_local_call_account_reads(self.storage_metrics.account_reads.total_count(), contract, function);
-        metrics::inc_executor_local_call_slot_reads(self.storage_metrics.slot_reads.total_count(), contract, function);
-        metrics::inc_executor_local_call_gas(self.gas_used.as_u64() as usize, contract, function);
-        self.storage_metrics.publish();
-    }
-
-    pub fn publish_storage_metrics(self) {
-        self.storage_metrics.publish();
+impl Drop for ExecutionMetrics {
+    fn drop(&mut self) {
+        #[cfg(feature = "metrics")]
+        self.publish();
     }
 }
 
 impl StorageMetrics {
-    fn publish(self) {
+    fn publish(&self) {
         for (found_at, stats) in self.account_reads.iter() {
             if stats.count > 0 {
                 metrics::inc_n_executor_account_reads(stats.count as u64, found_at.as_str());

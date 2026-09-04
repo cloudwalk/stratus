@@ -29,7 +29,7 @@ pub use types::GeneralRevm;
 use util::default_trace;
 use util::enhance_trace_with_decoded_errors;
 
-use crate::eth::executor::EvmExecutionMetrics;
+use crate::eth::executor::ExecutionMetrics;
 use crate::eth::executor::ExecutionResult;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::TransactionExecution;
@@ -70,7 +70,9 @@ impl<Input: EvmInput> Evm<Input> {
     }
 
     /// Execute a transaction that deploys a contract or call a contract function.
-    pub fn execute(&mut self, input: Input) -> Result<(RevmResultAndState, EvmExecutionMetrics), StratusError> {
+    pub fn execute(&mut self, input: Input) -> Result<(RevmResultAndState, ExecutionMetrics), StratusError> {
+        let metrics_context = input.metrics_context();
+
         // configure session
         self.evm.journaled_state.database.reset(input.kind());
         input.fill_env(&mut self.evm);
@@ -86,7 +88,7 @@ impl<Input: EvmInput> Evm<Input> {
             .inspect_err(|err| tracing::warn!(?err, "evm error"))
             .map_err(|err| err.into())
             .map(|execution| {
-                let metrics = EvmExecutionMetrics::new(storage_metrics, (*execution.result.gas()).into());
+                let metrics = ExecutionMetrics::new(storage_metrics, (*execution.result.gas()).into(), metrics_context);
                 (execution, metrics)
             })
     }
