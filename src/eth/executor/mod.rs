@@ -290,6 +290,7 @@ impl Executor {
         #[cfg(feature = "metrics")]
         metrics::inc_executor_local_transaction_lock_waiting(1);
         let transaction_lock = self.locks.transaction.lock();
+        #[cfg(feature = "metrics")]
         let start = metrics::now();
 
         #[cfg(feature = "metrics")]
@@ -298,16 +299,18 @@ impl Executor {
         // execute transaction
         let result = self.execute_local_transaction_attempts(tx, INFINITE_ATTEMPTS);
 
+        drop(transaction_lock);
+
         #[cfg(feature = "metrics")]
         let execution_elapsed = start.elapsed();
 
-        drop(transaction_lock);
         drop(permit);
 
         #[cfg(feature = "metrics")]
-        metrics::inc_executor_local_transaction(execution_elapsed, result.is_ok(), contract, function);
-
-        result?.publish_local_transaction(contract, function);
+        {
+            metrics::inc_executor_local_transaction(execution_elapsed, result.is_ok(), contract, function);
+            result?.publish_local_transaction(contract, function);
+        }
 
         Ok(())
     }
@@ -347,6 +350,7 @@ impl Executor {
                     return Ok(evm_metrics);
                 }
                 Err(e) => {
+                    #[cfg(feature = "metrics")]
                     evm_metrics.publish_local_transaction(contract, function);
                     match e {
                         StratusError::Storage(StorageError::EvmInputMismatch { ref expected, ref actual }) => {
