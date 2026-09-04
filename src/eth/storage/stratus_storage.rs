@@ -47,7 +47,6 @@ use crate::eth::types::Wei;
 #[cfg(feature = "dev")]
 use crate::eth::types::primitives::test_accounts;
 use crate::ext::not;
-use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 
 pub mod label {
@@ -398,29 +397,22 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::read_transaction", %tx_hash).entered();
 
         let read_perm = || {
-            metrics::record(
-                || {
-                    self.perm
-                        .read_transaction(tx_hash)
-                        .inspect_err(|err| {
-                            tracing::error!(
-                                reason = ?err,
-                                "failed to read transaction from permanent storage"
-                            );
-                        })
-                        .map(|tx| tx.map(TransactionStage::Mined))
-                },
-                |elapsed, result| {
-                    metrics::inc_storage_read_transaction(elapsed, label::PERM, result.as_ref().is_ok_and(Option::is_some), result.is_ok());
-                },
-            )
+            {
+                self.perm
+                    .read_transaction(tx_hash)
+                    .inspect_err(|err| {
+                        tracing::error!(
+                            reason = ?err,
+                            "failed to read transaction from permanent storage"
+                        );
+                    })
+                    .map(|tx| tx.map(TransactionStage::Mined))
+            }
         };
 
-        metrics::record(
-            || self.temp.read_pending_execution(tx_hash),
-            |elapsed, result| metrics::inc_storage_read_transaction(elapsed, label::TEMP, result.is_some(), true),
-        )
-        .map_or_else(read_perm, |tx| Ok(Some(TransactionStage::Pending(tx))))
+        self.temp
+            .read_pending_execution(tx_hash)
+            .map_or_else(read_perm, |tx| Ok(Some(TransactionStage::Pending(tx))))
     }
 
     pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMessage>, StorageError> {
