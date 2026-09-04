@@ -93,9 +93,8 @@ pub async fn send_block_to_kafka(kafka_connector: &Option<KafkaConnector>, block
 
 /// Record metrics for imported block
 #[cfg(feature = "metrics")]
-fn record_import_metrics(block_tx_len: usize, duration: std::time::Duration) {
+fn record_import_metrics(block_tx_len: usize) {
     metrics::inc_n_importer_online_transactions_total(block_tx_len as u64);
-    metrics::inc_import_online_mined_block(duration);
 }
 
 #[cfg(not(feature = "metrics"))]

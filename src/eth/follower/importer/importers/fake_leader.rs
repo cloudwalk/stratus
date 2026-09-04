@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::bail;
 use async_trait::async_trait;
+use stratus_macros::timed;
 
 use crate::GlobalState;
 use crate::eth::executor::Executor;
@@ -31,6 +32,7 @@ impl ImportData for <FakeLeaderWorker as ImporterWorker>::DataType {
 impl ImporterWorker for FakeLeaderWorker {
     type DataType = <FakeLeaderFetcher as DataFetcher>::PostProcessType;
 
+    #[timed(import_online_mined_block)]
     async fn import(&self, ((block, _), (expected_block, expected_changes)): Self::DataType) -> anyhow::Result<usize> {
         let block_tx_len = block.transactions.len();
         self.storage.set_pending_from_external(&block);

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use tokio::time::Instant;
+use stratus_macros::timed;
 use tracing::Span;
 
 use crate::eth::executor::AccessListOutput;
@@ -50,9 +50,9 @@ use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 
-mod label {
-    pub(super) const TEMP: &str = "temporary";
-    pub(super) const PERM: &str = "permanent";
+pub mod label {
+    pub const TEMP: &str = "temporary";
+    pub const PERM: &str = "permanent";
 }
 
 /// Proxy that simplifies interaction with permanent and temporary storages.
@@ -265,10 +265,10 @@ impl StratusStorage {
     // Blocks
     // -------------------------------------------------------------------------
 
+    #[timed(storage_save_execution, labels(success = result.is_ok()))]
     pub fn save_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.info.hash).entered();
-        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.info.hash, changes = ?state, "saving execution");
 
         // Log warning if a failed transaction has slot changes
         if !tx.output.result.is_success() {
@@ -279,11 +279,7 @@ impl StratusStorage {
             }
         }
 
-        let start = Instant::now();
-        let res = self.temp.save_pending_execution(tx, state);
-        metrics::inc_storage_save_execution(start.elapsed(), res.is_ok());
-
-        res
+        self.temp.save_pending_execution(tx, state)
     }
 
     /// Retrieves pending transactions being mined.
@@ -291,17 +287,31 @@ impl StratusStorage {
         self.temp.read_pending_executions()
     }
 
+    #[timed(storage_finish_pending_block)]
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::finish_pending_block", block_number = tracing::field::Empty).entered();
 
-        let start = Instant::now();
         let result = self.temp.finish_pending_block();
-        metrics::inc_storage_finish_pending_block(start.elapsed());
-
         Span::with(|s| s.rec_str("block_number", &result.0.header.number));
 
         result
+    }
+
+    /// Save the block and apply changes. This function acquires a write lock to the latest state lock.
+    #[timed(storage_save_block, labels(storage = label::PERM, tens_of_millions_gas_used = |block| block.header.gas_used.as_u64() / 10_000_000))]
+    fn commit_changes(&self, block: Block, changes: State<Complete>) -> Result<(), StorageError> {
+        let block_number = block.number();
+
+        let mut guard = self.latest_state_lock.write();
+        let block_info = (&block.header).into();
+        self.perm.save_block(block, changes.finalize())?;
+        guard.set_latest_block_info(block_info);
+        self.cache.cache_account_and_slots_latest_from_changes(changes);
+        self.set_mined_block_number(block_number);
+        drop(guard);
+
+        Ok(())
     }
 
     pub fn save_block(&self, block: Block, changes: State<Complete>) -> Result<(), StorageError> {
@@ -338,34 +348,19 @@ impl StratusStorage {
             return Err(StorageError::BlockConflict { number: block_number });
         }
 
-        let tens_of_millions_gas_used = block.header.gas_used.as_u64() / 10_000_000;
-
-        let start = Instant::now();
-        let mut guard = self.latest_state_lock.write();
-        let block_info = (&block.header).into();
-        self.perm.save_block(block, changes.finalize())?;
-        guard.set_latest_block_info(block_info);
-        self.cache.cache_account_and_slots_latest_from_changes(changes);
-        drop(guard);
-        metrics::inc_storage_save_block(start.elapsed(), label::PERM, tens_of_millions_gas_used);
-
-        self.set_mined_block_number(block_number);
+        self.commit_changes(block, changes)?;
 
         Ok(())
     }
 
+    #[timed(storage_read_block, labels(storage = label::PERM, success = result.is_ok()))]
     pub fn read_block(&self, filter: BlockFilter) -> Result<Option<Block>, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block", %filter).entered();
-        tracing::debug!(storage = %label::PERM, ?filter, "reading block");
 
-        let start = Instant::now();
-        let result = self
-            .perm
+        self.perm
             .read_block(filter)
-            .inspect_err(|err| tracing::error!(reason = ?err, "failed to read block"));
-        metrics::inc_storage_read_block(start.elapsed(), label::PERM, result.is_ok());
-        result
+            .inspect_err(|err| tracing::error!(reason = ?err, "failed to read block"))
     }
 
     pub fn read_block_info(&self, filter: BlockFilter) -> Result<Option<BlockInfo>, StorageError> {
@@ -388,42 +383,44 @@ impl StratusStorage {
         }
     }
 
+    #[timed(storage_read_block_with_changes, labels(storage = label::PERM, success = result.is_ok()))]
     pub fn read_block_with_changes(&self, filter: BlockFilter) -> Result<Option<(BlockRocksdb, BlockChangesRocksdb)>, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block_with_changes", %filter).entered();
-        tracing::debug!(storage = %label::PERM, ?filter, "reading block with changes");
 
-        let start = Instant::now();
-        let result = self
-            .perm
+        self.perm
             .read_block_with_changes(filter)
-            .inspect_err(|err| tracing::error!(reason = ?err, "failed to read block with changes"));
-        metrics::inc_storage_read_block_with_changes(start.elapsed(), label::PERM, result.is_ok());
-        result
+            .inspect_err(|err| tracing::error!(reason = ?err, "failed to read block with changes"))
     }
 
     pub fn read_transaction(&self, tx_hash: Hash) -> Result<Option<TransactionStage>, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_transaction", %tx_hash).entered();
 
-        let start = Instant::now();
-        let temp_tx = self.temp.read_pending_execution(tx_hash);
-        if let Some(tx_temp) = temp_tx {
-            metrics::inc_storage_read_block_with_changes(start.elapsed(), label::PERM, true);
-            return Ok(Some(TransactionStage::Pending(tx_temp)));
-        }
+        let read_perm = || {
+            metrics::record(
+                || {
+                    self.perm
+                        .read_transaction(tx_hash)
+                        .inspect_err(|err| {
+                            tracing::error!(
+                                reason = ?err,
+                                "failed to read transaction from permanent storage"
+                            );
+                        })
+                        .map(|tx| tx.map(TransactionStage::Mined))
+                },
+                |elapsed, result| {
+                    metrics::inc_storage_read_transaction(elapsed, label::PERM, result.as_ref().is_ok_and(Option::is_some), result.is_ok());
+                },
+            )
+        };
 
-        // read from perm
-        tracing::debug!(storage = %label::PERM, %tx_hash, "reading transaction");
-        let perm_tx = self
-            .perm
-            .read_transaction(tx_hash)
-            .inspect_err(|err| {
-                tracing::error!(reason = ?err, "failed to read transaction from permanent storage");
-                metrics::inc_storage_read_transaction(start.elapsed(), label::PERM, false);
-            })
-            .inspect(|_| metrics::inc_storage_read_transaction(start.elapsed(), label::PERM, true))?;
-        Ok(perm_tx.map(TransactionStage::Mined))
+        metrics::record(
+            || self.temp.read_pending_execution(tx_hash),
+            |elapsed, result| metrics::inc_storage_read_transaction(elapsed, label::TEMP, result.is_some(), true),
+        )
+        .map_or_else(read_perm, |tx| Ok(Some(TransactionStage::Pending(tx))))
     }
 
     pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMessage>, StorageError> {

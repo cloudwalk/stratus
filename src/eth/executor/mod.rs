@@ -5,10 +5,10 @@ pub mod types;
 
 use std::mem;
 use std::sync::Arc;
-use std::time::Instant;
 
 #[cfg(feature = "metrics")]
 use alloy_consensus::Transaction;
+use alloy_rpc_types_trace::geth::GethDebugTracerType;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::bail;
@@ -21,6 +21,8 @@ pub use evm::types::TransactionExecutionInput;
 pub use evm::types::TransactionExecutionOutput;
 pub use evm::types::TransactionExecutionResult;
 use parking_lot::Mutex;
+use parking_lot::MutexGuard;
+use stratus_macros::timed;
 use tracing::Span;
 #[cfg(feature = "tracing")]
 use tracing::info_span;
@@ -111,11 +113,8 @@ impl Executor {
     /// Reexecutes an external block locally and imports it to the temporary storage.
     ///
     /// Returns the remaining receipts that were not consumed by the execution.
+    #[timed(executor_external_block)]
     pub fn execute_external_block(&self, mut block: ExternalBlock, mut receipts: ExternalReceipts) -> anyhow::Result<()> {
-        // track
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
         #[cfg(feature = "tracing")]
         let _span = info_span!("executor::external_block", block_number = %block.number()).entered();
         tracing::info!(block_number = %block.number(), "reexecuting external block");
@@ -132,12 +131,6 @@ impl Executor {
             self.execute_external_transaction(tx, receipt, block_number)?;
         }
 
-        // track block metrics
-        #[cfg(feature = "metrics")]
-        {
-            metrics::inc_executor_external_block(start.elapsed());
-        }
-
         Ok(())
     }
 
@@ -145,15 +138,12 @@ impl Executor {
     ///
     /// This function wraps `reexecute_external_tx_inner` and returns back the payload
     /// to facilitate re-execution of parallel transactions that failed
+    #[timed(executor_external_transaction, labels(
+        contract = |tx| codegen::contract_name(&tx.0.to().map_into()),
+        function = |tx| codegen::function_sig(tx.inner.input())
+        )
+    )]
     fn execute_external_transaction(&self, tx: ExternalTransaction, receipt: ExternalReceipt, block_number: BlockNumber) -> anyhow::Result<()> {
-        // track
-        #[cfg(feature = "metrics")]
-        let (start, tx_function, tx_contract) = (
-            metrics::now(),
-            codegen::function_sig(tx.inner.input()),
-            codegen::contract_name(&tx.0.to().map_into()),
-        );
-
         #[cfg(feature = "tracing")]
         let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash()).entered();
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
@@ -192,9 +182,6 @@ impl Executor {
                     return Err(e);
                 };
 
-                // track metrics
-                #[cfg(feature = "metrics")]
-                metrics::inc_executor_external_transaction(start.elapsed(), tx_contract, tx_function);
                 #[cfg(feature = "metrics")]
                 evm_metrics.publish_storage_metrics();
 
@@ -253,6 +240,16 @@ impl Executor {
         Ok(())
     }
 
+    #[timed(executor_local_transaction, labels(
+        success = result.is_ok(),
+        contract = |tx| codegen::contract_name(&tx.execution_info.to),
+        function = |tx| codegen::function_sig(&tx.execution_info.input)
+        )
+    )]
+    fn execute_local_transaction_impl(&self, tx: TransactionInput, _transaction_guard: MutexGuard<()>) -> Result<EvmExecutionMetrics, StratusError> {
+        self.execute_local_transaction_attempts(tx, usize::MAX)
+    }
+
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to, tx_nonce))]
     pub fn execute_local_transaction(&self, tx: TransactionInput, access_list: Option<AccessListOutput>) -> Result<(), StratusError> {
@@ -261,11 +258,7 @@ impl Executor {
         }
 
         #[cfg(feature = "metrics")]
-        let function = codegen::function_sig(&tx.execution_info.input);
-        #[cfg(feature = "metrics")]
-        let contract = codegen::contract_name(&tx.execution_info.to);
-
-        tracing::debug!(tx_hash = %tx.transaction_info.hash, "executing local transaction");
+        let (contract, function) = (codegen::contract_name(&tx.execution_info.to), codegen::function_sig(&tx.execution_info.input));
 
         // track
         Span::with(|s| {
@@ -281,36 +274,22 @@ impl Executor {
             self.storage.load_access_list(access_list);
         }
 
-        // execute according to the strategy
-        const INFINITE_ATTEMPTS: usize = usize::MAX;
-
         // Executes transactions serially:
         // * Uses a Mutex, so a new transactions starts executing only after the previous one is executed and persisted.
         // * Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.
         #[cfg(feature = "metrics")]
         metrics::inc_executor_local_transaction_lock_waiting(1);
-        let transaction_lock = self.locks.transaction.lock();
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
+        let transaction_guard = self.locks.transaction.lock();
         #[cfg(feature = "metrics")]
         metrics::dec_executor_local_transaction_lock_waiting(1);
 
         // execute transaction
-        let result = self.execute_local_transaction_attempts(tx, INFINITE_ATTEMPTS);
-
-        drop(transaction_lock);
-
-        #[cfg(feature = "metrics")]
-        let execution_elapsed = start.elapsed();
+        let result = self.execute_local_transaction_impl(tx, transaction_guard);
 
         drop(permit);
 
         #[cfg(feature = "metrics")]
-        {
-            metrics::inc_executor_local_transaction(execution_elapsed, result.is_ok(), contract, function);
-            result?.publish_local_transaction(contract, function);
-        }
+        result?.publish_local_transaction(contract, function);
 
         Ok(())
     }
@@ -369,12 +348,16 @@ impl Executor {
 
     /// Executes a read-only call in the local EVM, without persisting state changes.
     #[tracing::instrument(name = "executor::local_call", skip_all, fields(from, to))]
+    #[timed(executor_local_call, labels(
+        success = result.is_ok(),
+        contract = |call_input| codegen::contract_name(&call_input.to),
+        function = |call_input| codegen::function_sig(&call_input.data)
+        )
+    )]
     pub fn execute_local_call<Output>(&self, call_input: CallInput, kind: ExecutionKind) -> Result<Output, StratusError>
     where
         Output: TryFrom<RevmResultAndState, Error = StratusError>,
     {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
         Span::with(|s| {
             s.rec_opt("from", &call_input.from);
             s.rec_opt("to", &call_input.to);
@@ -402,10 +385,7 @@ impl Executor {
             PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input),
             PointInTime::Past(_) => EvmRoute::CallPast(evm_input),
         };
-        let (output, evm_metrics) = self.evms.execute::<Output>(evm_route).inspect_err(|_err| {
-            #[cfg(feature = "metrics")]
-            metrics::inc_executor_local_call(start.elapsed(), false, contract, function);
-        })?;
+        let (output, evm_metrics) = self.evms.execute::<Output>(evm_route)?;
 
         // track metrics
         #[cfg(feature = "metrics")]
@@ -414,21 +394,23 @@ impl Executor {
         Ok(output)
     }
 
+    #[timed(executor_inspect, labels(
+        trace_type = |opts|
+            opts
+            .as_ref()
+            .and_then(|opts| opts.tracer.as_ref())
+            .map_or("missing", GethDebugTracerType::as_str)
+        )
+    )]
     pub fn trace_transaction(&self, tx_hash: Hash, opts: Option<GethDebugTracingOptions>, trace_unsuccessful_only: bool) -> Result<GethTrace, StratusError> {
         Span::with(|s| {
             s.rec_str("tx_hash", &tx_hash);
         });
 
-        let opts = opts.unwrap_or_default();
-        let tracer_type = opts.tracer.clone();
-
-        let start = Instant::now();
-        let result = self.evms.inspect(InspectorInput {
+        self.evms.inspect(InspectorInput {
             tx_hash,
-            opts,
+            opts: opts.unwrap_or_default(),
             trace_unsuccessful_only,
-        });
-        metrics::inc_executor_inspect(start.elapsed(), serde_json::to_string(&tracer_type).unwrap_or_else(|_| "unkown".to_owned()));
-        result
+        })
     }
 }

@@ -66,6 +66,77 @@ pub enum MetricLabelValue {
     None,
 }
 
+/// Converts a borrowed function parameter into an owned metric label value.
+///
+/// This allows instrumentation to prepare labels before the function body
+/// consumes its parameters, without cloning the parameters themselves.
+pub trait ToMetricLabelValue {
+    fn to_metric_label_value(&self) -> MetricLabelValue;
+}
+
+impl<T> ToMetricLabelValue for &T
+where
+    T: ToMetricLabelValue + ?Sized,
+{
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        (*self).to_metric_label_value()
+    }
+}
+
+impl ToMetricLabelValue for Option<Cow<'static, str>> {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        match self {
+            Some(value) => MetricLabelValue::Some(value.to_string()),
+            None => MetricLabelValue::None,
+        }
+    }
+}
+
+impl ToMetricLabelValue for String {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        MetricLabelValue::Some(self.to_owned())
+    }
+}
+
+impl ToMetricLabelValue for str {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        MetricLabelValue::Some(self.to_owned())
+    }
+}
+
+impl ToMetricLabelValue for Option<&str> {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        match self {
+            Some(value) => MetricLabelValue::Some((*value).to_owned()),
+            None => MetricLabelValue::None,
+        }
+    }
+}
+
+impl ToMetricLabelValue for bool {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        MetricLabelValue::Some(self.to_string())
+    }
+}
+
+impl ToMetricLabelValue for i32 {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        MetricLabelValue::Some(self.to_string())
+    }
+}
+
+impl ToMetricLabelValue for u64 {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        MetricLabelValue::Some(self.to_string())
+    }
+}
+
+impl ToMetricLabelValue for EvmKind {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        (*self).into()
+    }
+}
+
 impl From<Option<Cow<'static, str>>> for MetricLabelValue {
     fn from(value: Option<Cow<'static, str>>) -> Self {
         match value {

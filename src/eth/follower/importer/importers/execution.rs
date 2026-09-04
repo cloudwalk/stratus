@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use stratus_macros::timed;
 
 use crate::GlobalState;
 use crate::eth::executor::Executor;
@@ -31,6 +32,7 @@ impl ImportData for <ReexecutionWorker as ImporterWorker>::DataType {
 impl ImporterWorker for ReexecutionWorker {
     type DataType = (ExternalBlock, Vec<ExternalReceipt>);
 
+    #[timed(import_online_mined_block)]
     async fn import(&self, (block, receipts): Self::DataType) -> anyhow::Result<usize> {
         const TASK_NAME: &str = "block-executor";
 

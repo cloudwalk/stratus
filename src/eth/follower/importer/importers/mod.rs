@@ -7,7 +7,6 @@ use crate::eth::follower::importer::record_import_metrics;
 use crate::eth::follower::importer::should_shutdown;
 use crate::eth::types::BlockNumber;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
-use crate::infra::metrics;
 use crate::infra::tracing::warn_task_tx_closed;
 
 pub mod blockchain_client;
@@ -48,9 +47,8 @@ pub trait ImporterWorker: Send + Sync + Sized {
                 return Ok(());
             }
 
-            let start = metrics::now();
             let block_tx_len = self.import(data).await?;
-            record_import_metrics(block_tx_len, start.elapsed());
+            record_import_metrics(block_tx_len);
         }
 
         warn_task_tx_closed(TASK_NAME);

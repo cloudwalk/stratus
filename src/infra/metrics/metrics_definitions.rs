@@ -31,7 +31,7 @@ metrics! {
     histogram_duration storage_read_block_with_changes{storage, success},
 
     "Time executing storage read_transaction operation."
-    histogram_duration storage_read_transaction{storage, success}
+    histogram_duration storage_read_transaction{storage, hit, success}
 }
 
 // Storage writes.
