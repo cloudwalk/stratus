@@ -128,7 +128,7 @@ rdkafka = {version = "=0.38.0", features = ["ssl", "sasl"] }
 sasl2-sys = { version = "=0.1.22", features = ["vendored"] }
 
 # Data migration
-indicatif = { version = "=0.18.3", optional = true }
+indicatif = { version = "=0.18.6", optional = true }
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies
