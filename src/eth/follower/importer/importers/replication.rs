@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use stratus_macros::timed;
 
 use crate::eth::executor::State;
@@ -26,7 +25,6 @@ impl ImportData for <ReplicationWorker as ImporterWorker>::DataType {
     }
 }
 
-#[async_trait]
 impl ImporterWorker for ReplicationWorker {
     type DataType = (Block, State<Incomplete>);
 

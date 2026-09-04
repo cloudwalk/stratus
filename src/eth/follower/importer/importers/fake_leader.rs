@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::bail;
-use async_trait::async_trait;
 use stratus_macros::timed;
 
 use crate::GlobalState;
@@ -28,7 +27,6 @@ impl ImportData for <FakeLeaderWorker as ImporterWorker>::DataType {
     }
 }
 
-#[async_trait]
 impl ImporterWorker for FakeLeaderWorker {
     type DataType = <FakeLeaderFetcher as DataFetcher>::PostProcessType;
 

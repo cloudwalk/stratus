@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use stratus_macros::timed;
 
 use crate::GlobalState;
@@ -28,7 +27,6 @@ impl ImportData for <ReexecutionWorker as ImporterWorker>::DataType {
     }
 }
 
-#[async_trait]
 impl ImporterWorker for ReexecutionWorker {
     type DataType = (ExternalBlock, Vec<ExternalReceipt>);
 

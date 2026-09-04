@@ -1,4 +1,5 @@
-use async_trait::async_trait;
+use std::future::Future;
+
 use tokio::sync::mpsc;
 
 use crate::GlobalState;
@@ -20,39 +21,41 @@ pub trait ImportData {
     fn block_number(&self) -> BlockNumber;
 }
 
-#[async_trait]
 pub trait ImporterWorker: Send + Sync + Sized {
     type DataType: ImportData + Send + 'static;
 
     /// Import the block. Returns the transaction count of the block.
-    async fn import(&self, data: Self::DataType) -> anyhow::Result<usize>;
-    async fn run(self, mut backlog_rx: mpsc::Receiver<Self::DataType>, stop_at_block: Option<BlockNumber>) -> anyhow::Result<()> {
-        const TASK_NAME: &str = "importer-worker";
-        let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
-        loop {
-            if should_shutdown(TASK_NAME) {
-                return Ok(());
+    fn import(&self, data: Self::DataType) -> impl Future<Output = anyhow::Result<usize>> + Send;
+
+    fn run(self, mut backlog_rx: mpsc::Receiver<Self::DataType>, stop_at_block: Option<BlockNumber>) -> impl Future<Output = anyhow::Result<()>> + Send {
+        async move {
+            const TASK_NAME: &str = "importer-worker";
+            let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
+            loop {
+                if should_shutdown(TASK_NAME) {
+                    return Ok(());
+                }
+
+                let data = match receive_with_timeout(&mut backlog_rx).await {
+                    Ok(Some(inner)) => inner,
+                    Ok(None) => continue,
+                    Err(_) => break,
+                };
+
+                if let Some(target_block) = stop_at_block
+                    && data.block_number() > target_block
+                {
+                    GlobalState::shutdown_importer_from(TASK_NAME, "Importer reached target block");
+                    return Ok(());
+                }
+
+                let block_tx_len = self.import(data).await?;
+                record_import_metrics(block_tx_len);
             }
 
-            let data = match receive_with_timeout(&mut backlog_rx).await {
-                Ok(Some(inner)) => inner,
-                Ok(None) => continue,
-                Err(_) => break,
-            };
-
-            if let Some(target_block) = stop_at_block
-                && data.block_number() > target_block
-            {
-                GlobalState::shutdown_importer_from(TASK_NAME, "Importer reached target block");
-                return Ok(());
-            }
-
-            let block_tx_len = self.import(data).await?;
-            record_import_metrics(block_tx_len);
+            warn_task_tx_closed(TASK_NAME);
+            Ok(())
         }
-
-        warn_task_tx_closed(TASK_NAME);
-        Ok(())
     }
 }
 
@@ -61,7 +64,6 @@ mod tests {
     use std::sync::Arc;
     use std::sync::Mutex;
 
-    use async_trait::async_trait;
     use tokio::sync::mpsc;
 
     use crate::GlobalState;
@@ -84,7 +86,6 @@ mod tests {
         imported: Arc<Mutex<Vec<BlockNumber>>>,
     }
 
-    #[async_trait]
     impl ImporterWorker for RecordingWorker {
         type DataType = NumberedBlock;
 
