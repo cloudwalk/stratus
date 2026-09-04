@@ -7,6 +7,7 @@ use alloy_consensus::TxEip4844Variant;
 use alloy_consensus::TxEip7702;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
+use alloy_consensus::TxType;
 use alloy_consensus::transaction::Recovered;
 use alloy_eips::eip7702::SignedAuthorization;
 use alloy_primitives::Address as AlloyAddress;
@@ -27,6 +28,7 @@ use display_json::DebugAsJson;
 
 use crate::alias::AlloyTransaction;
 use crate::eth::executor::TransactionExecutionInput;
+use crate::eth::rpc::TransactionDecodeError;
 use crate::eth::types::Address;
 use crate::eth::types::Bytes;
 use crate::eth::types::ChainId;
@@ -37,6 +39,28 @@ use crate::eth::types::Nonce;
 use crate::eth::types::SignatureComponent;
 use crate::eth::types::Wei;
 use crate::ext::RuintExt;
+
+/// Legacy transaction `v` value constants (EIP-155).
+const LEGACY_V_UNPROTECTED_EVEN: u64 = 27;
+const LEGACY_V_UNPROTECTED_ODD: u64 = 28;
+const EIP155_V_OFFSET: u64 = 35;
+
+impl From<TransactionDecodeError> for alloy_rlp::Error {
+    fn from(value: TransactionDecodeError) -> Self {
+        // Leak the formatted message to satisfy the `&'static str` requirement of `alloy_rlp::Error::Custom`.
+        // This only happens on error paths.
+        let message = Box::leak(value.to_string().into_boxed_str());
+        alloy_rlp::Error::Custom(message)
+    }
+}
+
+/// Common fields shared by EIP-2930, EIP-1559, EIP-4844, and EIP-7702 transactions.
+struct AccessListTxFields {
+    gas_limit: Gas,
+    to: Option<Address>,
+    value: Wei,
+    input: Bytes,
+}
 
 #[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
 #[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
@@ -161,6 +185,15 @@ impl TransactionInput {
         out
     }
 
+    /// Encodes the fields of a typed transaction, prefixes the type byte, and hashes the result.
+    fn encode_typed_transaction(tx_type: TxType, fields: &[&dyn RlpEncodable]) -> B256 {
+        let encoded = Self::encode_rlp_list(fields);
+        let mut out = Vec::with_capacity(1 + encoded.len());
+        out.push(tx_type as u8);
+        out.extend_from_slice(&encoded);
+        B256::from(keccak256(out))
+    }
+
     /// Returns the RLP encoding of the `to` field: empty bytes for contract creation,
     /// or the 20-byte address for a call.
     fn encode_to(&self) -> Vec<u8> {
@@ -184,10 +217,16 @@ impl TransactionInput {
         let to = self.encode_to();
         let input = self.encode_input();
 
-        match self.transaction_info.tx_type.map(|t| t.as_u64()).unwrap_or(0) {
-            // EIP-2930
-            1 => {
-                let encoded = Self::encode_rlp_list(&[
+        let tx_type = self
+            .transaction_info
+            .tx_type
+            .and_then(|t| TxType::try_from(t.as_u64()).ok())
+            .unwrap_or(TxType::Legacy);
+
+        match tx_type {
+            TxType::Eip2930 => Self::encode_typed_transaction(
+                TxType::Eip2930,
+                &[
                     &chain_id,
                     &nonce,
                     &gas_price,
@@ -196,16 +235,12 @@ impl TransactionInput {
                     &value,
                     &input.as_slice(),
                     &AccessList::default(),
-                ]);
-                let mut out = Vec::with_capacity(1 + encoded.len());
-                out.push(0x01);
-                out.extend_from_slice(&encoded);
-                B256::from(keccak256(out))
-            }
+                ],
+            ),
 
-            // EIP-1559
-            2 => {
-                let encoded = Self::encode_rlp_list(&[
+            TxType::Eip1559 => Self::encode_typed_transaction(
+                TxType::Eip1559,
+                &[
                     &chain_id,
                     &nonce,
                     &gas_price, // max_priority_fee_per_gas
@@ -215,16 +250,12 @@ impl TransactionInput {
                     &value,
                     &input.as_slice(),
                     &AccessList::default(),
-                ]);
-                let mut out = Vec::with_capacity(1 + encoded.len());
-                out.push(0x02);
-                out.extend_from_slice(&encoded);
-                B256::from(keccak256(out))
-            }
+                ],
+            ),
 
-            // EIP-4844
-            3 => {
-                let encoded = Self::encode_rlp_list(&[
+            TxType::Eip4844 => Self::encode_typed_transaction(
+                TxType::Eip4844,
+                &[
                     &chain_id,
                     &nonce,
                     &gas_price, // max_priority_fee_per_gas
@@ -236,16 +267,12 @@ impl TransactionInput {
                     &AccessList::default(),
                     &0u128,              // max_fee_per_blob_gas
                     &Vec::<B256>::new(), // blob_versioned_hashes
-                ]);
-                let mut out = Vec::with_capacity(1 + encoded.len());
-                out.push(0x03);
-                out.extend_from_slice(&encoded);
-                B256::from(keccak256(out))
-            }
+                ],
+            ),
 
-            // EIP-7702
-            4 => {
-                let encoded = Self::encode_rlp_list(&[
+            TxType::Eip7702 => Self::encode_typed_transaction(
+                TxType::Eip7702,
+                &[
                     &chain_id,
                     &nonce,
                     &gas_price, // max_priority_fee_per_gas
@@ -256,15 +283,10 @@ impl TransactionInput {
                     &input.as_slice(),
                     &AccessList::default(),
                     &Vec::<SignedAuthorization>::new(), // authorization list placeholder
-                ]);
-                let mut out = Vec::with_capacity(1 + encoded.len());
-                out.push(0x04);
-                out.extend_from_slice(&encoded);
-                B256::from(keccak256(out))
-            }
+                ],
+            ),
 
-            // Legacy (default)
-            _ =>
+            TxType::Legacy =>
                 if self.execution_info.chain_id.is_some() {
                     let encoded = Self::encode_rlp_list(&[&nonce, &gas_price, &gas_limit, &to.as_slice(), &value, &input.as_slice(), &chain_id, &0u8, &0u8]);
                     B256::from(keccak256(encoded))
@@ -290,9 +312,14 @@ impl TransactionInput {
         let signature: AlloySignature = self.signature.into();
         let tx_hash = self.transaction_info.hash.into();
 
-        match self.transaction_info.tx_type.map(|t| t.as_u64()).unwrap_or(0) {
-            // EIP-2930
-            1 => TxEnvelope::Eip2930(Signed::new_unchecked(
+        let tx_type = self
+            .transaction_info
+            .tx_type
+            .and_then(|t| TxType::try_from(t.as_u64()).ok())
+            .unwrap_or(TxType::Legacy);
+
+        match tx_type {
+            TxType::Eip2930 => TxEnvelope::Eip2930(Signed::new_unchecked(
                 TxEip2930 {
                     chain_id: self.execution_info.chain_id.unwrap_or_default().into(),
                     nonce: self.execution_info.nonce.into(),
@@ -307,8 +334,7 @@ impl TransactionInput {
                 tx_hash,
             )),
 
-            // EIP-1559
-            2 => TxEnvelope::Eip1559(Signed::new_unchecked(
+            TxType::Eip1559 => TxEnvelope::Eip1559(Signed::new_unchecked(
                 TxEip1559 {
                     chain_id: self.execution_info.chain_id.unwrap_or_default().into(),
                     nonce: self.execution_info.nonce.into(),
@@ -324,8 +350,7 @@ impl TransactionInput {
                 tx_hash,
             )),
 
-            // EIP-4844
-            3 => TxEnvelope::Eip4844(Signed::new_unchecked(
+            TxType::Eip4844 => TxEnvelope::Eip4844(Signed::new_unchecked(
                 TxEip4844Variant::TxEip4844(TxEip4844 {
                     chain_id: self.execution_info.chain_id.unwrap_or_default().into(),
                     nonce: self.execution_info.nonce.into(),
@@ -343,8 +368,7 @@ impl TransactionInput {
                 tx_hash,
             )),
 
-            // EIP-7702
-            4 => TxEnvelope::Eip7702(Signed::new_unchecked(
+            TxType::Eip7702 => TxEnvelope::Eip7702(Signed::new_unchecked(
                 TxEip7702 {
                     chain_id: self.execution_info.chain_id.unwrap_or_default().into(),
                     nonce: self.execution_info.nonce.into(),
@@ -361,8 +385,7 @@ impl TransactionInput {
                 tx_hash,
             )),
 
-            // Legacy (default)
-            _ => TxEnvelope::Legacy(Signed::new_unchecked(
+            TxType::Legacy => TxEnvelope::Legacy(Signed::new_unchecked(
                 TxLegacy {
                     chain_id: self.execution_info.chain_id.map(Into::into),
                     nonce: self.execution_info.nonce.into(),
@@ -398,11 +421,11 @@ impl TransactionInput {
     /// Derives the chain id and signature parity from a legacy `v` value.
     fn decode_legacy_v(v: u64) -> alloy_rlp::Result<(Option<ChainId>, u64)> {
         match v {
-            27 => Ok((None, 0)),
-            28 => Ok((None, 1)),
-            v if v >= 35 => {
-                let chain_id = (v - 35) / 2;
-                let parity = (v - 27) % 2;
+            LEGACY_V_UNPROTECTED_EVEN => Ok((None, 0)),
+            LEGACY_V_UNPROTECTED_ODD => Ok((None, 1)),
+            v if v >= EIP155_V_OFFSET => {
+                let chain_id = (v - EIP155_V_OFFSET) / 2;
+                let parity = (v - LEGACY_V_UNPROTECTED_EVEN) % 2;
                 Ok((Some(ChainId::from(chain_id)), parity))
             }
             _ => Err(alloy_rlp::Error::Custom("invalid legacy v value")),
@@ -412,12 +435,12 @@ impl TransactionInput {
     /// Builds a `TransactionInput` from decoded legacy fields and recovers the signer.
     #[allow(clippy::too_many_arguments)]
     fn build_legacy(
-        nonce: u64,
+        nonce: Nonce,
         gas_price: u128,
-        gas_limit: u64,
+        gas_limit: Gas,
         to: Option<Address>,
-        value: U256,
-        input: Vec<u8>,
+        value: Wei,
+        input: Bytes,
         v: u64,
         r: U256,
         s: U256,
@@ -429,12 +452,12 @@ impl TransactionInput {
             transaction_info: TransactionInfo { tx_type: None, hash },
             execution_info: ExecutionInfo {
                 chain_id,
-                nonce: Nonce::from(nonce),
+                nonce,
                 signer: Signer::Unrecovered,
                 to,
-                value: Wei::from(value),
-                input: Bytes::from(input),
-                gas_limit: Gas::from(gas_limit),
+                value,
+                input,
+                gas_limit,
                 gas_price,
             },
             signature: Signature { v: U64::from(parity), r, s },
@@ -447,148 +470,161 @@ impl TransactionInput {
     }
 
     /// Decodes a legacy transaction from raw RLP bytes.
-    fn decode_legacy(raw_bytes: &[u8]) -> alloy_rlp::Result<Self> {
+    fn decode_legacy(raw_bytes: &[u8]) -> anyhow::Result<Self> {
         let mut rlp = alloy_rlp::Rlp::new(raw_bytes)?;
 
-        let nonce: u64 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing nonce"))?;
-        let gas_price: u128 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing gasPrice"))?;
-        let gas_limit: u64 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing gasLimit"))?;
-        let to_bytes: AlloyBytes = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing to"))?;
-        let value: U256 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing value"))?;
-        let input: AlloyBytes = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing input"))?;
-        let v: u64 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing v"))?;
-        let r: U256 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing r"))?;
-        let s: U256 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing s"))?;
+        let nonce: Nonce = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("nonce"))?;
+        let gas_price: u128 = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("gasPrice"))?;
+        let gas_limit: Gas = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("gasLimit"))?;
+        let to_bytes: AlloyBytes = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("to"))?;
+        let value: Wei = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("value"))?;
+        let input: Bytes = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("input"))?;
+        let v: u64 = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("v"))?;
+        let r: U256 = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("r"))?;
+        let s: U256 = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("s"))?;
 
         if rlp.get_next::<u8>()?.is_some() {
-            return Err(alloy_rlp::Error::Custom("legacy transaction has extra fields"));
+            return Err(TransactionDecodeError::ExtraFields.into());
         }
 
-        let to = Self::decode_to(&to_bytes)?;
+        let to = Self::decode_to(&to_bytes).map_err(|_| TransactionDecodeError::InvalidTo)?;
         let hash = Hash::from(keccak256(raw_bytes));
 
-        Self::build_legacy(nonce, gas_price, gas_limit, to, value, input.to_vec(), v, r, s, hash)
-            .map_err(|_| alloy_rlp::Error::Custom("failed to recover legacy signer"))
+        Ok(Self::build_legacy(nonce, gas_price, gas_limit, to, value, input, v, r, s, hash).map_err(|_| TransactionDecodeError::SignerRecovery)?)
+    }
+
+    /// Decodes the common fields shared by access-list transaction types (EIP-2930, EIP-1559, EIP-4844, EIP-7702).
+    /// The `to` field is decoded via the provided closure because its RLP encoding varies by type.
+    fn decode_access_list_fields<F>(rlp: &mut alloy_rlp::Rlp<'_>, decode_to: F) -> anyhow::Result<AccessListTxFields>
+    where
+        F: FnOnce(&mut alloy_rlp::Rlp<'_>) -> anyhow::Result<Option<Address>>,
+    {
+        let gas_limit: Gas = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("gasLimit"))?;
+        let to = decode_to(rlp)?;
+        let value: Wei = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("value"))?;
+        let input: Bytes = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("input"))?;
+        let _: AccessList = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("accessList"))?;
+
+        Ok(AccessListTxFields { gas_limit, to, value, input })
+    }
+
+    /// Decodes the dynamic-fee gas price fields (`maxPriorityFeePerGas` and `maxFeePerGas`)
+    /// and returns `maxFeePerGas` as the effective gas price.
+    fn decode_dynamic_fee_gas_price(rlp: &mut alloy_rlp::Rlp<'_>) -> anyhow::Result<u128> {
+        let max_priority_fee_per_gas: u128 = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("maxPriorityFeePerGas"))?;
+        let max_fee_per_gas: u128 = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("maxFeePerGas"))?;
+        let _ = max_priority_fee_per_gas;
+        Ok(max_fee_per_gas)
+    }
+
+    /// Decodes the transaction signature fields (`v`, `r`, `s`).
+    fn decode_signature(rlp: &mut alloy_rlp::Rlp<'_>) -> anyhow::Result<(u64, U256, U256)> {
+        let v = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("v"))?;
+        let r = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("r"))?;
+        let s = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("s"))?;
+        Ok((v, r, s))
     }
 
     /// Decodes a typed transaction (EIP-2718) from raw bytes.
-    fn decode_typed(tx_type: u8, payload: &[u8], raw_bytes: &[u8]) -> alloy_rlp::Result<Self> {
+    fn decode_typed(tx_type: u8, payload: &[u8], raw_bytes: &[u8]) -> anyhow::Result<Self> {
+        let tx_type = TxType::try_from(tx_type).map_err(|_| TransactionDecodeError::UnsupportedType)?;
         let mut rlp = alloy_rlp::Rlp::new(payload)?;
 
-        let chain_id: u64 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing chainId"))?;
-        let nonce: u64 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing nonce"))?;
+        let chain_id: ChainId = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("chainId"))?;
+        let nonce: Nonce = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("nonce"))?;
         let gas_price: u128;
-        let gas_limit: u64;
+        let gas_limit: Gas;
         let to: Option<Address>;
-        let value: U256;
-        let input: Vec<u8>;
+        let value: Wei;
+        let input: Bytes;
         let v: u64;
         let r: U256;
         let s: U256;
 
         match tx_type {
-            // EIP-2930
-            1 => {
-                gas_price = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing gasPrice"))?;
-                gas_limit = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing gasLimit"))?;
-                let to_bytes: AlloyBytes = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing to"))?;
-                to = Self::decode_to(&to_bytes)?;
-                value = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing value"))?;
-                let input_bytes: AlloyBytes = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing input"))?;
-                input = input_bytes.to_vec();
-                let _: AccessList = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing accessList"))?;
-                v = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing v"))?;
-                r = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing r"))?;
-                s = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing s"))?;
+            TxType::Eip2930 => {
+                gas_price = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("gasPrice"))?;
+                let fields = Self::decode_access_list_fields(&mut rlp, |rlp| {
+                    let to_bytes: AlloyBytes = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("to"))?;
+                    Self::decode_to(&to_bytes).map_err(|_| TransactionDecodeError::InvalidTo.into())
+                })?;
+                gas_limit = fields.gas_limit;
+                to = fields.to;
+                value = fields.value;
+                input = fields.input;
+                (v, r, s) = Self::decode_signature(&mut rlp)?;
             }
 
-            // EIP-1559
-            2 => {
-                let max_priority_fee_per_gas: u128 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing maxPriorityFeePerGas"))?;
-                let max_fee_per_gas: u128 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing maxFeePerGas"))?;
-                gas_price = max_fee_per_gas;
-                let _ = max_priority_fee_per_gas;
-                gas_limit = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing gasLimit"))?;
-                let to_bytes: AlloyBytes = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing to"))?;
-                to = Self::decode_to(&to_bytes)?;
-                value = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing value"))?;
-                let input_bytes: AlloyBytes = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing input"))?;
-                input = input_bytes.to_vec();
-                let _: AccessList = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing accessList"))?;
-                v = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing v"))?;
-                r = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing r"))?;
-                s = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing s"))?;
+            TxType::Eip1559 => {
+                gas_price = Self::decode_dynamic_fee_gas_price(&mut rlp)?;
+                let fields = Self::decode_access_list_fields(&mut rlp, |rlp| {
+                    let to_bytes: AlloyBytes = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("to"))?;
+                    Self::decode_to(&to_bytes).map_err(|_| TransactionDecodeError::InvalidTo.into())
+                })?;
+                gas_limit = fields.gas_limit;
+                to = fields.to;
+                value = fields.value;
+                input = fields.input;
+                (v, r, s) = Self::decode_signature(&mut rlp)?;
             }
 
-            // EIP-4844
-            3 => {
-                let max_priority_fee_per_gas: u128 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing maxPriorityFeePerGas"))?;
-                let max_fee_per_gas: u128 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing maxFeePerGas"))?;
-                gas_price = max_fee_per_gas;
-                let _ = max_priority_fee_per_gas;
-                gas_limit = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing gasLimit"))?;
-                let to_addr: AlloyAddress = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing to"))?;
-                to = Some(Address::from(to_addr.0));
-                value = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing value"))?;
-                let input_bytes: AlloyBytes = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing input"))?;
-                input = input_bytes.to_vec();
-                let _: AccessList = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing accessList"))?;
-                let _: u128 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing maxFeePerBlobGas"))?;
-                let _: Vec<B256> = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing blobVersionedHashes"))?;
-                v = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing v"))?;
-                r = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing r"))?;
-                s = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing s"))?;
+            TxType::Eip4844 => {
+                gas_price = Self::decode_dynamic_fee_gas_price(&mut rlp)?;
+                let fields = Self::decode_access_list_fields(&mut rlp, |rlp| {
+                    let to_addr: AlloyAddress = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("to"))?;
+                    Ok(Some(Address::from(to_addr.0)))
+                })?;
+                gas_limit = fields.gas_limit;
+                to = fields.to;
+                value = fields.value;
+                input = fields.input;
+                let _: u128 = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("maxFeePerBlobGas"))?;
+                let _: Vec<B256> = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("blobVersionedHashes"))?;
+                (v, r, s) = Self::decode_signature(&mut rlp)?;
             }
 
-            // EIP-7702
-            4 => {
-                let max_priority_fee_per_gas: u128 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing maxPriorityFeePerGas"))?;
-                let max_fee_per_gas: u128 = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing maxFeePerGas"))?;
-                gas_price = max_fee_per_gas;
-                let _ = max_priority_fee_per_gas;
-                gas_limit = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing gasLimit"))?;
-                let to_addr: AlloyAddress = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing to"))?;
-                to = Some(Address::from(to_addr.0));
-                value = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing value"))?;
-                let input_bytes: AlloyBytes = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing input"))?;
-                input = input_bytes.to_vec();
-                let _: AccessList = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing accessList"))?;
-                let _: Vec<SignedAuthorization> = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing authorizationList"))?;
-                v = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing v"))?;
-                r = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing r"))?;
-                s = rlp.get_next()?.ok_or(alloy_rlp::Error::Custom("missing s"))?;
+            TxType::Eip7702 => {
+                gas_price = Self::decode_dynamic_fee_gas_price(&mut rlp)?;
+                let fields = Self::decode_access_list_fields(&mut rlp, |rlp| {
+                    let to_addr: AlloyAddress = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("to"))?;
+                    Ok(Some(Address::from(to_addr.0)))
+                })?;
+                gas_limit = fields.gas_limit;
+                to = fields.to;
+                value = fields.value;
+                input = fields.input;
+                let _: Vec<SignedAuthorization> = rlp.get_next()?.ok_or(TransactionDecodeError::MissingField("authorizationList"))?;
+                (v, r, s) = Self::decode_signature(&mut rlp)?;
             }
 
-            _ => return Err(alloy_rlp::Error::Custom("unsupported transaction type")),
+            TxType::Legacy => return Err(TransactionDecodeError::LegacyNotTyped.into()),
         }
 
         if rlp.get_next::<u8>()?.is_some() {
-            return Err(alloy_rlp::Error::Custom("typed transaction has extra fields"));
+            return Err(TransactionDecodeError::ExtraFields.into());
         }
 
         let hash = Hash::from(keccak256(raw_bytes));
 
         let mut tx = Self {
             transaction_info: TransactionInfo {
-                tx_type: Some(U64::from(tx_type)),
+                tx_type: Some(U64::from(tx_type as u8)),
                 hash,
             },
             execution_info: ExecutionInfo {
-                chain_id: Some(ChainId::from(chain_id)),
-                nonce: Nonce::from(nonce),
+                chain_id: Some(chain_id),
+                nonce,
                 signer: Signer::Unrecovered,
                 to,
-                value: Wei::from(value),
-                input: Bytes::from(input),
-                gas_limit: Gas::from(gas_limit),
+                value,
+                input,
+                gas_limit,
                 gas_price,
             },
             signature: Signature { v: U64::from(v), r, s },
         };
 
-        let signer = tx
-            .recover_signer_address()
-            .map_err(|_| alloy_rlp::Error::Custom("failed to recover typed signer"))?;
+        let signer = tx.recover_signer_address().map_err(|_| TransactionDecodeError::SignerRecovery)?;
         tx.execution_info.signer = Signer::Recovered(signer);
 
         Ok(tx)
@@ -600,22 +636,30 @@ impl RlpDecodable for TransactionInput {
         let raw_bytes = *buf;
 
         if raw_bytes.is_empty() {
-            return Err(alloy_rlp::Error::Custom("empty transaction bytes"));
+            return Err(TransactionDecodeError::EmptyBytes.into());
         }
 
         let tx = match raw_bytes[0] {
-            byte if byte >= 0xc0 => Self::decode_legacy(raw_bytes)?,
+            byte if byte >= 0xc0 => Self::decode_legacy(raw_bytes).map_err(decode_error_to_rlp)?,
             byte if byte <= 0x7f => {
                 let tx_type = byte;
                 let payload = &raw_bytes[1..];
-                Self::decode_typed(tx_type, payload, raw_bytes)?
+                Self::decode_typed(tx_type, payload, raw_bytes).map_err(decode_error_to_rlp)?
             }
-            _ => return Err(alloy_rlp::Error::Custom("invalid transaction type byte")),
+            _ => return Err(TransactionDecodeError::InvalidTypeByte.into()),
         };
 
         // A raw transaction occupies the entire buffer.
         *buf = &[];
         Ok(tx)
+    }
+}
+
+/// Converts a transaction decode error into an `alloy_rlp::Error` for the `RlpDecodable` boundary.
+fn decode_error_to_rlp(error: anyhow::Error) -> alloy_rlp::Error {
+    match error.downcast::<TransactionDecodeError>() {
+        Ok(decode_error) => decode_error.into(),
+        Err(_) => alloy_rlp::Error::Custom("failed to decode transaction"),
     }
 }
 
@@ -627,14 +671,6 @@ impl TryFrom<ExternalTransaction> for TransactionInput {
 
     fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
         try_from_alloy_transaction(value.0)
-    }
-}
-
-impl TryFrom<AlloyTransaction> for TransactionInput {
-    type Error = anyhow::Error;
-
-    fn try_from(value: AlloyTransaction) -> anyhow::Result<Self> {
-        try_from_alloy_transaction(value)
     }
 }
 

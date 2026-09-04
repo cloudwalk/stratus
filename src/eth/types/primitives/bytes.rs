@@ -6,7 +6,7 @@ use display_json::DebugAsJson;
 use crate::alias::RevmBytes;
 use crate::alias::RevmOutput;
 
-#[derive(DebugAsJson, Clone, Default, Eq, PartialEq)]
+#[derive(DebugAsJson, Clone, Default, Eq, PartialEq, alloy_rlp::RlpDecodableWrapper)]
 pub struct Bytes(pub bytes::Bytes);
 
 impl Display for Bytes {

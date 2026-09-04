@@ -7,7 +7,21 @@ use fake::Dummy;
 use fake::Faker;
 
 /// Native token amount in wei.
-#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialOrd, Ord, PartialEq, Eq, derive_more::Sub, serde::Serialize, serde::Deserialize)]
+#[derive(
+    DebugAsJson,
+    derive_more::Display,
+    Clone,
+    Copy,
+    Default,
+    PartialOrd,
+    Ord,
+    PartialEq,
+    Eq,
+    derive_more::Sub,
+    serde::Serialize,
+    serde::Deserialize,
+    alloy_rlp::RlpDecodableWrapper,
+)]
 pub struct Wei(pub U256);
 
 impl Wei {

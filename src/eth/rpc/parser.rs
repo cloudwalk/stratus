@@ -8,6 +8,7 @@ use tracing::Span;
 use super::middleware::Authentication;
 use crate::eth::rpc::RpcClientApp;
 use crate::eth::rpc::RpcError;
+use crate::eth::rpc::TransactionDecodeError;
 use crate::ext::type_basename;
 use crate::infra::tracing::EnteredWrap;
 
@@ -80,6 +81,8 @@ pub fn parse_rpc_rlp<T: Decodable>(value: &[u8]) -> Result<T, RpcError> {
     let mut buf = value;
     match T::decode(&mut buf) {
         Ok(trx) => Ok(trx),
-        Err(e) => Err(RpcError::TransactionInvalid { decode_error: e.to_string() }),
+        Err(e) => Err(RpcError::TransactionInvalid {
+            decode_error: TransactionDecodeError::Custom(e.to_string()),
+        }),
     }
 }

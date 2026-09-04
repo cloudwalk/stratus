@@ -67,6 +67,7 @@ use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::rpc::RpcSubscriptions;
+use crate::eth::rpc::TransactionDecodeError;
 use crate::eth::rpc::middleware::decode_input_arguments;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
@@ -1320,7 +1321,7 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
         _ => {
             tracing::error!("failed to execute eth_sendRawTransaction because transaction input is not available");
             return Err(RpcError::TransactionInvalid {
-                decode_error: "transaction input is not available".to_string(),
+                decode_error: TransactionDecodeError::Custom("transaction input is not available".to_string()),
             }
             .into());
         }
