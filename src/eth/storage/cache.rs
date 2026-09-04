@@ -82,8 +82,8 @@ impl StorageCache {
         self.account_latest_cache.insert_if_missing(address, account);
     }
 
-    pub fn cache_slot_latest_if_missing(&self, address: Address, slot: Slot) {
-        self.slot_latest_cache.insert_if_missing((address, slot.index), slot.value);
+    pub fn cache_slot_latest_if_missing(&self, address: Address, slot_index: SlotIndex, slot_value: SlotValue) {
+        self.slot_latest_cache.insert_if_missing((address, slot_index), slot_value);
     }
 
     pub fn get_account_latest(&self, address: &Address) -> Option<Account> {

@@ -5,6 +5,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::bail;
+use stratus_macros::timed;
 
 use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_state::RocksStorageState;
@@ -17,6 +18,7 @@ use crate::eth::rpc::LogFilter;
 use crate::eth::storage::MinedPointInTime;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+use crate::eth::storage::stratus_storage::label;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::Block;
@@ -203,6 +205,7 @@ impl RocksPermanentStorage {
         result.map_err(|err| StorageError::RocksError { err })
     }
 
+    #[timed(storage_read_transaction, labels(storage = label::PERM, hit = result.as_ref().ok().and_then(Option::as_ref).is_some(), success = result.is_ok()))]
     pub fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>, StorageError> {
         self.state
             .read_transaction(hash)
@@ -216,22 +219,6 @@ impl RocksPermanentStorage {
         self.state.read_logs(filter).map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read log in RocksPermanent");
         })
-    }
-
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: State<Final>) -> anyhow::Result<(), StorageError> {
-        #[cfg(feature = "rocks_metrics")]
-        {
-            self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
-                tracing::error!(reason = ?e, "failed to export metrics in RocksPermanent");
-            })?;
-        }
-
-        self.state
-            .save_genesis_block(block, accounts, account_changes)
-            .map_err(|err| StorageError::RocksError { err })
-            .inspect_err(|e| {
-                tracing::error!(reason = ?e, "failed to save genesis block in RocksPermanent");
-            })
     }
 
     pub fn save_block(&self, block: Block, account_changes: State<Final>) -> anyhow::Result<(), StorageError> {

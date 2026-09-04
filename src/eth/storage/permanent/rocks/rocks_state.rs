@@ -455,49 +455,6 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(write_batch)
     }
 
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: State<Final>) -> Result<()> {
-        let mut batch = WriteBatch::default();
-
-        let mut txs_batch = vec![];
-        for transaction in block.transactions.iter().cloned() {
-            txs_batch.push((transaction.info.hash.into(), transaction.input.block_number.into()));
-        }
-        self.transactions.prepare_batch_insertion(txs_batch, &mut batch)?;
-
-        let number = block.number();
-        let block_hash = block.hash();
-        let timestamp = block.header.timestamp;
-
-        let block_by_number = (number.into(), block.into());
-        self.blocks_by_number.prepare_batch_insertion([block_by_number], &mut batch)?;
-
-        let block_by_hash = (block_hash.into(), number.into());
-        self.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch)?;
-
-        let block_by_timestamp = (timestamp.into(), number.into());
-        self.blocks_by_timestamp.prepare_batch_insertion([block_by_timestamp], &mut batch)?;
-
-        self.prepare_batch_with_execution_changes(account_changes, number, &mut batch)?;
-
-        self.accounts.prepare_batch_insertion(
-            accounts.iter().cloned().map(|acc| {
-                let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
-                (tup.0, tup.1.into())
-            }),
-            &mut batch,
-        )?;
-
-        self.accounts_history.prepare_batch_insertion(
-            accounts.iter().cloned().map(|acc| {
-                let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
-                ((tup.0, 0u32.into()), tup.1.into())
-            }),
-            &mut batch,
-        )?;
-
-        self.write_in_batch_for_multiple_cfs(batch)
-    }
-
     pub fn save_block(&self, block: Block, account_changes: State<Final>) -> Result<()> {
         let mut batch = WriteBatch::default();
         self.prepare_block_insertion(block, account_changes, &mut batch)?;

@@ -12,8 +12,8 @@ use rdkafka::producer::DeliveryFuture;
 use rdkafka::producer::FutureProducer;
 use rdkafka::producer::FutureRecord;
 use rdkafka::producer::future_producer::OwnedDeliveryResult;
+use stratus_macros::timed;
 
-use crate::infra::metrics;
 use crate::ledger::events::Event;
 use crate::log_and_err;
 
@@ -173,37 +173,23 @@ impl KafkaConnector {
         handle_delivery_result(self.queue_event(event)?.await)
     }
 
+    #[timed(kafka_create_buffer)]
     pub fn create_buffer<T, I>(&self, events: I, buffer_size: usize) -> Result<impl Stream<Item = Result<()>>>
     where
         T: Event,
         I: IntoIterator<Item = T>,
     {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        let futures: Vec<DeliveryFuture> = events
-            .into_iter()
-            .map(|event| {
-                metrics::timed(|| self.queue_event(event)).with(|m| {
-                    metrics::inc_kafka_queue_event(m.elapsed);
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?; // This could fail because the queue is full (?)
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_kafka_create_buffer(start.elapsed());
+        let futures: Vec<DeliveryFuture> = events.into_iter().map(|event| self.queue_event(event)).collect::<Result<Vec<_>, _>>()?; // This could fail because the queue is full (?)
 
         Ok(futures::stream::iter(futures).buffered(buffer_size).map(handle_delivery_result))
     }
 
+    #[timed(kafka_send_buffered)]
     pub async fn send_buffered<T, I>(&self, events: I, buffer_size: usize) -> Result<()>
     where
         T: Event,
         I: IntoIterator<Item = T>,
     {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
         tracing::info!(?buffer_size, "sending events");
 
         let mut buffer = self.create_buffer(events, buffer_size)?;
@@ -213,8 +199,6 @@ impl KafkaConnector {
             }
         }
 
-        #[cfg(feature = "metrics")]
-        metrics::inc_kafka_send_buffered(start.elapsed());
         Ok(())
     }
 }

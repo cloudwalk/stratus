@@ -3,7 +3,7 @@ use std::sync::Arc;
 use alloy_rpc_types_trace::geth::GethTrace;
 
 use crate::GlobalState;
-use crate::eth::executor::EvmExecutionMetrics;
+use crate::eth::executor::ExecutionMetrics;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::ExecutorError;
 use crate::eth::executor::TransactionExecutionInput;
@@ -105,11 +105,11 @@ impl EvmWorkerPool {
     }
 
     /// Executes a transaction in the specified route.
-    pub fn execute<Output>(&self, route: EvmRoute) -> Result<(Output, EvmExecutionMetrics), StratusError>
+    pub fn execute<Output>(&self, route: EvmRoute) -> Result<(Output, ExecutionMetrics), StratusError>
     where
         Output: TryFrom<RevmResultAndState, Error = StratusError>,
     {
-        let (execution_tx, execution_rx) = oneshot::channel::<Result<(RevmResultAndState, EvmExecutionMetrics), StratusError>>();
+        let (execution_tx, execution_rx) = oneshot::channel::<Result<(RevmResultAndState, ExecutionMetrics), StratusError>>();
 
         match route {
             EvmRoute::Transaction(input) => {
