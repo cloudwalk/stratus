@@ -10,6 +10,7 @@ use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::consensus::LagDirection;
 use crate::eth::follower::consensus::LagStatus;
+use crate::eth::follower::importer::BlockchainClient;
 use crate::eth::follower::importer::EXTERNAL_RPC_CURRENT_BLOCK;
 use crate::eth::follower::importer::ImporterMode;
 use crate::eth::follower::importer::LATEST_FETCHED_BLOCK_TIME;
@@ -23,7 +24,6 @@ use crate::eth::follower::importer::importers::fake_leader::FakeLeaderWorker;
 use crate::eth::follower::importer::importers::replication::ReplicationWorker;
 use crate::eth::follower::importer::start_number_fetcher;
 use crate::eth::miner::Miner;
-use crate::eth::rpc::BlockchainClient;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::BlockNumber;
 use crate::ext::spawn;
@@ -151,9 +151,15 @@ pub async fn start_importer(
 pub struct ImporterConsensus {
     pub storage: Arc<StratusStorage>,
     pub chain: Arc<BlockchainClient>,
+    pub executor: Arc<Executor>,
+    pub forward_access_list: bool,
 }
 
 impl Consensus for ImporterConsensus {
+    fn forward_access_list(&self) -> bool {
+        self.forward_access_list
+    }
+
     async fn lag(&self) -> anyhow::Result<LagStatus> {
         let last_fetched_time = LATEST_FETCHED_BLOCK_TIME.load(Ordering::Relaxed);
 
@@ -183,7 +189,11 @@ impl Consensus for ImporterConsensus {
         }
     }
 
-    fn get_chain(&self) -> anyhow::Result<&Arc<BlockchainClient>> {
-        Ok(&self.chain)
+    fn get_client(&self) -> &Arc<BlockchainClient> {
+        &self.chain
+    }
+
+    fn get_executor(&self) -> &Arc<Executor> {
+        &self.executor
     }
 }

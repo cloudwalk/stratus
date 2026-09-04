@@ -1,20 +1,12 @@
 mod error;
 mod execution_result;
-mod state;
+pub mod state;
 mod task;
 mod transaction_execution;
 
 pub use error::ExecutorError;
 pub use execution_result::ExecutionResult;
 pub use execution_result::RevertReason;
-pub use state::AccountChanges;
-pub use state::AccountOriginalsReader;
-pub use state::Complete;
-pub use state::CompleteValue;
-pub use state::Final;
-pub use state::Incomplete;
-pub use state::IncompleteValue;
-pub use state::Stage;
 pub use state::State;
 pub use task::EvmRoute;
 pub use task::EvmTask;

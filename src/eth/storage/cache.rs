@@ -6,12 +6,12 @@ use display_json::DebugAsJson;
 use indexmap::Equivalent;
 use quick_cache::UnitWeighter;
 use quick_cache::sync::Cache;
-use quick_cache::sync::DefaultLifecycle;
 use quick_cache::sync::GuardResult;
-use rustc_hash::FxBuildHasher;
+use quick_cache::sync::LockContention;
 
-use crate::eth::executor::Complete;
 use crate::eth::executor::State;
+use crate::eth::executor::types::state::Change;
+use crate::eth::executor::types::state::Complete;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::Slot;
@@ -19,8 +19,8 @@ use crate::eth::types::SlotIndex;
 use crate::eth::types::SlotValue;
 
 pub struct StorageCache {
-    account_latest_cache: Cache<Address, Account, UnitWeighter, FxBuildHasher>,
-    slot_latest_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
+    account_latest_cache: Cache<Address, Account, UnitWeighter>,
+    slot_latest_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter>,
 }
 
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
@@ -43,20 +43,12 @@ impl CacheConfig {
 impl StorageCache {
     pub fn new(config: &CacheConfig) -> Self {
         Self {
-            account_latest_cache: Cache::with(
+            account_latest_cache: Cache::with_weighter(
                 config.account_history_cache_capacity,
                 config.account_history_cache_capacity as u64,
                 UnitWeighter,
-                FxBuildHasher,
-                DefaultLifecycle::default(),
             ),
-            slot_latest_cache: Cache::with(
-                config.slot_history_cache_capacity,
-                config.slot_history_cache_capacity as u64,
-                UnitWeighter,
-                FxBuildHasher,
-                DefaultLifecycle::default(),
-            ),
+            slot_latest_cache: Cache::with_weighter(config.slot_history_cache_capacity, config.slot_history_cache_capacity as u64, UnitWeighter),
         }
     }
 
@@ -67,12 +59,12 @@ impl StorageCache {
 
     fn _cache_account_and_slots_from_changes_impl(
         changes: State<Complete>,
-        account_cache: &Cache<Address, Account, UnitWeighter, FxBuildHasher>,
-        slot_cache: &Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
+        account_cache: &Cache<Address, Account, UnitWeighter>,
+        slot_cache: &Cache<(Address, SlotIndex), SlotValue, UnitWeighter>,
     ) {
         // cache accounts
         for (address, change) in changes.accounts.into_iter() {
-            let account = change.clone().to_account(address);
+            let account = change.to_account(address);
             account_cache.insert(address, account);
         }
 
@@ -94,12 +86,42 @@ impl StorageCache {
         self.slot_latest_cache.insert_if_missing((address, slot.index), slot.value);
     }
 
-    pub fn get_account_latest(&self, address: Address) -> Option<Account> {
-        self.account_latest_cache.get(&address)
+    pub fn get_account_latest(&self, address: &Address) -> Option<Account> {
+        self.account_latest_cache.get(address)
     }
 
-    pub fn get_slot_latest(&self, address: Address, index: SlotIndex) -> Option<Slot> {
-        self.slot_latest_cache.get(&(address, index)).map(|value| Slot { value, index })
+    pub fn get_slot_latest(&self, address: &Address, index: &SlotIndex) -> Option<Slot> {
+        self.slot_latest_cache
+            .get(&SlotKeyRef(address, index))
+            .map(|value| Slot { value, index: *index })
+    }
+
+    pub fn try_get_account_latest(&self, address: &Address) -> Result<Option<Account>, LockContention> {
+        self.account_latest_cache.try_get(address)
+    }
+
+    pub fn try_get_slot_latest(&self, address: &Address, index: &SlotIndex) -> Result<Option<Slot>, LockContention> {
+        self.slot_latest_cache
+            .try_get(&SlotKeyRef(address, index))
+            .map(|value| value.map(|value| Slot { value, index: *index }))
+    }
+
+    pub fn contains_account(&self, address: &Address) -> bool {
+        self.account_latest_cache.contains_key(address)
+    }
+
+    pub fn contains_slot(&self, address: &Address, index: &SlotIndex) -> bool {
+        self.slot_latest_cache.contains_key(&SlotKeyRef(address, index))
+    }
+}
+
+/// Borrowed lookup key for `slot_latest_cache`.
+#[derive(Hash)]
+struct SlotKeyRef<'a>(&'a Address, &'a SlotIndex);
+
+impl Equivalent<(Address, SlotIndex)> for SlotKeyRef<'_> {
+    fn equivalent(&self, key: &(Address, SlotIndex)) -> bool {
+        self.0 == &key.0 && self.1 == &key.1
     }
 }
 

@@ -5,17 +5,17 @@ use parking_lot::RwLockUpgradableReadGuard;
 #[cfg(not(feature = "dev"))]
 use parking_lot::RwLockWriteGuard;
 
-use crate::eth::executor::Complete;
-#[cfg(feature = "dev")]
-use crate::eth::executor::CompleteValue;
 use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::TransactionExecutionInput;
+use crate::eth::executor::types::state::Complete;
+#[cfg(feature = "dev")]
+use crate::eth::executor::types::state::CompleteValue;
 use crate::eth::storage::StorageError;
-use crate::eth::storage::TxCount;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
+use crate::eth::types::BlockInfo;
 use crate::eth::types::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::types::Bytes;
@@ -23,7 +23,6 @@ use crate::eth::types::Hash;
 #[cfg(feature = "dev")]
 use crate::eth::types::Nonce;
 use crate::eth::types::PendingBlock;
-use crate::eth::types::PendingBlockHeader;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::TransactionInput;
@@ -44,7 +43,7 @@ impl InmemoryTransactionTemporaryStorage {
         Self {
             pending_block: RwLock::new(InMemoryTemporaryStorageState {
                 block: PendingBlock::new_at_now(block_number),
-                block_changes: State::default(),
+                state: State::default(),
             }),
             latest_block: RwLock::new(None),
         }
@@ -60,10 +59,9 @@ impl InmemoryTransactionTemporaryStorage {
     // Block number
     // -------------------------------------------------------------------------
 
-    // Uneeded clone here, return Cow
-    pub fn read_pending_block_header(&self) -> (PendingBlockHeader, TxCount) {
+    pub fn read_pending_block_header(&self) -> BlockInfo {
         let pending_block = self.pending_block.read();
-        (pending_block.block.header.clone(), (pending_block.block.transactions.len() as u64).into())
+        pending_block.block.header
     }
 
     #[cfg(feature = "dev")]
@@ -76,14 +74,13 @@ impl InmemoryTransactionTemporaryStorage {
     // Block and executions
     // -------------------------------------------------------------------------
 
-    pub fn save_pending_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
+    pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
         // check conflicts
         let pending_block = self.pending_block.upgradable_read();
-        if tx.input != &pending_block.block.header {
+        if tx.input != pending_block.block.header {
             let actual_input = tx.input.clone();
             let tx_input: TransactionInput = tx.into();
-            let expected_input =
-                TransactionExecutionInput::from_eth_transaction(&tx_input, pending_block.block.header.number, *pending_block.block.header.timestamp);
+            let expected_input = TransactionExecutionInput::create(&tx_input, pending_block.block.header);
             return Err(StorageError::EvmInputMismatch {
                 expected: Box::new(expected_input),
                 actual: Box::new(actual_input),
@@ -92,7 +89,7 @@ impl InmemoryTransactionTemporaryStorage {
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
-        pending_block.block_changes.merge(tx.output.changes.clone()); // TODO: This clone can be removed by reworking the primitives
+        pending_block.state.merge(state);
 
         // save execution
         pending_block.block.push_transaction(tx);
@@ -111,18 +108,17 @@ impl InmemoryTransactionTemporaryStorage {
 
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {
         let pending_block = self.pending_block.upgradable_read();
-        let changes = pending_block.block_changes.clone();
 
         // This has to happen BEFORE creating the new state, because UnixTimeNow::default() may change the offset.
         #[cfg(feature = "dev")]
-        let finished_block = {
+        let (finished_block, state) = {
             let mut finished_block = pending_block.block.clone();
             // Update block timestamp only if evm_setNextBlockTimestamp was called,
             // otherwise keep the original timestamp from pending block creation
             if UnixTime::evm_set_next_block_timestamp_was_called() {
                 finished_block.header.timestamp = UnixTimeNow::default();
             }
-            finished_block
+            (finished_block, pending_block.state.clone())
         };
 
         let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number());
@@ -135,14 +131,15 @@ impl InmemoryTransactionTemporaryStorage {
         drop(pending_block);
 
         #[cfg(not(feature = "dev"))]
-        let finished_block = {
+        let (finished_block, state) = {
             let latest = RwLockWriteGuard::<Option<InMemoryTemporaryStorageState>>::downgrade(latest);
 
             #[allow(clippy::expect_used)]
-            latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone()
+            let latest_state = latest.as_ref().expect("latest should be Some after finishing the pending block");
+            (latest_state.block.clone(), latest_state.state.clone())
         };
 
-        (finished_block, changes)
+        (finished_block, state)
     }
 
     pub fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
@@ -158,25 +155,55 @@ impl InmemoryTransactionTemporaryStorage {
     // -------------------------------------------------------------------------
 
     pub fn read_account(&self, address: Address) -> Option<Account> {
-        match self.pending_block.read().block_changes.accounts.get(&address) {
+        match self.pending_block.read().state.accounts.get(&address) {
             Some(pending_account) => Some(pending_account.clone().to_account(address)),
             None => self
                 .latest_block
                 .read()
                 .as_ref()
-                .and_then(|latest| latest.block_changes.accounts.get(&address))
+                .and_then(|latest| latest.state.accounts.get(&address))
                 .map(|account| account.clone().to_account(address)),
         }
     }
 
     pub fn read_slot(&self, address: Address, index: SlotIndex) -> Option<Slot> {
-        match self.pending_block.read().block_changes.slots.get(&(address, index)) {
+        match self.pending_block.read().state.slots.get(&(address, index)) {
             Some(pending_value) => Some(Slot::new(index, *pending_value.value())),
             None => self
                 .latest_block
                 .read()
                 .as_ref()
-                .and_then(|latest| latest.block_changes.slots.get(&(address, index)).map(|value| Slot::new(index, *value.value()))),
+                .and_then(|latest| latest.state.slots.get(&(address, index)).map(|value| Slot::new(index, *value.value()))),
+        }
+    }
+
+    /// Retains only the addresses that are missing from both the pending and latest temporary states.
+    ///
+    /// Batched: each lock is acquired once for the whole key set, instead of once per key,
+    /// to reduce contention with the executor.
+    pub fn retain_missing_accounts(&self, addresses: &mut Vec<Address>) {
+        {
+            let pending_block = self.pending_block.read();
+            addresses.retain(|address| !pending_block.state.accounts.contains_key(address));
+        }
+        let latest_block = self.latest_block.read();
+        if let Some(latest_block) = latest_block.as_ref() {
+            addresses.retain(|address| !latest_block.state.accounts.contains_key(address));
+        }
+    }
+
+    /// Retains only the slot keys that are missing from both the pending and latest temporary states.
+    ///
+    /// Batched: each lock is acquired once for the whole key set, instead of once per key,
+    /// to reduce contention with the executor.
+    pub fn retain_missing_slots(&self, slot_keys: &mut Vec<(Address, SlotIndex)>) {
+        {
+            let pending_block = self.pending_block.read();
+            slot_keys.retain(|slot_key| !pending_block.state.slots.contains_key(slot_key));
+        }
+        let latest_block = self.latest_block.read();
+        if let Some(latest_block) = latest_block.as_ref() {
+            slot_keys.retain(|slot_key| !latest_block.state.slots.contains_key(slot_key));
         }
     }
 
@@ -187,10 +214,7 @@ impl InmemoryTransactionTemporaryStorage {
     #[cfg(feature = "dev")]
     pub fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
-        pending_block
-            .block_changes
-            .slots
-            .insert((address, slot.index), CompleteValue::Changed(slot.value));
+        pending_block.state.slots.insert((address, slot.index), CompleteValue::Changed(slot.value));
         Ok(())
     }
 
@@ -199,7 +223,7 @@ impl InmemoryTransactionTemporaryStorage {
         let mut pending_block = self.pending_block.write();
 
         // Only update if the account exists
-        if let Some(account) = pending_block.block_changes.accounts.get_mut(&address) {
+        if let Some(account) = pending_block.state.accounts.get_mut(&address) {
             account.nonce.apply(nonce);
         }
 
@@ -211,7 +235,7 @@ impl InmemoryTransactionTemporaryStorage {
         let mut pending_block = self.pending_block.write();
 
         // Only update if the account exists
-        if let Some(account) = pending_block.block_changes.accounts.get_mut(&address) {
+        if let Some(account) = pending_block.state.accounts.get_mut(&address) {
             account.balance.apply(balance);
         }
 
@@ -225,7 +249,7 @@ impl InmemoryTransactionTemporaryStorage {
         let mut pending_block = self.pending_block.write();
 
         // Only update if the account exists
-        if let Some(account) = pending_block.block_changes.accounts.get_mut(&address) {
+        if let Some(account) = pending_block.state.accounts.get_mut(&address) {
             account.bytecode.apply(if code.0.is_empty() {
                 None
             } else {

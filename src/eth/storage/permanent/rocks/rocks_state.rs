@@ -40,14 +40,13 @@ use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
 use super::types::UnixTimeRocksdb;
-use crate::eth::executor::Final;
 use crate::eth::executor::State;
+use crate::eth::executor::types::state::Final;
 use crate::eth::rpc::BlockFilter;
 use crate::eth::rpc::LogFilter;
 use crate::eth::storage::MinedPointInTime;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::cf_versions::CfBlockChangesValue;
-use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
@@ -61,10 +60,10 @@ use crate::eth::types::LogMessage;
 use crate::eth::types::Nonce;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
+use crate::eth::types::SlotValue;
 use crate::eth::types::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
-use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::log_and_err;
@@ -223,32 +222,17 @@ impl RocksStorageState {
         let block_number = block_number.into();
 
         for (address, change) in changes.accounts {
-            let address: AddressRocksdb = address.into();
-            if change.is_changed() {
-                let mut account_change_entry = AccountChangesRocksdb::default();
-                let mut account_info_entry = self.accounts.get(&address)?.unwrap_or(AccountRocksdb::default().into());
+            let address_rocks: AddressRocksdb = address.into();
+            let account_change_entry = (&change).into();
+            let account_info_entry: CfAccountsValue = match self.accounts.get(&address_rocks)? {
+                Some(existing_account) => existing_account.into_inner().update(change).into(),
+                None => change.to_account(address).into(),
+            };
 
-                if change.nonce.is_changed() {
-                    let nonce = (*change.nonce.value()).into();
-                    account_info_entry.nonce = nonce;
-                    account_change_entry.nonce = Some(nonce);
-                }
-                if change.balance.is_changed() {
-                    let balance = (*change.balance.value()).into();
-                    account_info_entry.balance = balance;
-                    account_change_entry.balance = Some(balance);
-                }
-                if change.bytecode.is_changed() {
-                    let bytecode = change.bytecode.value().clone().map_into();
-                    account_info_entry.bytecode = bytecode.clone();
-                    account_change_entry.bytecode = Some(bytecode);
-                }
-
-                self.accounts.prepare_batch_insertion([(address, account_info_entry.clone())], batch)?;
-                self.accounts_history
-                    .prepare_batch_insertion([((address, block_number), account_info_entry.into_inner().into())], batch)?;
-                block_changes.account_changes.insert(address, account_change_entry);
-            }
+            self.accounts.prepare_batch_insertion([(address_rocks, account_info_entry.clone())], batch)?;
+            self.accounts_history
+                .prepare_batch_insertion([((address_rocks, block_number), account_info_entry.into_inner().into())], batch)?;
+            block_changes.account_changes.insert(address_rocks, account_change_entry);
         }
 
         for ((address, slot_index), slot_value) in changes.slots {
@@ -364,6 +348,15 @@ impl RocksStorageState {
         }
     }
 
+    pub fn read_slots(&self, slot_keys: Vec<(Address, SlotIndex)>) -> Result<Vec<((Address, SlotIndex), SlotValue)>> {
+        Ok(self
+            .account_slots
+            .multi_get(slot_keys.into_iter().map(|(address, index)| (address.into(), index.into())))?
+            .into_iter()
+            .map(|((address, index), slot_value)| ((address.into(), index.into()), slot_value.into_inner().into()))
+            .collect_vec())
+    }
+
     pub fn read_account(&self, address: Address, point: &MinedPointInTime<'_>) -> Result<Option<Account>> {
         if address.is_coinbase() || address.is_zero() {
             return Ok(None);
@@ -398,9 +391,12 @@ impl RocksStorageState {
     }
 
     pub fn read_accounts(&self, addresses: Vec<Address>) -> Result<Vec<(Address, Account)>> {
-        self.accounts
-            .multi_get(addresses.into_iter().map_into())
-            .map(|vec| vec.into_iter().map(|(addr, acc)| (addr.into(), acc.to_account(addr.into()))).collect_vec())
+        Ok(self
+            .accounts
+            .multi_get(addresses.into_iter().map_into())?
+            .into_iter()
+            .map(|(addr, acc)| (addr.into(), acc.to_account(addr.into())))
+            .collect_vec())
     }
 
     pub fn read_block(&self, selection: BlockFilter) -> Result<Option<Block>> {
@@ -597,6 +593,7 @@ impl RocksStorageState {
     #[cfg(feature = "dev")]
     pub fn save_account_code(&self, address: Address, code: Bytes) -> Result<()> {
         use crate::alias::RevmBytecode;
+        use crate::ext::OptionExt;
 
         let mut batch = WriteBatch::default();
 
@@ -798,10 +795,10 @@ mod tests {
     use fake::Faker;
 
     use super::*;
-    use crate::eth::executor::Complete;
     use crate::eth::executor::TransactionExecution;
     use crate::eth::executor::TransactionExecutionInput;
-    use crate::eth::executor::TransactionExecutionOutput;
+    use crate::eth::executor::TransactionExecutionResult;
+    use crate::eth::executor::types::state::Complete;
     use crate::eth::types::BlockHeader;
 
     #[test]
@@ -866,9 +863,9 @@ mod tests {
                             block_number: number.into(),
                             ..Faker.fake()
                         },
-                        output: TransactionExecutionOutput {
+                        output: TransactionExecutionResult {
                             logs: vec![Faker.fake(), Faker.fake()],
-                            ..Faker.fake()
+                            ..Default::default()
                         },
                         ..Faker.fake()
                     },

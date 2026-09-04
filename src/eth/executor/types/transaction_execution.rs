@@ -10,7 +10,7 @@ use crate::alias::AlloyLogPrimitive;
 use crate::alias::AlloyReceipt;
 use crate::alias::AlloyTransaction;
 use crate::eth::executor::TransactionExecutionInput;
-use crate::eth::executor::TransactionExecutionOutput;
+use crate::eth::executor::TransactionExecutionResult;
 use crate::eth::types::Log;
 use crate::eth::types::LogsBloom;
 use crate::eth::types::MinedData;
@@ -26,7 +26,7 @@ pub struct TransactionExecution {
     pub info: TransactionInfo,
     pub signature: Signature,
     pub input: TransactionExecutionInput,
-    pub output: TransactionExecutionOutput,
+    pub output: TransactionExecutionResult,
 }
 
 impl TransactionExecution {
@@ -69,7 +69,7 @@ impl TransactionExecution {
     /// [`crate::eth::types::TransactionMined`] (with mined data).
     pub fn to_alloy_receipt(&self, alloy_logs: Vec<AlloyLog>, mined_data: Option<MinedData>) -> AlloyReceipt {
         let receipt = Receipt {
-            status: Eip658Value::Eip658(self.output.is_success()),
+            status: Eip658Value::Eip658(self.output.result.is_success()),
             cumulative_gas_used: self.output.gas_used.into(), // TODO: implement cumulative gas used correctly
             logs: alloy_logs,
         };

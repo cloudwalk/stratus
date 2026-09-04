@@ -6,12 +6,12 @@ use super::hash::HashRocksdb;
 use super::index::IndexRocksdb;
 use super::log_mined::LogMinedRocksdb;
 use super::transaction_input::TransactionInputRocksdb;
-use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::TransactionExecutionInput;
-use crate::eth::executor::TransactionExecutionOutput;
+use crate::eth::executor::TransactionExecutionResult;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::types::execution_result::ExecutionResultBuilder;
+use crate::eth::types::BlockInfo;
 use crate::eth::types::Index;
 use crate::eth::types::MinedData;
 use crate::eth::types::TransactionInput;
@@ -80,16 +80,21 @@ impl TransactionMined {
         let (result, output) = ExecutionResultBuilder((other.execution.result, other.execution.output)).build();
 
         let input = TransactionInput::from(other.input);
-        let evm_result = TransactionExecutionOutput {
+        let evm_result = TransactionExecutionResult {
             result,
             output,
             logs,
             gas_used: other.execution.gas.into(),
-            changes: State::default(),
             deployed_contract_address: other.execution.deployed_contract_address.map_into(),
         };
 
-        let evm_input = TransactionExecutionInput::from_eth_transaction(&input, block_number.into(), other.execution.block_timestamp.into());
+        let evm_input = TransactionExecutionInput::create(
+            &input,
+            BlockInfo {
+                number: block_number.into(),
+                timestamp: other.execution.block_timestamp.into(),
+            },
+        );
         let execution = TransactionExecution {
             info: input.transaction_info,
             signature: input.signature,

@@ -176,7 +176,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a15f179cd60c4584b8a8c596927aadc462e27f2ca70c04e0071964a73ba7a75"
 dependencies = [
  "cfg-if",
- "getrandom 0.3.3",
  "once_cell",
  "version_check",
  "zerocopy",
@@ -4610,13 +4609,13 @@ dependencies = [
 
 [[package]]
 name = "quick_cache"
-version = "0.6.22"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1c821816e9b928e20e92ed59bb3ac4aab321d16ca2316871c9fe7ca739cd477"
+checksum = "403c1a912fec895cafb223201e368234842acb9220aaf08ab042ae89ba5f135c"
 dependencies = [
- "ahash",
  "equivalent",
- "hashbrown 0.16.1",
+ "foldhash 0.2.0",
+ "hashbrown 0.17.0",
  "parking_lot",
 ]
 
@@ -6186,6 +6185,7 @@ dependencies = [
  "alloy-trie",
  "anyhow",
  "async-trait",
+ "base64",
  "bincode",
  "bytes",
  "cfg-if",
@@ -6194,12 +6194,12 @@ dependencies = [
  "const-hex",
  "const_format",
  "crossbeam-channel",
- "dashmap",
  "derive-new",
  "derive_more",
  "display_json",
  "dotenvy",
  "fake",
+ "foldhash 0.2.0",
  "futures",
  "futures-channel",
  "futures-timer",

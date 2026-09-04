@@ -12,6 +12,7 @@ default-run = "stratus"
 
 # general
 anyhow = "=1.0.100"
+base64 = "=0.22.1"
 cfg-if = "=1.0.4"
 chrono = { version = "=0.4.43", features = ["serde"] }
 const_format = "=0.2.35"
@@ -36,12 +37,12 @@ rustc-hash = "=2.1.1"
 smallvec = "=1.15.1"
 static_assertions = "=1.1.0"
 strum = { version = "=0.27.2", features = ["derive"] }
-quick_cache = "=0.6.22"
 sugars = "=3.0.1"
 thiserror = "=2.0.18"
 uuid = { version = "=1.23.3", features = ["v7"]}
 stratus_macros = { path = "./crates/stratus_macros" }
 libc = "=0.2.186"
+hostname = "=0.4.2"
 
 # async
 tokio = { version = "=1.50.0", features = [
@@ -119,7 +120,8 @@ tracing-serde = "=0.2.0"
 
 # storage
 rocksdb = { version = "=0.24.0", features = ["multi-threaded-cf", "jemalloc"] }
-dashmap = "=6.1.0"
+quick_cache = "=0.7.0"
+foldhash = "=0.2.0"
 
 # test
 fake = { version = "=4.4.0", features = ["chrono", "derive"] }
