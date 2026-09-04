@@ -98,7 +98,7 @@ fn record_import_metrics(block_tx_len: usize) {
 }
 
 #[cfg(not(feature = "metrics"))]
-fn record_import_metrics(_block_tx_len: usize, _duration: std::time::Duration) {}
+fn record_import_metrics(_block_tx_len: usize) {}
 
 /// Record metrics for fetched block
 #[cfg(feature = "metrics")]
