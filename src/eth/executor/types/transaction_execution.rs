@@ -10,7 +10,7 @@ use crate::alias::AlloyLogPrimitive;
 use crate::alias::AlloyReceipt;
 use crate::alias::AlloyTransaction;
 use crate::eth::executor::TransactionExecutionInput;
-use crate::eth::executor::TransactionExecutionOutput;
+use crate::eth::executor::TransactionExecutionResult;
 use crate::eth::types::Log;
 use crate::eth::types::LogsBloom;
 use crate::eth::types::MinedData;
@@ -25,8 +25,8 @@ use crate::ext::RuintExt;
 pub struct TransactionExecution {
     pub info: TransactionInfo,
     pub signature: Signature,
-    pub evm_input: TransactionExecutionInput,
-    pub result: TransactionExecutionOutput,
+    pub input: TransactionExecutionInput,
+    pub output: TransactionExecutionResult,
 }
 
 impl TransactionExecution {
@@ -39,8 +39,8 @@ impl TransactionExecution {
                     data: AlloyLogData::new_unchecked(log.topics_non_empty().into_iter().map(Into::into).collect(), log.data.clone().into()),
                 },
                 block_hash: None,
-                block_number: Some(self.evm_input.block_number.as_u64()),
-                block_timestamp: Some(*self.evm_input.block_timestamp),
+                block_number: Some(self.input.block_number.as_u64()),
+                block_timestamp: Some(*self.input.block_timestamp),
                 transaction_hash: Some(self.info.hash.into()),
                 transaction_index: None,
                 log_index: None,
@@ -52,14 +52,14 @@ impl TransactionExecution {
     /// Computes the bloom filter from execution logs.
     fn compute_bloom(&self) -> LogsBloom {
         let mut bloom = LogsBloom::default();
-        for log in self.result.logs.iter() {
+        for log in self.output.logs.iter() {
             bloom.accrue_log(log);
         }
         bloom
     }
 
     pub fn logs(&self) -> &Vec<Log> {
-        &self.result.logs
+        &self.output.logs
     }
 
     /// Builds an [`AlloyReceipt`] from this execution, optionally enriching it
@@ -69,8 +69,8 @@ impl TransactionExecution {
     /// [`crate::eth::types::TransactionMined`] (with mined data).
     pub fn to_alloy_receipt(&self, alloy_logs: Vec<AlloyLog>, mined_data: Option<MinedData>) -> AlloyReceipt {
         let receipt = Receipt {
-            status: Eip658Value::Eip658(self.result.is_success()),
-            cumulative_gas_used: self.result.gas_used.into(), // TODO: implement cumulative gas used correctly
+            status: Eip658Value::Eip658(self.output.result.is_success()),
+            cumulative_gas_used: self.output.gas_used.into(), // TODO: implement cumulative gas used correctly
             logs: alloy_logs,
         };
 
@@ -92,14 +92,14 @@ impl TransactionExecution {
             transaction_hash: self.info.hash.into(),
             transaction_index: mined_data.map(|data| data.index.into()),
             block_hash: mined_data.map(|data| data.block_hash.into()),
-            block_number: Some(self.evm_input.block_number.as_u64()),
-            gas_used: self.result.gas_used.into(),
-            effective_gas_price: self.evm_input.gas_price,
+            block_number: Some(self.input.block_number.as_u64()),
+            gas_used: self.output.gas_used.into(),
+            effective_gas_price: self.input.gas_price,
             blob_gas_used: None,
             blob_gas_price: None,
-            from: self.evm_input.from.into(),
-            to: self.evm_input.to.map_into(),
-            contract_address: self.result.deployed_contract_address.map_into(),
+            from: self.input.from.into(),
+            to: self.input.to.map_into(),
+            contract_address: self.output.deployed_contract_address.map_into(),
         }
     }
 }
@@ -115,7 +115,7 @@ impl From<TransactionExecution> for TransactionInput {
     fn from(value: TransactionExecution) -> Self {
         Self {
             transaction_info: value.info,
-            execution_info: value.evm_input.into(),
+            execution_info: value.input.into(),
             signature: value.signature,
         }
     }

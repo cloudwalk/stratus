@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use parking_lot::Mutex;
+use parking_lot::MutexGuard;
 use parking_lot::RwLock;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::broadcast;
@@ -13,8 +14,9 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::Span;
 
-use crate::eth::executor::Changes;
+use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
+use crate::eth::executor::types::state::Complete;
 use crate::eth::miner::MinerMode;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
@@ -85,6 +87,18 @@ pub struct MinerLocks {
 }
 
 impl Miner {
+    /// Acquires all locks that mutate the pending/mined state, so a storage reset can never interleave with a
+    /// transaction save, a block mine or a block commit. Otherwise, a concurrent mine can permanently desync the
+    /// pending and mined block numbers (e.g. mined number reset to zero while the pending block already advanced).
+    pub fn lock_state_for_reset(&self) -> (MutexGuard<'_, ()>, MutexGuard<'_, ()>, MutexGuard<'_, ()>, MutexGuard<'_, ()>) {
+        // acquire in the same order used by the mining paths to avoid deadlocks
+        let save_execution = self.locks.save_execution.lock();
+        let mine_and_commit = self.locks.mine_and_commit.lock();
+        let mine = self.locks.mine.lock();
+        let commit = self.locks.commit.lock();
+        (save_execution, mine_and_commit, mine, commit)
+    }
+
     pub fn new(storage: Arc<StratusStorage>, mode: MinerMode) -> Self {
         tracing::info!(?mode, "creating block miner");
         Self {
@@ -196,7 +210,7 @@ impl Miner {
     }
 
     /// Persists a transaction execution.
-    pub fn save_execution(&self, tx_execution: TransactionExecution) -> Result<(), StratusError> {
+    pub fn save_execution(&self, tx_execution: TransactionExecution, state: State<Complete>) -> Result<(), StratusError> {
         let tx_hash = tx_execution.info.hash;
 
         // track
@@ -210,7 +224,7 @@ impl Miner {
         let _save_execution_lock = if is_automine { Some(self.locks.save_execution.lock()) } else { None };
 
         // save execution to temporary storage
-        self.storage.save_execution(tx_execution)?;
+        self.storage.save_execution(tx_execution, state)?;
 
         // notify
         if self.has_pending_tx_subscribers() {
@@ -228,7 +242,7 @@ impl Miner {
     /// Mines external block and external transactions.
     ///
     /// Local transactions are not allowed to be part of the block.
-    pub fn mine_external(&self, external_block: ExternalBlock) -> anyhow::Result<(Block, Changes)> {
+    pub fn mine_external(&self, external_block: ExternalBlock) -> anyhow::Result<(Block, State<Complete>)> {
         // track
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_external", block_number = field::Empty).entered();
@@ -237,7 +251,7 @@ impl Miner {
         let _mine_lock = self.locks.mine.lock();
 
         // mine block
-        let (pending_block, changes) = self.storage.finish_pending_block()?;
+        let (pending_block, changes) = self.storage.finish_pending_block();
         let mut block: Block = pending_block.into();
 
         Span::with(|s| s.rec_str("block_number", &block.header.number));
@@ -262,14 +276,14 @@ impl Miner {
     pub fn mine_local_and_commit(&self) -> anyhow::Result<(), StorageError> {
         let _mine_and_commit_lock = self.locks.mine_and_commit.lock();
 
-        let (block, changes) = self.mine_local()?;
+        let (block, changes) = self.mine_local();
         self.commit(CommitItem::Block(block), changes)
     }
 
     /// Mines local transactions.
     ///
     /// External transactions are not allowed to be part of the block.
-    pub fn mine_local(&self) -> anyhow::Result<(Block, Changes), StorageError> {
+    pub fn mine_local(&self) -> (Block, State<Complete>) {
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_local", block_number = field::Empty).entered();
 
@@ -277,25 +291,25 @@ impl Miner {
         let _mine_lock = self.locks.mine.lock();
 
         // mine block
-        let (block, changes) = self.storage.finish_pending_block()?;
+        let (block, changes) = self.storage.finish_pending_block();
         Span::with(|s| s.rec_str("block_number", &block.header.number));
 
-        Ok((block.into(), changes))
+        (block.into(), changes)
     }
 
-    pub fn commit(&self, item: CommitItem, changes: Changes) -> anyhow::Result<(), StorageError> {
+    pub fn commit(&self, item: CommitItem, changes: State<Complete>) -> anyhow::Result<(), StorageError> {
         match item {
             CommitItem::Block(block) => self.commit_block(block, changes),
             CommitItem::ReplicationBlock(block) => {
                 self.storage.set_pending_header(block.number(), block.timestamp());
-                self.storage.finish_pending_block()?;
+                self.storage.finish_pending_block();
                 self.commit_block(block, changes)
             }
         }
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
-    pub fn commit_block(&self, block: Block, changes: Changes) -> anyhow::Result<(), StorageError> {
+    pub fn commit_block(&self, block: Block, changes: State<Complete>) -> anyhow::Result<(), StorageError> {
         let block_number = block.number();
 
         // track
@@ -382,7 +396,8 @@ pub mod interval_miner {
     use tokio::time::Instant;
     use tokio_util::sync::CancellationToken;
 
-    use crate::eth::executor::Changes;
+    use crate::eth::executor::State;
+    use crate::eth::executor::types::state::Complete;
     use crate::eth::miner::Miner;
     use crate::eth::miner::miner::CommitItem;
     use crate::eth::types::Block;
@@ -414,25 +429,14 @@ pub mod interval_miner {
 
             // mine
             tracing::info!(lag_us = %tick.elapsed().as_micros(), "interval mining block");
-            let (block, changes, miner_guard) = mine_local_retry(&miner);
+            let miner_guard = miner.locks.mine_and_commit.lock();
+            let (block, changes) = miner.mine_local();
             commit_retry(&miner, block, changes, miner_guard);
         }
         warn_task_rx_closed(TASK_NAME);
     }
 
-    pub fn mine_local_retry(miner: &Miner) -> (Block, Changes, MutexGuard<'_, ()>) {
-        let guard = miner.locks.mine_and_commit.lock();
-        loop {
-            match miner.mine_local() {
-                Ok((block, changes)) => break (block, changes, guard),
-                Err(e) => {
-                    tracing::error!(reason = ?e, "failed to mine block");
-                }
-            }
-        }
-    }
-
-    pub fn commit_retry(miner: &Miner, block: Block, changes: Changes, _miner_guard: MutexGuard<()>) {
+    pub fn commit_retry(miner: &Miner, block: Block, changes: State<Complete>, _miner_guard: MutexGuard<()>) {
         loop {
             match miner.commit(CommitItem::Block(block.clone()), changes.clone()) {
                 Ok(_) => break,
