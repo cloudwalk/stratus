@@ -38,7 +38,10 @@ fn expand_impl(input: DeriveInput) -> syn::Result<TokenStream2> {
         return Err(syn::Error::new_spanned(&input.ident, "CliOverrides can only be derived for structs"));
     };
     let syn::Fields::Named(fields) = &data.fields else {
-        return Err(syn::Error::new_spanned(&input.ident, "CliOverrides can only be derived for structs with named fields"));
+        return Err(syn::Error::new_spanned(
+            &input.ident,
+            "CliOverrides can only be derived for structs with named fields",
+        ));
     };
 
     let mut statements = Vec::new();
@@ -131,7 +134,9 @@ fn option_inner(ty: &syn::Type) -> Option<&syn::Type> {
     if segment.ident != "Option" {
         return None;
     }
-    let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments else { return None };
+    let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments else {
+        return None;
+    };
     if arguments.args.len() != 1 {
         return None;
     }
