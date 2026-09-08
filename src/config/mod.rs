@@ -251,8 +251,11 @@ impl StratusConfig {
             }
         }
 
-        // kafka: all-or-none
+        // kafka: all-or-none, and only with an importer (follower or fake-leader)
         if let Some(kafka) = &self.kafka_config {
+            if self.leader {
+                anyhow::bail!("`[kafka]` configuration requires follower or fake-leader mode");
+            }
             let missing = [
                 ("bootstrap_servers", kafka.bootstrap_servers.is_empty()),
                 ("topic", kafka.topic.is_empty()),
@@ -603,6 +606,42 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_rejects_kafka_with_leader() {
+        let config = StratusConfig {
+            leader: true,
+            executor: ExecutorConfig {
+                executor_chain_id: 2008,
+                ..Default::default()
+            },
+            kafka_config: Some(KafkaConfig::default()),
+            ..Default::default()
+        };
+        let error = config.validate().unwrap_err();
+        assert!(error.to_string().contains("kafka"), "unexpected error: {error}");
+
+        // follower + kafka remains valid
+        let config = StratusConfig {
+            follower: true,
+            executor: ExecutorConfig {
+                executor_chain_id: 2008,
+                ..Default::default()
+            },
+            importer: Some(ImporterConfig {
+                external_rpc: "http://localhost:3000/".to_string(),
+                ..Default::default()
+            }),
+            kafka_config: Some(KafkaConfig {
+                bootstrap_servers: "localhost:29092".to_string(),
+                topic: "stratus-events".to_string(),
+                client_id: "stratus-producer".to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        config.validate().unwrap();
+    }
+
+    #[test]
     fn test_validate_requires_importer_for_follower() {
         let config = StratusConfig {
             follower: true,
@@ -631,11 +670,15 @@ mod tests {
     #[test]
     fn test_validate_rejects_incomplete_kafka() {
         let config = StratusConfig {
-            leader: true,
+            follower: true,
             executor: ExecutorConfig {
                 executor_chain_id: 2008,
                 ..Default::default()
             },
+            importer: Some(ImporterConfig {
+                external_rpc: "http://localhost:3000/".to_string(),
+                ..Default::default()
+            }),
             kafka_config: Some(KafkaConfig::default()),
             ..Default::default()
         };
@@ -649,11 +692,15 @@ mod tests {
             ..Default::default()
         };
         let config = StratusConfig {
-            leader: true,
+            follower: true,
             executor: ExecutorConfig {
                 executor_chain_id: 2008,
                 ..Default::default()
             },
+            importer: Some(ImporterConfig {
+                external_rpc: "http://localhost:3000/".to_string(),
+                ..Default::default()
+            }),
             kafka_config: Some(kafka),
             ..Default::default()
         };
