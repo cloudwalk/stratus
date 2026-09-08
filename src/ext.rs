@@ -188,6 +188,48 @@ pub fn parse_duration(s: &str) -> anyhow::Result<Duration> {
     Err(anyhow!("invalid duration format: {s}"))
 }
 
+/// Serde support for durations in the same human-time notation used by CLI arguments.
+///
+/// Serializes durations as strings (e.g. `"4m"`) and deserializes from the same
+/// formats accepted by [`parse_duration`], so config files can use `shutdown_timeout = "4m"`.
+pub mod duration_serde {
+    use std::time::Duration;
+
+    use serde::Deserialize;
+    use serde::Deserializer;
+    use serde::Serializer;
+
+    pub fn serialize<S: Serializer>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&humantime::format_duration(*duration).to_string())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Duration, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        super::parse_duration(&value).map_err(serde::de::Error::custom)
+    }
+}
+
+/// Serde support for optional durations in the same human-time notation used by CLI arguments.
+pub mod option_duration_serde {
+    use std::time::Duration;
+
+    use serde::Deserialize;
+    use serde::Deserializer;
+    use serde::Serializer;
+
+    pub fn serialize<S: Serializer>(duration: &Option<Duration>, serializer: S) -> Result<S::Ok, S::Error> {
+        match duration {
+            Some(duration) => serializer.serialize_str(&humantime::format_duration(*duration).to_string()),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Duration>, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        super::parse_duration(&value).map(Some).map_err(serde::de::Error::custom)
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Tokio
 // -----------------------------------------------------------------------------

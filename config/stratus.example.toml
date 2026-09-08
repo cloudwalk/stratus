@@ -1,0 +1,147 @@
+# Example Stratus configuration file with all available options.
+#
+# Configuration is loaded from a TOML file and can be overridden by explicitly provided CLI arguments.
+#
+#   1. The config file is resolved: `--config <path>` when provided, otherwise `config/{binary}.{env}.toml`.
+#   2. Any field absent from the file falls back to its default value (the ones shown here).
+#   3. CLI arguments explicitly provided in the command line override the corresponding file values.
+#
+# The node mode is required: set exactly one of `leader`, `follower` or `fake_leader`,
+# either in this file or via the `--leader`/`--follower`/`--fake-leader` CLI flags.
+
+# leader = true
+# follower = true
+# fake_leader = true
+
+[common]
+# Environment where the application is running: local, staging, production or canary.
+# env = "local"
+# Number of threads to execute global async tasks.
+# async_threads = 32
+# Number of threads to execute global blocking tasks.
+# blocking_threads = 512
+# Enables or disables unknown client interactions.
+# unknown_client_enabled = true
+# List of client names that are blocked from interacting with the application.
+# blocked_clients = []
+
+[common.tracing]
+# OpenTelemetry server URL. When empty, the OpenTelemetry exporter is disabled.
+# url = ""
+# OpenTelemetry server communication protocol: grpc, http-binary or http-json.
+# protocol = "grpc"
+# OpenTelemetry additional HTTP headers or GRPC metadata.
+# headers = []
+# How tracing events will be formatted in stdout: minimal, normal, verbose or json.
+# log_format = "normal"
+# Directives filter for tracing events, in the same syntax as the `RUST_LOG` environment variable.
+# When absent, the `RUST_LOG` environment variable is used instead.
+# filter = "info"
+
+# [common.sentry]
+# Sentry server URL. When the section is absent, the Sentry exporter is disabled.
+# url = "https://sentry.io/123"
+
+[common.metrics]
+# Prometheus metrics exporter binding address.
+# exporter_address = "0.0.0.0:9000"
+
+[rpc]
+# JSON-RPC server binding address.
+# address = "0.0.0.0:3000"
+# JSON-RPC server max active connections.
+# max_connections = 400
+# JSON-RPC server max response size limit in bytes (must be at least 704 bytes).
+# max_response_size_bytes = 10485760
+# JSON-RPC server max active subscriptions per client.
+# max_subscriptions = 30
+# Health check interval in milliseconds.
+# health_check_interval_ms = 100
+# JSON-RPC server max batch request limit.
+# batch_request_limit = 500
+# Debug trace endpoints that return only unsuccessful transactions for the given client apps.
+# debug_trace_unsuccessful_only = ["blockscout"]
+
+[executor]
+# Chain ID of the network. Required.
+chain_id = 2008
+# Number of EVMs to execute calls against the present state.
+# call_present_evms = 50
+# Number of EVMs to execute calls against past states.
+# call_past_evms = 50
+# Number of EVMs to execute inspector calls.
+# inspector_evms = 50
+# Should reject contract transactions and calls to accounts that are not contracts?
+# reject_not_contract = true
+# EVM hardfork spec, e.g. Prague, Cancun, Shanghai.
+# evm_spec = "Prague"
+
+[miner]
+# Target block time: `automine`, `external`, or a duration like `1s`.
+# block_mode = "automine"
+
+[storage.cache]
+# Capacity of the account history cache.
+# account_history_cache_capacity = 20000
+# Capacity of the slot history cache.
+# slot_history_cache_capacity = 100000
+
+[storage.permanent]
+# RocksDB storage path prefix to execute multiple local Stratus instances.
+# path_prefix = ""
+# Maximum time to wait for the RocksDB `wait_for_compaction` shutdown call.
+# shutdown_timeout = "4m"
+# Disables sync write for RocksDB (improves performance but reduces durability).
+# disable_sync_write = false
+# Interval for collecting RocksDB column family size metrics. When absent, no metrics are collected.
+# cf_size_metrics_interval = "30s"
+# Minimum number of file descriptors required for RocksDB initialization.
+# file_descriptors_limit = 1048576
+
+[storage.permanent.cf_cache]
+# Cache size in bytes for each RocksDB column family.
+# accounts = 10737418240
+# accounts_history = 5368709120
+# account_slots = 42949672960
+# account_slots_history = 21474836480
+# transactions = 21474836480
+# blocks_by_number = 21474836480
+# blocks_by_hash = 2147483648
+# blocks_by_timestamp = 2147483648
+# block_changes = 2147483648
+
+# [storage.permanent.genesis]
+# Path to the genesis.json file (available with the `dev` feature).
+# path = "config/genesis.local.json"
+
+# [importer]
+# External RPC HTTP endpoint to sync blocks with Stratus.
+# Required for follower and fake-leader modes.
+# external_rpc = "http://localhost:3000/"
+# External RPC WS endpoint to sync blocks with Stratus.
+# external_rpc_ws = "ws://localhost:3000/"
+# Timeout for blockchain requests.
+# external_rpc_timeout = "2s"
+# Interval between block import attempts.
+# sync_interval = "100ms"
+# Enable replication of block changes.
+# enable_block_changes_replication = false
+# Compute an access list for transactions before forwarding them to the leader.
+# forward_access_list = true
+# Block number to stop importing at, e.g. `0x2a`. When absent, imports indefinitely.
+# stop_at_block = "0x2a"
+
+# [kafka]
+# Kafka configuration is all-or-none: when the section is present,
+# `bootstrap_servers`, `topic` and `client_id` are all required.
+# bootstrap_servers = "localhost:29092"
+# topic = "stratus-events"
+# client_id = "stratus-producer"
+# group_id = "stratus-group"
+# security_protocol = "none"
+# sasl_mechanisms = "plain"
+# sasl_username = "user"
+# sasl_password = "pass"
+# ssl_ca_location = "/ca.pem"
+# ssl_certificate_location = "/cert.pem"
+# ssl_key_location = "/key.pem"

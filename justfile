@@ -124,7 +124,7 @@ stratus-memory-profiling *args="":
 
 # Bin: Stratus main service as follower
 stratus-follower *args="":
-    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --follower {{args}}
+    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --config config/stratus-follower.toml --follower {{args}}
 
 # Bin: Stratus main service as follower
 stratus-follower-test *args="":
@@ -136,7 +136,7 @@ stratus-follower-test *args="":
     fi
     echo "follower features: " $FEATURES
     cargo build {{profile_flag}} --features $FEATURES
-    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
+    cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --config config/stratus-follower.toml --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
     just _wait_for_stratus 3001
 
 # Bin: Stratus main service as fake leader (imports blocks like a follower, executes/mines locally like a leader)
@@ -146,7 +146,7 @@ stratus-fake-leader-test *args="":
     FEATURES="dev"
     echo "fake-leader features: " $FEATURES
     cargo build {{profile_flag}} --features $FEATURES
-    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --fake-leader --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_fake_leader.log &
+    cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --config config/stratus-follower.toml --fake-leader --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_fake_leader.log &
     just _wait_for_stratus 3001
 
 # ------------------------------------------------------------------------------

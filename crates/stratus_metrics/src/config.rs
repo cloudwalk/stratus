@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 
 use clap::Parser;
 use display_json::DebugAsJson;
+use stratus_macros::CliOverrides;
 
 use crate::metrics_for_consensus;
 use crate::metrics_for_executor;
@@ -13,11 +14,21 @@ use crate::metrics_for_storage_read;
 use crate::metrics_for_storage_write;
 use crate::set_node_mode_provider;
 
-#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+#[derive(DebugAsJson, Clone, Parser, serde::Deserialize, serde::Serialize, CliOverrides)]
+#[serde(default, deny_unknown_fields)]
 pub struct MetricsConfig {
     /// Metrics exporter binding address.
-    #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
+    #[arg(long = "metrics-exporter-address", default_value = "0.0.0.0:9000")]
+    #[serde(rename = "exporter_address")]
     pub metrics_exporter_address: SocketAddr,
+}
+
+impl Default for MetricsConfig {
+    fn default() -> Self {
+        Self {
+            metrics_exporter_address: SocketAddr::from(([0, 0, 0, 0], 9000)),
+        }
+    }
 }
 
 impl MetricsConfig {
