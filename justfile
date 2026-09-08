@@ -318,10 +318,11 @@ e2e-leader *extra-args="":
 
 e2e-follower test="brlc" use_block_changes_replication="false":
     #!/bin/bash
+    # the binary reads the replication mode from the CLI flag;
+    # `_e2e-leader-follower-up-impl` still exports ENABLE_BLOCK_CHANGES_REPLICATION for the mocha tests
+    replication_flag=""
     if [ "{{use_block_changes_replication}}" = "true" ]; then
-        export ENABLE_BLOCK_CHANGES_REPLICATION=true
-    else
-        export ENABLE_BLOCK_CHANGES_REPLICATION=false
+        replication_flag="--enable-block-changes-replication"
     fi
 
     if [ "{{test}}" = "kafka" ]; then
@@ -331,9 +332,9 @@ e2e-follower test="brlc" use_block_changes_replication="false":
         just _log "Waiting Kafka start"
         wait-service --tcp 0.0.0.0:29092 -- echo
         docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ $replication_flag --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
     else
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ $replication_flag
     fi
 
 
