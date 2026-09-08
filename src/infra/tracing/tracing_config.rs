@@ -102,6 +102,17 @@ impl TracingConfig {
         }
     }
 
+    /// Checks that the configured filter is a valid directives string.
+    ///
+    /// [`EnvFilter::new`] silently drops invalid directives, which would hide typos in the config file; this makes them
+    /// fail loudly during configuration validation instead.
+    pub fn validate_filter(&self) -> anyhow::Result<()> {
+        if let Some(filter) = &self.tracing_filter {
+            EnvFilter::try_new(filter).map_err(|error| anyhow!("invalid filter {filter:?}: {error}"))?;
+        }
+        Ok(())
+    }
+
     pub fn create_subscriber(&self, sentry_config: &Option<SentryConfig>) -> impl SubscriberInitExt {
         println!("creating tracing registry");
 

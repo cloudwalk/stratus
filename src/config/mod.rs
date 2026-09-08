@@ -5,8 +5,6 @@
 
 pub mod loader;
 
-pub use loader::ConfigLoad;
-
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -16,6 +14,7 @@ use anyhow::anyhow;
 use clap::ArgGroup;
 use clap::Parser;
 use display_json::DebugAsJson;
+pub use loader::ConfigLoad;
 use stratus_macros::CliOverrides;
 use strum::VariantNames;
 use tokio::runtime::Builder;
@@ -273,6 +272,11 @@ impl StratusConfig {
         // sentry url non-empty when section present
         if self.common.sentry.as_ref().is_some_and(|sentry| sentry.sentry_url.is_empty()) {
             anyhow::bail!("`[sentry]` configuration requires a non-empty `url`");
+        }
+
+        // tracing filter: reject invalid directives strings, otherwise they are silently dropped by `EnvFilter`
+        if let Err(error) = self.common.tracing.validate_filter() {
+            anyhow::bail!("`[common.tracing] filter` is invalid: {error}");
         }
 
         Ok(())
@@ -542,6 +546,24 @@ mod tests {
         };
         let error = config.validate().unwrap_err();
         assert!(error.to_string().contains("multiple node modes"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn test_validate_rejects_invalid_tracing_filter() {
+        let mut config = StratusConfig {
+            leader: true,
+            executor: ExecutorConfig {
+                executor_chain_id: 2008,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        config.common.tracing.tracing_filter = Some("stratus=bogus-level".to_string());
+        let error = config.validate().unwrap_err();
+        assert!(error.to_string().contains("filter"), "unexpected error: {error}");
+
+        config.common.tracing.tracing_filter = Some("info,stratus::eth=debug,jsonrpsee-server=off".to_string());
+        config.validate().unwrap();
     }
 
     #[test]
