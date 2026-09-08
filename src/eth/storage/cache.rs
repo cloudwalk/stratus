@@ -8,6 +8,7 @@ use quick_cache::UnitWeighter;
 use quick_cache::sync::Cache;
 use quick_cache::sync::GuardResult;
 use quick_cache::sync::LockContention;
+use stratus_macros::CliOverrides;
 
 use crate::eth::executor::State;
 use crate::eth::executor::types::state::Change;
@@ -23,15 +24,25 @@ pub struct StorageCache {
     slot_latest_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter>,
 }
 
-#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+#[derive(DebugAsJson, Clone, Parser, serde::Deserialize, serde::Serialize, CliOverrides)]
+#[serde(default, deny_unknown_fields)]
 pub struct CacheConfig {
     /// Capacity of account history cache
-    #[arg(long = "account-history-cache-capacity", env = "ACCOUNT_HISTORY_CACHE_CAPACITY", default_value = "20000")]
+    #[arg(long = "account-history-cache-capacity", default_value = "20000")]
     pub account_history_cache_capacity: usize,
 
     /// Capacity of slot history cache
-    #[arg(long = "slot-history-cache-capacity", env = "SLOT_HISTORY_CACHE_CAPACITY", default_value = "100000")]
+    #[arg(long = "slot-history-cache-capacity", default_value = "100000")]
     pub slot_history_cache_capacity: usize,
+}
+
+impl Default for CacheConfig {
+    fn default() -> Self {
+        Self {
+            account_history_cache_capacity: 20000,
+            slot_history_cache_capacity: 100000,
+        }
+    }
 }
 
 impl CacheConfig {
