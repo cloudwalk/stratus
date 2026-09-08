@@ -55,11 +55,18 @@ pub struct PermanentStorageConfig {
     #[serde(rename = "file_descriptors_limit")]
     pub rocks_file_descriptors_limit: u64,
 
-    /// Genesis file configuration
+    /// Genesis file configuration (available with the `dev` feature).
     #[clap(flatten)]
     #[cfg(feature = "dev")]
     #[serde(rename = "genesis")]
     pub genesis_file: GenesisFileConfig,
+
+    /// Genesis file configuration is only available with the `dev` feature; the section is parsed
+    /// and ignored on other builds so config files stay portable across binaries.
+    #[arg(skip)]
+    #[cfg(not(feature = "dev"))]
+    #[serde(rename = "genesis", deserialize_with = "deserialize_ignored", skip_serializing)]
+    pub genesis_file: (),
 }
 
 impl Default for PermanentStorageConfig {
@@ -73,8 +80,16 @@ impl Default for PermanentStorageConfig {
             rocks_file_descriptors_limit: Self::default_file_descriptors_limit(),
             #[cfg(feature = "dev")]
             genesis_file: GenesisFileConfig::default(),
+            #[cfg(not(feature = "dev"))]
+            genesis_file: (),
         }
     }
+}
+
+/// Deserializes any value into `()`, ignoring it.
+#[cfg(not(feature = "dev"))]
+fn deserialize_ignored<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<(), D::Error> {
+    <serde::de::IgnoredAny as serde::Deserialize>::deserialize(deserializer).map(|_| ())
 }
 
 impl PermanentStorageConfig {
