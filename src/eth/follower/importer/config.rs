@@ -52,7 +52,14 @@ pub struct ImporterConfig {
     pub enable_block_changes_replication: bool,
 
     /// Compute an access list for transactions before forwarding them to the leader.
-    #[arg(long = "forward-access-list", default_value = "true", required = false)]
+    #[arg(
+        long = "forward-access-list",
+        default_value = "true",
+        default_missing_value = "true",
+        action = clap::ArgAction::Set,
+        num_args = 0..=1,
+        required = false
+    )]
     pub forward_access_list: bool,
 
     /// Specify the block to stop importing. (useful for validating a follower db against a fake leader)
