@@ -17,7 +17,7 @@ repos:
     hooks:
       - id: just-lint
         name: just lint-check
-        entry: just lint-check
+        entry: just lint-check -2026-05-08
         language: system
         types: [rust]
         pass_filenames: false

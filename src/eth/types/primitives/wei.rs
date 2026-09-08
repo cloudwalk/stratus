@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use alloy_primitives::U256;
 use anyhow::Context;
 use display_json::DebugAsJson;
@@ -7,7 +5,6 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 #[cfg(test)]
 use fake::Faker;
-use sqlx::types::BigDecimal;
 
 /// Native token amount in wei.
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialOrd, Ord, PartialEq, Eq, derive_more::Sub, serde::Serialize, serde::Deserialize)]
@@ -117,15 +114,6 @@ impl From<[u64; 4]> for Wei {
     }
 }
 
-impl TryFrom<BigDecimal> for Wei {
-    type Error = anyhow::Error;
-
-    fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
-        let value_str = value.to_string();
-        Ok(Wei(U256::from_str_radix(&value_str, 10)?))
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
@@ -144,26 +132,9 @@ impl From<Wei> for U256 {
     }
 }
 
-impl TryFrom<Wei> for BigDecimal {
-    type Error = anyhow::Error;
-    fn try_from(value: Wei) -> Result<Self, Self::Error> {
-        // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
-        Ok(BigDecimal::from_str(&value.0.to_string())?)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // #[test]
-    // fn big_decimal_to_nonce_conversion() {
-    //     // Test with a simple value
-    //     let big_decimal = BigDecimal::new(1.into(), -4);
-    //     let nonce: Wei = big_decimal.clone().try_into().unwrap();
-    //     let expected = nonce.0.as_u64();
-    //     assert_eq!(10000, expected);
-    // }
 
     #[test]
     fn test_from_hex_str() {

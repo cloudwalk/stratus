@@ -9,6 +9,7 @@ data/
 # E2E (Stratus)
 e2e/artifacts
 e2e/typechain-types
+e2e/pagination-catchup.json
 e2e/node_modules
 e2e/rpc-mock-server/node_modules
 e2e/cache

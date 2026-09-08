@@ -6,7 +6,7 @@ export RUST_BACKTRACE := env("RUST_BACKTRACE", "0")
 export CARGO_COMMAND := env("CARGO_COMMAND", "")
 
 # Global arguments that can be passed to receipts.
-nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly" } else { "" }
+nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly-2026-05-08" } else { "" }
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 profile_flag := if env("STRATUS_PROFILE", "") != "" { "--profile " + env("STRATUS_PROFILE", "") } else { "" }
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
@@ -62,7 +62,7 @@ doc nightly-version="":
 
 # Stratus: Lint and format code
 lint:
-    @just _lint
+    @just _lint -2026-05-08
 
 # Stratus: Lint and check code formatting
 lint-check nightly-version="" clippy-flags="-D warnings -A clippy::unwrap_used -A clippy::expect_used -A clippy::panic":
@@ -148,26 +148,6 @@ stratus-fake-leader-test *args="":
     cargo build {{profile_flag}} --features $FEATURES
     LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --fake-leader --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_fake_leader.log &
     just _wait_for_stratus 3001
-
-# Bin: Download external RPC blocks and receipts to temporary storage
-rpc-downloader *args="":
-    cargo {{nightly_flag}} run --bin rpc-downloader {{release_flag}} -- {{args}}
-
-rpc-downloader-test *args="":
-    #!/bin/bash
-    source <(just coverage-env)
-    cargo build {{profile_flag}}
-    cargo run {{profile_flag}} --bin rpc-downloader -- {{args}} > rpc-downloader.log
-
-# Bin: Import external RPC blocks from temporary storage to Stratus storage
-importer-offline *args="":
-    cargo {{nightly_flag}} run --bin importer-offline {{release_flag}} --features dev -- {{args}}
-
-importer-offline-test *args="":
-    #!/bin/bash
-    source <(just coverage-env)
-    cargo build {{profile_flag}}
-    cargo run {{profile_flag}} --bin importer-offline -- {{args}} --rocks-file-descriptors-limit=65536 > importer-offline.log
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -424,6 +404,76 @@ e2e-leader-follower-up test="brlc" use_block_changes_replication="false":
     just _e2e-leader-follower-up-impl {{test}} {{use_block_changes_replication}}
     just e2e-leader-follower-down
 
+# E2E: Leader & Follower with small response size limits, to exercise importer response pagination
+e2e-leader-follower-pagination:
+    #!/bin/bash
+
+    # leader with a small response limit, forcing oversized importer responses to be paginated
+    MAX_RESPONSE_SIZE_BYTES=8192 just e2e-leader
+
+    just e2e-follower
+
+    cd e2e
+    if [ ! -d node_modules ]; then npm install; fi
+    npx hardhat test test/follower/e2e-pagination.test.ts --network stratus --bail
+    exit_code=$?
+    cd ..
+
+    just e2e-leader-follower-down
+    exit $exit_code
+
+# E2E: Leader & Follower pagination in block changes replication mode (stratus_getBlockWithChanges)
+e2e-leader-follower-pagination-changes:
+    #!/bin/bash
+
+    # leader with a small response limit, forcing oversized with-changes responses to be paginated
+    MAX_RESPONSE_SIZE_BYTES=8192 just e2e-leader
+
+    # follower in block changes replication mode
+    just e2e-follower test/follower/e2e-pagination-changes.test.ts true
+
+    cd e2e
+    if [ ! -d node_modules ]; then npm install; fi
+    npx hardhat test test/follower/e2e-pagination-changes.test.ts --network stratus --bail
+    exit_code=$?
+    cd ..
+
+    just e2e-leader-follower-down
+    exit $exit_code
+
+# E2E: Leader & Follower pagination catch-up: the follower starts several fat blocks behind
+e2e-leader-follower-pagination-catchup:
+    #!/bin/bash
+
+    rm -f e2e/pagination-catchup.json
+
+    # leader with a small response limit; the follower is still down
+    MAX_RESPONSE_SIZE_BYTES=8192 just e2e-leader
+
+    # mine several fat blocks while the follower is down, persisting them for verification
+    cd e2e
+    if [ ! -d node_modules ]; then npm install; fi
+    npx hardhat test test/follower/e2e-pagination-catchup-setup.test.ts --network stratus --bail
+    exit_code=$?
+    cd ..
+    if [ "$exit_code" -ne 0 ]; then
+        just e2e-leader-follower-down
+        rm -f e2e/pagination-catchup.json
+        exit $exit_code
+    fi
+
+    # follower starts several fat blocks behind
+    just e2e-follower
+
+    cd e2e
+    npx hardhat test test/follower/e2e-pagination-catchup-verify.test.ts --network stratus --bail
+    exit_code=$?
+    cd ..
+
+    just e2e-leader-follower-down
+    rm -f e2e/pagination-catchup.json
+    exit $exit_code
+
 # E2E: Leader & Follower Down
 e2e-leader-follower-down:
     #!/bin/bash
@@ -478,74 +528,6 @@ _e2e-leader-fake-leader-up-impl test="fake-leader":
 e2e-leader-fake-leader-up test="fake-leader":
     just _e2e-leader-fake-leader-up-impl {{test}}
     just e2e-leader-follower-down
-
-# E2E: RPC Downloader test
-e2e-rpc-downloader:
-    #!/bin/bash
-    mkdir e2e_logs
-
-    just _log "Starting Stratus"
-    just stratus-test -a 0.0.0.0:3000
-
-    just _log "Starting PostgreSQL"
-    docker-compose up -d postgres
-
-    just _log "Running TestContractBalances tests"
-    just e2e stratus automine
-
-    just _log "Running RPC Downloader test"
-    just rpc-downloader-test --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
-    result_code_1=$?
-
-    just _log "Checking content of postgres"
-    pip install -r utils/check_rpc_downloader/requirements.txt
-    POSTGRES_DB=stratus POSTGRES_PASSWORD=123 ETH_RPC_URL=http://localhost:3000/ python utils/check_rpc_downloader/main.py --start 0
-    result_code_2=$?
-
-    just _log "Killing PostgreSQL"
-    docker-compose down postgres
-
-    just _log "Check result codes"
-    if [ $result_code_1 -ne 0 ] || [ $result_code_2 -ne 0 ]; then
-        exit 1
-    fi
-
-# E2E Importer Offline
-e2e-importer-offline:
-    #!/bin/bash
-    mkdir -p e2e_logs
-
-    rm -rf data/importer-offline-database-rocksdb
-
-    just _log "Starting Stratus"
-    just stratus-test -a 0.0.0.0:3000
-
-    just _log "Running TestContractBalances tests"
-    just e2e stratus automine
-
-    just _log "Starting PostgreSQL"
-    docker-compose up -d postgres
-
-    just _log "Running rpc downloader"
-    just rpc-downloader-test --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001 --initial-accounts 0x70997970c51812dc3a010c7d01b50e0d17dc79c8,0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
-
-    just _log "Run importer-offline"
-    just importer-offline-test --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
-
-    just _log "Stratus for importer-offline"
-    just stratus-test -a 0.0.0.0:3001 --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
-    just _wait_for_stratus 3001
-
-    just _log "Compare blocks of stratus and importer-offline"
-    cd utils/compare_block/
-    poetry install --no-root
-    poetry run python3 ./main.py http://localhost:3000 http://localhost:3001 1 --ignore timestamp
-    result_code=$?
-
-    just _log "Killing PostgreSQL"
-    docker-compose down postgres
-
-    exit $result_code
 
 # ------------------------------------------------------------------------------
 # Hive tests
