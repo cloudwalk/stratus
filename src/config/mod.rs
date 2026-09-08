@@ -72,7 +72,13 @@ pub struct CommonConfig {
     pub nocapture: bool,
 
     /// Enables or disables unknown client interactions.
-    #[arg(long = "unknown-client-enabled", default_value = "true")]
+    #[arg(
+        long = "unknown-client-enabled",
+        default_value = "true",
+        default_missing_value = "true",
+        action = clap::ArgAction::Set,
+        num_args = 0..=1
+    )]
     pub unknown_client_enabled: bool,
 
     /// Comma-separated list of client names that are blocked from interacting with the application.
@@ -564,6 +570,36 @@ mod tests {
 
         config.common.tracing.tracing_filter = Some("info,stratus::eth=debug,jsonrpsee-server=off".to_string());
         config.validate().unwrap();
+    }
+
+    #[test]
+    fn test_default_true_flags_accept_explicit_false() {
+        // these bools default to `true`; the bare flag and the `=false`/`=true` forms must all work
+        let config = StratusConfig::try_parse_from([
+            "stratus",
+            "--executor-reject-not-contract=false",
+            "--unknown-client-enabled=false",
+            "--forward-access-list=false",
+            "-r",
+            "http://localhost:3000/",
+        ])
+        .unwrap();
+        assert!(!config.executor.executor_reject_not_contract);
+        assert!(!config.common.unknown_client_enabled);
+        assert!(!config.importer.as_ref().unwrap().forward_access_list);
+
+        let config = StratusConfig::try_parse_from([
+            "stratus",
+            "--executor-reject-not-contract",
+            "--unknown-client-enabled",
+            "--forward-access-list",
+            "-r",
+            "http://localhost:3000/",
+        ])
+        .unwrap();
+        assert!(config.executor.executor_reject_not_contract);
+        assert!(config.common.unknown_client_enabled);
+        assert!(config.importer.as_ref().unwrap().forward_access_list);
     }
 
     #[test]

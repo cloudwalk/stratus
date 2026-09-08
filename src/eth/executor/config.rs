@@ -28,7 +28,14 @@ pub struct ExecutorConfig {
     pub inspector_evms: usize,
 
     /// Should reject contract transactions and calls to accounts that are not contracts?
-    #[arg(long = "executor-reject-not-contract", alias = "reject-not-contract", default_value = "true")]
+    #[arg(
+        long = "executor-reject-not-contract",
+        alias = "reject-not-contract",
+        default_value = "true",
+        default_missing_value = "true",
+        action = clap::ArgAction::Set,
+        num_args = 0..=1
+    )]
     #[serde(rename = "reject_not_contract")]
     pub executor_reject_not_contract: bool,
 
