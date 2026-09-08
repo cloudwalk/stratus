@@ -288,6 +288,8 @@ mod tests {
         #[cfg_attr(not(feature = "dev"), allow(unused_mut))]
         let mut args: Vec<&str> = vec![
             "--follower",
+            // serde-skip fields: CLI-only, so also exercised here
+            "--nocapture",
             // common
             "--env",
             "staging",
@@ -419,9 +421,50 @@ mod tests {
         #[cfg(feature = "dev")]
         args.extend(["--genesis-path", "config/genesis.local.json"]);
 
+        for arg in StratusConfig::command().get_arguments() {
+            let Some(long) = arg.get_long() else { continue };
+            if ["config", "help", "version", "leader", "fake-leader"].contains(&long) {
+                continue;
+            }
+            let flag = format!("--{long}");
+            assert!(args.contains(&flag.as_str()), "sentinel test does not cover {flag}");
+        }
+
         let merged = load_with(&args, file).unwrap();
         let clap_parsed = StratusConfig::parse_from(std::iter::once("stratus").chain(args.iter().copied()));
         assert_eq!(serde_json::to_value(&merged).unwrap(), serde_json::to_value(&clap_parsed).unwrap());
+        assert!(merged.nocapture, "CLI-only field must take the CLI value");
+    }
+
+    #[test]
+    fn test_partial_importer_and_kafka_overrides() {
+        // a single importer/kafka flag must not demand sibling arguments the file already provides
+        let file = r#"
+            follower = true
+
+            [executor]
+            chain_id = 2008
+
+            [importer]
+            external_rpc = "http://127.0.0.1:3000/"
+            external_rpc_ws = "ws://127.0.0.1:3000/"
+            sync_interval = "5s"
+
+            [kafka]
+            bootstrap_servers = "broker:29092"
+            topic = "file-topic"
+            client_id = "file-client"
+        "#;
+        let config = load_with(&["--sync-interval", "7ms", "--kafka-topic", "cli-topic"], file).unwrap();
+
+        let importer = config.importer.as_ref().unwrap();
+        assert_eq!(importer.external_rpc, "http://127.0.0.1:3000/"); // from the file
+        assert_eq!(importer.sync_interval, std::time::Duration::from_millis(7)); // from the CLI
+        let kafka = config.kafka_config.as_ref().unwrap();
+        assert_eq!(kafka.topic, "cli-topic"); // from the CLI
+        assert_eq!(kafka.bootstrap_servers, "broker:29092"); // from the file
+        assert_eq!(kafka.client_id, "file-client"); // from the file
+        config.validate().unwrap();
     }
 
     #[test]
