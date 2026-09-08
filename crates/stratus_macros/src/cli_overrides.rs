@@ -13,8 +13,8 @@
 //! - Fields flattened for CLI parsing (`#[clap(flatten)]`) recurse into the child struct,
 //!   because their arguments belong to the child. Optional flattened sections are merged
 //!   when both layers have them, or taken from the CLI when only the CLI has them.
-//! - Fields skipped by serde (`#[serde(skip)]`) are not part of the config file and are
-//!   left untouched.
+//! - Fields skipped by serde (`#[serde(skip)]`) are not part of the config file, so their
+//!   only possible source is the CLI and the CLI value is always applied.
 //! - `#[cfg(...)]` attributes on fields are propagated to the generated code.
 
 use proc_macro::TokenStream;
@@ -49,8 +49,12 @@ fn expand_impl(input: DeriveInput) -> syn::Result<TokenStream2> {
         let Some(field_name) = &field.ident else { continue };
         let cfg_attributes = field.attrs.iter().filter(|attr| attr.path().is_ident("cfg")).collect::<Vec<_>>();
 
-        // fields not part of the config file cannot be overridden by it either
+        // fields not part of the config file can only come from the CLI: always take the CLI value
         if has_attribute(&field.attrs, "serde", "skip") {
+            statements.push(quote! {
+                #(#cfg_attributes)*
+                self.#field_name = ::std::clone::Clone::clone(&cli.#field_name);
+            });
             continue;
         }
 
@@ -233,6 +237,7 @@ mod tests {
             #[automatically_derived]
             impl ExampleConfig {
                 pub(crate) fn apply_cli_overrides(&mut self, cli: &Self, explicit: &::std::collections::HashSet<::std::string::String>) {
+                    self.skipped = ::std::clone::Clone::clone(&cli.skipped);
                     #[cfg(feature = "dev")]
                     self.child.apply_cli_overrides(&cli.child, explicit);
                 }
@@ -253,8 +258,9 @@ mod tests {
         let expected = quote! {
             #[automatically_derived]
             impl EmptyConfig {
-                #[allow(clippy::unused_self)]
-                pub(crate) fn apply_cli_overrides(&mut self, cli: &Self, explicit: &::std::collections::HashSet<::std::string::String>) {}
+                pub(crate) fn apply_cli_overrides(&mut self, cli: &Self, explicit: &::std::collections::HashSet<::std::string::String>) {
+                    self.skipped = ::std::clone::Clone::clone(&cli.skipped);
+                }
             }
         };
         assert_eq!(output, expected.to_string());

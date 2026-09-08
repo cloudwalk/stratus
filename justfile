@@ -106,13 +106,9 @@ stratus *args="":
 stratus-test *args="":
     #!/bin/bash
     source <(just coverage-env)
-    FEATURES="dev"
-    if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
-        FEATURES="dev,replication"
-    fi
-    echo "leader features: " $FEATURES
-    cargo build {{profile_flag}} --features $FEATURES
-    cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
+    echo "leader features: dev"
+    cargo build {{profile_flag}} --features dev
+    cargo run {{profile_flag}} --bin stratus --features dev -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
     just _wait_for_stratus
 
 # Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
@@ -130,13 +126,9 @@ stratus-follower *args="":
 stratus-follower-test *args="":
     #!/bin/bash
     source <(just coverage-env)
-    FEATURES="dev"
-    if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
-        FEATURES="dev,replication"
-    fi
-    echo "follower features: " $FEATURES
-    cargo build {{profile_flag}} --features $FEATURES
-    cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --config config/stratus-follower.toml --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
+    echo "follower features: dev"
+    cargo build {{profile_flag}} --features dev
+    cargo run {{profile_flag}} --bin stratus --features dev -- --config config/stratus-follower.toml --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
     just _wait_for_stratus 3001
 
 # Bin: Stratus main service as fake leader (imports blocks like a follower, executes/mines locally like a leader)
@@ -332,9 +324,9 @@ e2e-follower test="brlc" use_block_changes_replication="false":
         just _log "Waiting Kafka start"
         wait-service --tcp 0.0.0.0:29092 -- echo
         docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ $replication_flag --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 $replication_flag --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
     else
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ $replication_flag
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 $replication_flag
     fi
 
 

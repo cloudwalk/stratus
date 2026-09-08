@@ -21,13 +21,14 @@ use crate::log_and_err;
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize, Default, CliOverrides)]
 #[serde(default, deny_unknown_fields)]
 pub struct KafkaConfig {
-    #[arg(long = "kafka-bootstrap-servers", required = false)]
+    /// Kafka bootstrap servers. Empty by default; the all-or-none rule is enforced by `validate()` after the merge.
+    #[arg(long = "kafka-bootstrap-servers", default_value = "", required = false)]
     pub bootstrap_servers: String,
 
-    #[arg(long = "kafka-topic", group = "kafka", required = false)]
+    #[arg(long = "kafka-topic", group = "kafka", default_value = "", required = false)]
     pub topic: String,
 
-    #[arg(long = "kafka-client-id", required = false)]
+    #[arg(long = "kafka-client-id", default_value = "", required = false)]
     pub client_id: String,
 
     #[arg(long = "kafka-group-id", required = false)]

@@ -30,8 +30,8 @@ use crate::infra::kafka::KafkaConnector;
 #[derive(Parser, DebugAsJson, Clone, serde::Deserialize, serde::Serialize, CliOverrides)]
 #[serde(default, deny_unknown_fields)]
 pub struct ImporterConfig {
-    /// External RPC HTTP endpoint to sync blocks with Stratus.
-    #[arg(short = 'r', long = "external-rpc", required = false)]
+    /// External RPC HTTP endpoint to sync blocks with Stratus. Empty by default; `validate()` rejects it after the merge.
+    #[arg(short = 'r', long = "external-rpc", default_value = "", required = false)]
     pub external_rpc: String,
 
     /// External RPC WS endpoint to sync blocks with Stratus.
