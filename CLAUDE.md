@@ -123,16 +123,20 @@ Stratus is a high-performance EVM-compatible blockchain infrastructure written i
 
 ## Configuration
 
-### Environment Files
-- `config/` - Environment-specific configurations
-- `LOCAL_ENV_PATH` - Override environment file path
-- `.env` files supported via `dotenvy`
+### Config Files
+- `config/stratus.local.toml` - Local development configuration (leader), selected by default
+- `config/stratus-follower.toml` - Local development configuration (follower), selected via `--config`
+- `config/stratus.example.toml` - Fully documented example with all available options
+- File resolution: `--config <path>` when provided, otherwise `config/{binary}.{env}.toml` (env from `--env`, default `local`)
+- Precedence: defaults < config file < explicitly provided CLI arguments
+- Unknown fields in the config file are rejected (typos fail loudly)
 
-### Key Environment Variables
+### Remaining Environment Variables
 - `RUST_BACKTRACE` - Backtrace verbosity (default: 0)
+- `RUST_LOG` - Tracing filter fallback when `[common.tracing] filter` is not set in the config file
+- `ADMIN_PASSWORD` - Admin RPC authentication secret
 - `RELEASE` - Build in release mode when set to 1
 - `NIGHTLY` - Use nightly toolchain when set to 1
-- `DATABASE_URL` - PostgreSQL connection string
 
 ## Performance Targets
 

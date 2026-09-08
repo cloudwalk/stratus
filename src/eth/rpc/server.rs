@@ -627,10 +627,10 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         external_rpc_ws: Some(external_rpc_ws),
         external_rpc_timeout,
         sync_interval,
-        enable_block_changes_replication: std::env::var("ENABLE_BLOCK_CHANGES_REPLICATION")
-            .ok()
-            .is_some_and(|val| val == "1" || val == "true"),
-        forward_access_list: !matches!(std::env::var("FORWARD_ACCESS_LIST").as_deref(), Ok("0") | Ok("false")),
+        // These values were previously configurable via environment variables only;
+        // now they use the same defaults as `[importer]` in the config file.
+        enable_block_changes_replication: false,
+        forward_access_list: true,
         stop_at_block: None,
     };
 

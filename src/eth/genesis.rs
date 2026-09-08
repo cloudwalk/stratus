@@ -491,8 +491,6 @@ mod tests {
 
     #[test]
     fn test_genesis_file_with_clap_integration() {
-        use std::env;
-
         use clap::Parser;
 
         use crate::config::GenesisFileConfig;
@@ -533,23 +531,14 @@ mod tests {
         // Verify that the file loaded via clap has the same chainId
         assert_eq!(genesis_from_clap.config.chainId, 2008);
 
-        // Test 3: Clap integration - environment variables
-        unsafe {
-            env::set_var("GENESIS_JSON_PATH", file_path);
-        }
-        let args = vec!["program"]; // No command line arguments
-        let config = GenesisFileConfig::parse_from(args);
+        // Test 3: config file parsing (serde integration)
+        let config: GenesisFileConfig = toml::from_str(&format!(r#"path = "{file_path}""#)).expect("Failed to parse genesis config from TOML");
         assert_eq!(config.genesis_path, Some(file_path.to_string()));
 
-        // Load the file using the path obtained via environment variable
-        let genesis_from_env = GenesisConfig::load_from_file(config.genesis_path.unwrap()).expect("Failed to load genesis.local.json via env var");
+        // Load the file using the path obtained from the config file
+        let genesis_from_config = GenesisConfig::load_from_file(config.genesis_path.unwrap()).expect("Failed to load genesis.local.json via config file");
 
-        // Verify that the file loaded via environment variable has the same chainId
-        assert_eq!(genesis_from_env.config.chainId, 2008);
-
-        // Clean up
-        unsafe {
-            env::remove_var("GENESIS_JSON_PATH");
-        }
+        // Verify that the file loaded via the config file has the same chainId
+        assert_eq!(genesis_from_config.config.chainId, 2008);
     }
 }

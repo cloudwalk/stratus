@@ -1,15 +1,18 @@
 use clap::Parser;
 use display_json::DebugAsJson;
 use sentry::ClientInitGuard;
+use stratus_macros::CliOverrides;
 
 use crate::config::Environment;
 use crate::ext::not;
 use crate::infra::build_info;
 
-#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+#[derive(DebugAsJson, Clone, Default, Parser, serde::Deserialize, serde::Serialize, CliOverrides)]
+#[serde(default, deny_unknown_fields)]
 pub struct SentryConfig {
     /// Sentry server URL.
-    #[arg(long = "sentry-url", env = "SENTRY_URL", required = false)]
+    #[arg(long = "sentry-url", required = false)]
+    #[serde(rename = "url")]
     pub sentry_url: String,
 }
 

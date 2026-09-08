@@ -17,7 +17,7 @@ use tokio::sync::watch::Sender;
 use tokio_util::sync::CancellationToken;
 
 use crate::alias::JsonValue;
-use crate::config;
+use crate::config::ConfigLoad;
 use crate::config::StratusConfig;
 use crate::config::WithCommonConfig;
 use crate::eth::rpc::RpcClientApp;
@@ -32,7 +32,7 @@ use crate::infra::tracing::warn_task_cancellation;
 
 pub struct GlobalServices<T>
 where
-    T: clap::Parser + WithCommonConfig + Debug,
+    T: ConfigLoad + WithCommonConfig + Debug,
 {
     pub config: T,
     pub runtime: Runtime,
@@ -41,22 +41,18 @@ where
 
 impl<T> GlobalServices<T>
 where
-    T: clap::Parser + WithCommonConfig + Debug,
+    T: ConfigLoad + WithCommonConfig + Debug,
 {
     #[allow(clippy::expect_used)]
     /// Executes global services initialization.
     pub fn init() -> Self
     where
-        T: clap::Parser + WithCommonConfig + Debug,
+        T: ConfigLoad + WithCommonConfig + Debug,
     {
         GlobalState::setup_start_time();
 
-        // env-var support
-        config::load_dotenv_file();
-        config::load_env_aliases();
-
-        // parse configuration
-        let config = T::parse();
+        // parse configuration: config file with explicitly provided CLI arguments as overrides
+        let config = T::load_config();
         let common = config.common();
 
         // Set the unknown_client_enabled value

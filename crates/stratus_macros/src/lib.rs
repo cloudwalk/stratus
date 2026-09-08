@@ -10,6 +10,7 @@ use syn::ItemEnum;
 use syn::Lit;
 use syn::Meta;
 
+mod cli_overrides;
 mod fake_enum_variants;
 mod timed_attribute;
 
@@ -79,6 +80,11 @@ pub fn timed(args: TokenStream, input: TokenStream) -> TokenStream {
         Ok(expanded) => expanded.into(),
         Err(error) => error.to_compile_error().into(),
     }
+}
+
+#[proc_macro_derive(CliOverrides)]
+pub fn derive_cli_overrides(input: TokenStream) -> TokenStream {
+    cli_overrides::expand(input)
 }
 
 #[proc_macro_derive(FakeEnum, attributes(fake_enum))]
