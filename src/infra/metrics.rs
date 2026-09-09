@@ -1,7 +1,3 @@
-//! Stratus-specific metrics glue: `EvmKind` labels and the executor pool
-//! busy-workers gauge. The generic metrics infrastructure, including the
-//! metrics exporter configuration, lives in the `stratus_metrics` crate.
-
 use stratus_metrics::MetricLabelValue;
 use stratus_metrics::ToMetricLabelValue;
 use stratus_metrics::dec_executor_workers_busy;
