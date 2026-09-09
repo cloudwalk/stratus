@@ -68,13 +68,11 @@ where
         // init tokio
         let tokio = common.init_tokio_runtime().expect("failed to init tokio runtime");
 
-        // init tracing
+        // init observability services
         tokio.block_on(async {
             common.tracing.init(&common.sentry).expect("failed to init tracing");
+            common.metrics.init().expect("failed to init metrics");
         });
-
-        // init observability services
-        common.metrics.init().expect("failed to init metrics");
 
         // init sentry
         let sentry_guard = common
