@@ -106,13 +106,9 @@ stratus *args="":
 stratus-test *args="":
     #!/bin/bash
     source <(just coverage-env)
-    FEATURES="dev"
-    if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
-        FEATURES="dev,replication"
-    fi
-    echo "leader features: " $FEATURES
-    cargo build {{profile_flag}} --features $FEATURES
-    cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
+    echo "leader features: dev"
+    cargo build {{profile_flag}} --features dev
+    cargo run {{profile_flag}} --bin stratus --features dev -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
     just _wait_for_stratus
 
 # Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
@@ -124,19 +120,15 @@ stratus-memory-profiling *args="":
 
 # Bin: Stratus main service as follower
 stratus-follower *args="":
-    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --follower {{args}}
+    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --config config/stratus-follower.toml --follower {{args}}
 
 # Bin: Stratus main service as follower
 stratus-follower-test *args="":
     #!/bin/bash
     source <(just coverage-env)
-    FEATURES="dev"
-    if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
-        FEATURES="dev,replication"
-    fi
-    echo "follower features: " $FEATURES
-    cargo build {{profile_flag}} --features $FEATURES
-    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
+    echo "follower features: dev"
+    cargo build {{profile_flag}} --features dev
+    cargo run {{profile_flag}} --bin stratus --features dev -- --config config/stratus-follower.toml --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
     just _wait_for_stratus 3001
 
 # Bin: Stratus main service as fake leader (imports blocks like a follower, executes/mines locally like a leader)
@@ -146,7 +138,7 @@ stratus-fake-leader-test *args="":
     FEATURES="dev"
     echo "fake-leader features: " $FEATURES
     cargo build {{profile_flag}} --features $FEATURES
-    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --fake-leader --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_fake_leader.log &
+    cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --config config/stratus-follower.toml --fake-leader --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_fake_leader.log &
     just _wait_for_stratus 3001
 
 # ------------------------------------------------------------------------------
@@ -309,19 +301,20 @@ shell-lint mode="--write":
     @shfmt {{ mode }} --indent 4 e2e/cloudwalk-contracts/*.sh
     @shellcheck e2e/cloudwalk-contracts/*.sh --severity=warning --shell=bash
 
-e2e-leader:
+e2e-leader *extra-args="":
     #!/bin/bash
     echo "starting e2e-leader"
     # Leader doesn't need block changes flag, only follower does
     unset ENABLE_BLOCK_CHANGES_REPLICATION
-    RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s --rocks-path-prefix=temp_3000
+    RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s --rocks-path-prefix=temp_3000 {{extra-args}}
 
 e2e-follower test="brlc" use_block_changes_replication="false":
     #!/bin/bash
+    # the binary reads the replication mode from the CLI flag;
+    # `_e2e-leader-follower-up-impl` still exports ENABLE_BLOCK_CHANGES_REPLICATION for the mocha tests
+    replication_flag=""
     if [ "{{use_block_changes_replication}}" = "true" ]; then
-        export ENABLE_BLOCK_CHANGES_REPLICATION=true
-    else
-        export ENABLE_BLOCK_CHANGES_REPLICATION=false
+        replication_flag="--enable-block-changes-replication"
     fi
 
     if [ "{{test}}" = "kafka" ]; then
@@ -331,9 +324,9 @@ e2e-follower test="brlc" use_block_changes_replication="false":
         just _log "Waiting Kafka start"
         wait-service --tcp 0.0.0.0:29092 -- echo
         docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 $replication_flag --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
     else
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 $replication_flag
     fi
 
 
@@ -342,12 +335,12 @@ _e2e-leader-follower-up-impl test="brlc" use_block_changes_replication="false":
 
     mkdir e2e_logs
 
-    if [ "{{test}}" = "tx-types" ]; then
-        export EXECUTOR_REJECT_NOT_CONTRACT=false
-    fi
-
     # Start Stratus with leader flag
-    just e2e-leader
+    if [ "{{test}}" = "tx-types" ]; then
+        just e2e-leader --executor-reject-not-contract=false
+    else
+        just e2e-leader
+    fi
 
     if [ "{{use_block_changes_replication}}" = "true" ]; then
         export ENABLE_BLOCK_CHANGES_REPLICATION=true
@@ -409,7 +402,7 @@ e2e-leader-follower-pagination:
     #!/bin/bash
 
     # leader with a small response limit, forcing oversized importer responses to be paginated
-    MAX_RESPONSE_SIZE_BYTES=8192 just e2e-leader
+    just e2e-leader --max-response-size-bytes 8192
 
     just e2e-follower
 
@@ -427,7 +420,7 @@ e2e-leader-follower-pagination-changes:
     #!/bin/bash
 
     # leader with a small response limit, forcing oversized with-changes responses to be paginated
-    MAX_RESPONSE_SIZE_BYTES=8192 just e2e-leader
+    just e2e-leader --max-response-size-bytes 8192
 
     # follower in block changes replication mode
     just e2e-follower test/follower/e2e-pagination-changes.test.ts true
@@ -448,7 +441,7 @@ e2e-leader-follower-pagination-catchup:
     rm -f e2e/pagination-catchup.json
 
     # leader with a small response limit; the follower is still down
-    MAX_RESPONSE_SIZE_BYTES=8192 just e2e-leader
+    just e2e-leader --max-response-size-bytes 8192
 
     # mine several fat blocks while the follower is down, persisting them for verification
     cd e2e

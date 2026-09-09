@@ -8,10 +8,13 @@ use std::time::Duration;
 
 use clap::Parser;
 use display_json::DebugAsJson;
+use stratus_macros::CliOverrides;
 
 /// Genesis file configuration
 #[cfg(feature = "dev")]
 use crate::config::GenesisFileConfig;
+use crate::ext::duration_serde;
+use crate::ext::option_duration_serde;
 use crate::ext::parse_duration;
 
 // -----------------------------------------------------------------------------
@@ -19,36 +22,80 @@ use crate::ext::parse_duration;
 // -----------------------------------------------------------------------------
 
 /// Permanent storage configuration.
-#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+#[derive(DebugAsJson, Clone, Parser, serde::Deserialize, serde::Serialize, CliOverrides)]
+#[serde(default, deny_unknown_fields)]
 pub struct PermanentStorageConfig {
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
-    #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
+    #[arg(long = "rocks-path-prefix")]
+    #[serde(rename = "path_prefix")]
     pub rocks_path_prefix: Option<String>,
 
     /// The maximum time to wait for the RocksDB `wait_for_compaction` shutdown call.
-    #[arg(long = "rocks-shutdown-timeout", env = "ROCKS_SHUTDOWN_TIMEOUT", value_parser=parse_duration, default_value = "4m")]
+    #[arg(long = "rocks-shutdown-timeout", value_parser = parse_duration, default_value = "4m")]
+    #[serde(rename = "shutdown_timeout", with = "duration_serde")]
     pub rocks_shutdown_timeout: Duration,
 
     /// Individual cache size configuration for each RocksDB Column Family.
     #[clap(flatten)]
+    #[serde(rename = "cf_cache")]
     pub rocks_cf_cache: RocksCfCacheConfig,
 
     /// Disables sync write for RocksDB (improves performance but reduces durability).
-    #[arg(long = "rocks-disable-sync-write", env = "ROCKS_DISABLE_SYNC_WRITE")]
+    #[arg(long = "rocks-disable-sync-write")]
+    #[serde(rename = "disable_sync_write")]
     pub rocks_disable_sync_write: bool,
 
     /// Interval for collecting RocksDB column family size metrics.
-    #[arg(long = "rocks-cf-size-metrics-interval", env = "ROCKS_CF_SIZE_METRICS_INTERVAL", value_parser=parse_duration)]
+    #[arg(long = "rocks-cf-size-metrics-interval", value_parser = parse_duration)]
+    #[serde(rename = "cf_size_metrics_interval", with = "option_duration_serde")]
     pub rocks_cf_size_metrics_interval: Option<Duration>,
 
     /// Minimum number of file descriptors required for RocksDB initialization.
-    #[arg(long = "rocks-file-descriptors-limit", env = "ROCKS_FILE_DESCRIPTORS_LIMIT", default_value = Self::DEFAULT_FILE_DESCRIPTORS_LIMIT)]
+    #[arg(long = "rocks-file-descriptors-limit", default_value = Self::DEFAULT_FILE_DESCRIPTORS_LIMIT)]
+    #[serde(rename = "file_descriptors_limit")]
     pub rocks_file_descriptors_limit: u64,
 
-    /// Genesis file configuration
+    /// Genesis file configuration (available with the `dev` feature).
     #[clap(flatten)]
     #[cfg(feature = "dev")]
+    #[serde(rename = "genesis")]
     pub genesis_file: GenesisFileConfig,
+
+    /// Genesis file configuration is only available with the `dev` feature; the section is parsed
+    /// and ignored on other builds so config files stay portable across binaries.
+    #[arg(skip)]
+    #[cfg(not(feature = "dev"))]
+    #[serde(rename = "genesis", deserialize_with = "deserialize_ignored", skip_serializing)]
+    pub genesis_file: (),
+}
+
+impl Default for PermanentStorageConfig {
+    fn default() -> Self {
+        Self {
+            rocks_path_prefix: None,
+            rocks_shutdown_timeout: Duration::from_secs(4 * 60),
+            rocks_cf_cache: RocksCfCacheConfig::default(),
+            rocks_disable_sync_write: false,
+            rocks_cf_size_metrics_interval: None,
+            rocks_file_descriptors_limit: Self::default_file_descriptors_limit(),
+            #[cfg(feature = "dev")]
+            genesis_file: GenesisFileConfig::default(),
+            #[cfg(not(feature = "dev"))]
+            genesis_file: (),
+        }
+    }
+}
+
+/// Deserializes any value into `()`, ignoring it.
+#[cfg(not(feature = "dev"))]
+fn deserialize_ignored<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<(), D::Error> {
+    <serde::de::IgnoredAny as serde::Deserialize>::deserialize(deserializer).map(|_| ())
+}
+
+impl PermanentStorageConfig {
+    const fn default_file_descriptors_limit() -> u64 {
+        if cfg!(feature = "dev") { 65536 } else { 1048576 }
+    }
 }
 
 impl PermanentStorageConfig {
