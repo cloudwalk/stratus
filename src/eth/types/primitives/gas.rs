@@ -21,6 +21,7 @@ use crate::ext::RuintExt;
     derive_more::Add,
     derive_more::AddAssign,
     alloy_rlp::RlpDecodableWrapper,
+    alloy_rlp::RlpEncodableWrapper,
 )]
 #[serde(transparent)]
 #[cfg_attr(test, derive(serde::Deserialize))]

@@ -21,6 +21,7 @@ use fake::Faker;
     serde::Serialize,
     serde::Deserialize,
     alloy_rlp::RlpDecodableWrapper,
+    alloy_rlp::RlpEncodableWrapper,
 )]
 pub struct Wei(pub U256);
 

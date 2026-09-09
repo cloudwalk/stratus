@@ -12,10 +12,25 @@ use fake::Faker;
 use hex_literal::hex;
 
 use crate::alias::RevmAddress;
+use crate::eth::rpc::TransactionDecodeError;
 use crate::eth::types::LogTopic;
 
 /// Address of an Ethereum account (wallet or contract).
-#[derive(DebugAsJson, Clone, Copy, Default, Eq, PartialEq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize, alloy_rlp::RlpDecodableWrapper)]
+#[derive(
+    DebugAsJson,
+    Clone,
+    Copy,
+    Default,
+    Eq,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    alloy_rlp::RlpDecodableWrapper,
+    alloy_rlp::RlpEncodableWrapper,
+)]
 pub struct Address(pub FixedBytes<20>);
 
 impl Address {
@@ -106,6 +121,15 @@ impl TryFrom<Vec<u8>> for Address {
             bail!("array of bytes to be converted to address must have exactly 20 bytes");
         }
         Ok(Self(FixedBytes::from_slice(&value)))
+    }
+}
+
+impl TryFrom<&[u8]> for Address {
+    type Error = TransactionDecodeError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let array = <[u8; 20]>::try_from(value).map_err(|_| TransactionDecodeError::InvalidTo)?;
+        Ok(Self(FixedBytes::from(array)))
     }
 }
 

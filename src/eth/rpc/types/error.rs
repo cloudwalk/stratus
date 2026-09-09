@@ -30,8 +30,33 @@ pub enum TransactionDecodeError {
     #[error("legacy transaction type is not typed")]
     LegacyNotTyped,
 
+    #[error("invalid legacy v value")]
+    InvalidLegacyV,
+
+    #[error("rlp decode error: {0}")]
+    RlpError(String),
+
     #[error("{0}")]
     Custom(String),
+}
+
+impl From<TransactionDecodeError> for alloy_rlp::Error {
+    fn from(value: TransactionDecodeError) -> Self {
+        let message = match value {
+            TransactionDecodeError::MissingField(_) => "missing field",
+            TransactionDecodeError::InvalidTo => "invalid to field",
+            TransactionDecodeError::SignerRecovery => "failed to recover signer",
+            TransactionDecodeError::UnsupportedType => "unsupported transaction type",
+            TransactionDecodeError::ExtraFields => "typed transaction has extra fields",
+            TransactionDecodeError::InvalidTypeByte => "invalid transaction type byte",
+            TransactionDecodeError::EmptyBytes => "empty transaction bytes",
+            TransactionDecodeError::LegacyNotTyped => "legacy transaction type is not typed",
+            TransactionDecodeError::InvalidLegacyV => "invalid legacy v value",
+            TransactionDecodeError::RlpError(_) => "rlp decode error",
+            TransactionDecodeError::Custom(_) => "failed to decode transaction",
+        };
+        alloy_rlp::Error::Custom(message)
+    }
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
