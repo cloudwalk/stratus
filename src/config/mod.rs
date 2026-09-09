@@ -221,24 +221,40 @@ impl StratusConfig {
     /// Validates configuration invariants that cannot be enforced by clap or serde alone,
     /// because values may come from the config file, the CLI, or both.
     pub fn validate(&self) -> anyhow::Result<()> {
-        // node mode: exactly one
+        self.validate_node_mode()?;
+        self.validate_executor()?;
+        self.validate_importer()?;
+        self.validate_kafka()?;
+        self.validate_rpc()?;
+        self.validate_sentry()?;
+        self.validate_tracing_filter()?;
+        Ok(())
+    }
+
+    /// Validates that exactly one node mode is configured.
+    fn validate_node_mode(&self) -> anyhow::Result<()> {
         let modes = [(self.leader, "leader"), (self.follower, "follower"), (self.fake_leader, "fake-leader")];
         let active: Vec<&str> = modes.iter().filter(|(active, _)| *active).map(|(_, name)| *name).collect();
         match active.as_slice() {
-            [_mode] => {}
+            [_mode] => Ok(()),
             [] => anyhow::bail!("no node mode configured: set exactly one of `leader`, `follower` or `fake_leader` (config file or CLI flag)"),
             many => anyhow::bail!(
                 "multiple node modes configured ({}): use exactly one of `leader`, `follower`, `fake_leader`",
                 many.join(", ")
             ),
         }
+    }
 
-        // chain id
+    /// Validates that a chain id is configured.
+    fn validate_executor(&self) -> anyhow::Result<()> {
         if self.executor.executor_chain_id == 0 {
             anyhow::bail!("`executor.chain_id` is required: set it in the config file or pass `--executor-chain-id`");
         }
+        Ok(())
+    }
 
-        // importer requirements
+    /// Validates the importer requirements for the configured node mode.
+    fn validate_importer(&self) -> anyhow::Result<()> {
         if self.leader && self.importer.is_some() {
             anyhow::bail!("leader mode cannot be used with `[importer]` configuration");
         }
@@ -250,44 +266,54 @@ impl StratusConfig {
                 anyhow::bail!("`importer.external_rpc` is required for follower and fake-leader modes");
             }
         }
+        Ok(())
+    }
 
-        // kafka: all-or-none, and only with an importer (follower or fake-leader)
-        if let Some(kafka) = &self.kafka_config {
-            if self.leader {
-                anyhow::bail!("`[kafka]` configuration requires follower or fake-leader mode");
-            }
-            let missing = [
-                ("bootstrap_servers", kafka.bootstrap_servers.is_empty()),
-                ("topic", kafka.topic.is_empty()),
-                ("client_id", kafka.client_id.is_empty()),
-            ];
-            let missing: Vec<&str> = missing.iter().filter(|(_, missing)| *missing).map(|(name, _)| *name).collect();
-            if !missing.is_empty() {
-                anyhow::bail!(
-                    "incomplete `[kafka]` configuration: `bootstrap_servers`, `topic` and `client_id` are all required (missing: {})",
-                    missing.join(", ")
-                );
-            }
+    /// Validates the kafka section: all-or-none fields, and only with an importer (follower or fake-leader).
+    fn validate_kafka(&self) -> anyhow::Result<()> {
+        let Some(kafka) = &self.kafka_config else { return Ok(()) };
+        if self.leader {
+            anyhow::bail!("`[kafka]` configuration requires follower or fake-leader mode");
         }
+        let missing = [
+            ("bootstrap_servers", kafka.bootstrap_servers.is_empty()),
+            ("topic", kafka.topic.is_empty()),
+            ("client_id", kafka.client_id.is_empty()),
+        ];
+        let missing: Vec<&str> = missing.iter().filter(|(_, missing)| *missing).map(|(name, _)| *name).collect();
+        if !missing.is_empty() {
+            anyhow::bail!(
+                "incomplete `[kafka]` configuration: `bootstrap_servers`, `topic` and `client_id` are all required (missing: {})",
+                missing.join(", ")
+            );
+        }
+        Ok(())
+    }
 
-        // rpc response size floor (same rule as the CLI value parser)
+    /// Validates the rpc response size floor (same rule as the CLI value parser).
+    fn validate_rpc(&self) -> anyhow::Result<()> {
         if self.rpc_server.rpc_max_response_size_bytes < crate::eth::rpc::pagination::MIN_RESPONSE_SIZE_BYTES {
             anyhow::bail!(
                 "`rpc.max_response_size_bytes` must be at least {} bytes, otherwise importer pagination cannot fit a chunk",
                 crate::eth::rpc::pagination::MIN_RESPONSE_SIZE_BYTES
             );
         }
+        Ok(())
+    }
 
-        // sentry url non-empty when section present
+    /// Validates that the sentry section has a non-empty url when present.
+    fn validate_sentry(&self) -> anyhow::Result<()> {
         if self.common.sentry.as_ref().is_some_and(|sentry| sentry.sentry_url.is_empty()) {
             anyhow::bail!("`[sentry]` configuration requires a non-empty `url`");
         }
+        Ok(())
+    }
 
-        // tracing filter: reject invalid directives strings, otherwise they are silently dropped by `EnvFilter`
+    /// Validates the tracing filter, rejecting invalid directive strings that `EnvFilter` would silently drop.
+    fn validate_tracing_filter(&self) -> anyhow::Result<()> {
         if let Err(error) = self.common.tracing.validate_filter() {
             anyhow::bail!("`[common.tracing] filter` is invalid: {error}");
         }
-
         Ok(())
     }
 }
