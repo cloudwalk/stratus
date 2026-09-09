@@ -1,5 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
+use syn::parse_macro_input;
 use syn::Data;
 use syn::DeriveInput;
 use syn::Expr;
@@ -8,7 +9,6 @@ use syn::Fields;
 use syn::ItemEnum;
 use syn::Lit;
 use syn::Meta;
-use syn::parse_macro_input;
 
 mod cli_overrides;
 mod fake_enum_variants;

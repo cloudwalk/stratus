@@ -33,7 +33,13 @@ pub fn expand(input: TokenStream) -> TokenStream {
 /// Generates the merge method for a named-field struct.
 fn expand_impl(input: DeriveInput) -> syn::Result<TokenStream2> {
     let struct_name = &input.ident;
+    let fields = named_fields(&input)?;
+    let statements: Vec<TokenStream2> = fields.named.iter().filter_map(merge_statement).collect();
+    Ok(method_impl(struct_name, statements))
+}
 
+/// Returns the named fields of the derive input, rejecting other data kinds.
+fn named_fields(input: &DeriveInput) -> syn::Result<&syn::FieldsNamed> {
     let syn::Data::Struct(data) = &input.data else {
         return Err(syn::Error::new_spanned(&input.ident, "CliOverrides can only be derived for structs"));
     };
@@ -43,55 +49,77 @@ fn expand_impl(input: DeriveInput) -> syn::Result<TokenStream2> {
             "CliOverrides can only be derived for structs with named fields",
         ));
     };
+    Ok(fields)
+}
 
-    let mut statements = Vec::new();
-    for field in &fields.named {
-        let Some(field_name) = &field.ident else { continue };
-        let cfg_attributes = field.attrs.iter().filter(|attr| attr.path().is_ident("cfg")).collect::<Vec<_>>();
+/// Generates the merge statement for one field, or `None` for unnamed fields.
+fn merge_statement(field: &syn::Field) -> Option<TokenStream2> {
+    let field_name = field.ident.as_ref()?;
+    let cfg_attributes = cfg_attributes(field);
 
-        // fields not part of the config file can only come from the CLI: always take the CLI value
-        if has_attribute(&field.attrs, "serde", "skip") {
-            statements.push(quote! {
-                #(#cfg_attributes)*
-                self.#field_name = ::std::clone::Clone::clone(&cli.#field_name);
-            });
-            continue;
-        }
+    if has_attribute(&field.attrs, "serde", "skip") {
+        return Some(cli_only_statement(field_name, &cfg_attributes));
+    }
+    if is_flattened(&field.attrs) {
+        return Some(flattened_statement(field, field_name, &cfg_attributes));
+    }
+    Some(plain_statement(field_name, &cfg_attributes))
+}
 
-        if is_flattened(&field.attrs) {
-            if option_inner(&field.ty).is_some() {
-                // optional section: merge when both layers have it, otherwise take the CLI's
-                statements.push(quote! {
-                    #(#cfg_attributes)*
-                    match (&mut self.#field_name, &cli.#field_name) {
-                        (::std::option::Option::Some(file_section), ::std::option::Option::Some(cli_section)) => {
-                            file_section.apply_cli_overrides(cli_section, explicit);
-                        }
-                        (::std::option::Option::None, ::std::option::Option::Some(cli_section)) => {
-                            self.#field_name = ::std::option::Option::Some(::std::clone::Clone::clone(cli_section));
-                        }
-                        _ => {}
-                    }
-                });
-            } else {
-                // nested section: recurse so the child's arguments can override the child's values
-                statements.push(quote! {
-                    #(#cfg_attributes)*
-                    self.#field_name.apply_cli_overrides(&cli.#field_name, explicit);
-                });
-            }
-        } else {
-            // plain field: override when the argument id was explicitly provided in the command line
-            let field_id = field_name.to_string();
-            statements.push(quote! {
-                #(#cfg_attributes)*
-                if explicit.contains(#field_id) {
-                    self.#field_name = ::std::clone::Clone::clone(&cli.#field_name);
-                }
-            });
+/// Returns the `#[cfg]` attributes that gate the field, so the generated code follows them.
+fn cfg_attributes(field: &syn::Field) -> Vec<&syn::Attribute> {
+    field.attrs.iter().filter(|attr| attr.path().is_ident("cfg")).collect()
+}
+
+/// Fields skipped by serde never come from the config file, so the CLI is their only source.
+fn cli_only_statement(field_name: &syn::Ident, cfg_attributes: &[&syn::Attribute]) -> TokenStream2 {
+    quote! {
+        #(#cfg_attributes)*
+        self.#field_name = ::std::clone::Clone::clone(&cli.#field_name);
+    }
+}
+
+/// Flattened sections merge recursively, so the child's arguments override the child's values.
+fn flattened_statement(field: &syn::Field, field_name: &syn::Ident, cfg_attributes: &[&syn::Attribute]) -> TokenStream2 {
+    if option_inner(&field.ty).is_some() {
+        optional_section_statement(field_name, cfg_attributes)
+    } else {
+        quote! {
+            #(#cfg_attributes)*
+            self.#field_name.apply_cli_overrides(&cli.#field_name, explicit);
         }
     }
+}
 
+/// Optional sections merge when both layers have them, otherwise the CLI's value is taken.
+fn optional_section_statement(field_name: &syn::Ident, cfg_attributes: &[&syn::Attribute]) -> TokenStream2 {
+    quote! {
+        #(#cfg_attributes)*
+        match (&mut self.#field_name, &cli.#field_name) {
+            (::std::option::Option::Some(file_section), ::std::option::Option::Some(cli_section)) => {
+                file_section.apply_cli_overrides(cli_section, explicit);
+            }
+            (::std::option::Option::None, ::std::option::Option::Some(cli_section)) => {
+                self.#field_name = ::std::option::Option::Some(::std::clone::Clone::clone(cli_section));
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Plain fields override when the argument id was explicitly provided in the command line.
+fn plain_statement(field_name: &syn::Ident, cfg_attributes: &[&syn::Attribute]) -> TokenStream2 {
+    let field_id = field_name.to_string();
+    quote! {
+        #(#cfg_attributes)*
+        if explicit.contains(#field_id) {
+            self.#field_name = ::std::clone::Clone::clone(&cli.#field_name);
+        }
+    }
+}
+
+/// Wraps the merge statements in the `apply_cli_overrides` method.
+fn method_impl(struct_name: &syn::Ident, statements: Vec<TokenStream2>) -> TokenStream2 {
     // structs without overridable fields still need the method so parents can recurse into them
     let (lint_allow, body) = if statements.is_empty() {
         (quote! { #[allow(clippy::unused_self)] }, quote! {})
@@ -99,7 +127,7 @@ fn expand_impl(input: DeriveInput) -> syn::Result<TokenStream2> {
         (quote! {}, quote! { #(#statements)* })
     };
 
-    Ok(quote! {
+    quote! {
         #[automatically_derived]
         impl #struct_name {
             #lint_allow
@@ -107,7 +135,7 @@ fn expand_impl(input: DeriveInput) -> syn::Result<TokenStream2> {
                 #body
             }
         }
-    })
+    }
 }
 
 /// Checks whether the attributes contain `#[<tool>(...)]` with the given bare marker, e.g. `#[clap(flatten)]`.
