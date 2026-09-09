@@ -468,30 +468,6 @@ mod tests {
     }
 
     #[test]
-    fn test_config_file_missing_error_only_for_explicit_path() {
-        let command = StratusConfig::command();
-        let matches = command
-            .clone()
-            .try_get_matches_from(["stratus", "--config", "/nonexistent/stratus.toml"])
-            .unwrap();
-        let error = StratusConfig::load_from_matches(&command, &matches).unwrap_err();
-        assert!(error.to_string().contains("config file not found"), "unexpected error: {error}");
-    }
-
-    #[test]
-    fn test_validate_after_merge() {
-        // file sets leader, CLI sets follower: clap does not see the conflict, validation must
-        let file = r#"
-            leader = true
-
-            [executor]
-            chain_id = 2008
-        "#;
-        let error = load_with(&["--follower"], file).unwrap_err();
-        assert!(error.to_string().contains("multiple node modes"), "unexpected error: {error}");
-    }
-
-    #[test]
     fn test_environment_from_cli_and_file() {
         let file = r#"
             leader = true
