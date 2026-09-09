@@ -1,6 +1,9 @@
 use proc_macro2::Span;
 use proc_macro2::TokenStream;
 use quote::quote;
+use syn::parse::Parse;
+use syn::parse::ParseStream;
+use syn::spanned::Spanned;
 use syn::Expr;
 use syn::ExprClosure;
 use syn::FnArg;
@@ -9,9 +12,6 @@ use syn::ItemFn;
 use syn::Pat;
 use syn::Stmt;
 use syn::Token;
-use syn::parse::Parse;
-use syn::parse::ParseStream;
-use syn::spanned::Spanned;
 
 syn::custom_keyword!(labels);
 

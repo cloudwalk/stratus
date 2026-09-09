@@ -1,12 +1,12 @@
 use proc_macro::TokenStream;
 use quote::quote;
+use syn::parse::Parse;
+use syn::parse::ParseStream;
 use syn::Expr;
 use syn::Fields;
 use syn::ItemEnum;
 use syn::Lit;
 use syn::Path;
-use syn::parse::Parse;
-use syn::parse::ParseStream;
 
 struct MacroArgs {
     func_name: Path,
