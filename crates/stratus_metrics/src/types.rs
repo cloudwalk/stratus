@@ -5,8 +5,6 @@ use metrics::describe_counter;
 use metrics::describe_gauge;
 use metrics::describe_histogram;
 
-use crate::eth::executor::EvmKind;
-
 pub type HistogramInt = u32;
 pub type Sum = u64;
 pub type Count = u64;
@@ -32,7 +30,7 @@ pub const LABEL_ERROR: &str = "error";
 // -----------------------------------------------------------------------------
 
 /// Metric definition.
-pub(super) struct Metric {
+pub struct Metric {
     pub(super) kind: &'static str,
     pub(super) name: &'static str,
     pub(super) description: &'static str,
@@ -40,7 +38,7 @@ pub(super) struct Metric {
 
 impl Metric {
     /// Register description with the provider.
-    pub(super) fn register_description(&self) {
+    pub fn register_description(&self) {
         match self.kind {
             "counter" => describe_counter!(self.name, self.description),
             "histogram_duration" | "histogram_counter" => describe_histogram!(self.name, self.description),
@@ -131,12 +129,6 @@ impl ToMetricLabelValue for u64 {
     }
 }
 
-impl ToMetricLabelValue for EvmKind {
-    fn to_metric_label_value(&self) -> MetricLabelValue {
-        (*self).into()
-    }
-}
-
 impl From<Option<Cow<'static, str>>> for MetricLabelValue {
     fn from(value: Option<Cow<'static, str>>) -> Self {
         match value {
@@ -188,18 +180,6 @@ impl From<i32> for MetricLabelValue {
 impl From<u64> for MetricLabelValue {
     fn from(value: u64) -> Self {
         Self::Some(value.to_string())
-    }
-}
-
-impl From<EvmKind> for MetricLabelValue {
-    fn from(value: EvmKind) -> Self {
-        let label = match value {
-            EvmKind::Transaction => "transaction",
-            EvmKind::CallPresent => "call_present",
-            EvmKind::CallPast => "call_past",
-            EvmKind::Inspect => "inspector",
-        };
-        Self::Some(label.to_owned())
     }
 }
 

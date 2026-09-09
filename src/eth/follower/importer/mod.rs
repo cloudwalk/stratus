@@ -12,6 +12,8 @@ use std::time::Duration;
 use anyhow::bail;
 pub use config::ImporterConfig;
 pub use importers::BlockchainClient;
+#[cfg(feature = "metrics")]
+use stratus_metrics as metrics;
 pub use supervisor::ImporterConsensus;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -25,8 +27,6 @@ use crate::ext::SleepReason;
 use crate::ext::traced_sleep;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
 use crate::infra::kafka::KafkaConnector;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::ledger::events::transaction_to_events;
 use crate::log_and_err;

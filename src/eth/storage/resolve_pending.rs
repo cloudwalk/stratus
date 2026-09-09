@@ -1,3 +1,5 @@
+use stratus_metrics::MetricLabelValue;
+
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::types::entity::EntityRead;
@@ -6,7 +8,6 @@ use crate::eth::types::Account;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::PointInTime;
 use crate::eth::types::Slot;
-use crate::infra::metrics::MetricLabelValue;
 
 /// Prevents construction of [`MinedPointInTime`] outside this module.
 /// `Seal` is public (so the enum variants can be pattern-matched) but cannot be constructed

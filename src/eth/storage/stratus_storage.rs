@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use stratus_macros::timed;
+use stratus_metrics::timed;
 use tracing::Span;
 
 use crate::eth::executor::AccessListOutput;

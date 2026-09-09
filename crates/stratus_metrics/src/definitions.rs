@@ -1,4 +1,4 @@
-use crate::metrics;
+use stratus_metrics_macros::metrics;
 
 // JSON-RPC metrics.
 metrics! {
@@ -45,10 +45,7 @@ metrics! {
     histogram_duration storage_finish_pending_block{},
 
     "Time executing storage save_block operation."
-    histogram_duration storage_save_block{storage, tens_of_millions_gas_used},
-
-    "Time executing storage apply_replication_log operation."
-    histogram_duration storage_apply_replication_log{storage, success}
+    histogram_duration storage_save_block{storage, tens_of_millions_gas_used}
 }
 
 // Importer online metrics.

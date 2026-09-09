@@ -1,6 +1,6 @@
 //! In-memory storage implementations.
 
-use stratus_macros::timed;
+use stratus_metrics::timed;
 
 use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;

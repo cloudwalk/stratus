@@ -22,7 +22,8 @@ pub use evm::types::TransactionExecutionOutput;
 pub use evm::types::TransactionExecutionResult;
 use parking_lot::Mutex;
 use parking_lot::MutexGuard;
-use stratus_macros::timed;
+use stratus_metrics as metrics;
+use stratus_metrics::timed;
 use tracing::Span;
 #[cfg(feature = "tracing")]
 use tracing::info_span;
@@ -57,7 +58,6 @@ use crate::eth::types::TransactionInput;
 #[cfg(feature = "metrics")]
 use crate::ext::OptionExt;
 use crate::ext::to_json_string;
-use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::utils::Semaphore;
 

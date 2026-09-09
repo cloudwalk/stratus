@@ -128,7 +128,7 @@ pub(super) fn expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenS
             LabelEntry::Parameter(parameter) => {
                 ensure_parameter_exists(parameter, &parameters)?;
                 before_body.push(quote! {
-                    let #label_variable = crate::infra::metrics::ToMetricLabelValue::to_metric_label_value(&#parameter);
+                    let #label_variable = ::stratus_metrics::ToMetricLabelValue::to_metric_label_value(&#parameter);
                 });
             }
             LabelEntry::InputClosure(closure) => {
@@ -136,7 +136,7 @@ pub(super) fn expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenS
                 let mut zero_argument_closure = closure.clone();
                 zero_argument_closure.inputs.clear();
                 before_body.push(quote! {
-                    let #label_variable: crate::infra::metrics::MetricLabelValue = {
+                    let #label_variable: ::stratus_metrics::MetricLabelValue = {
                         #(let #arguments = &#arguments;)*
                         (#zero_argument_closure)()
                     }
@@ -145,7 +145,7 @@ pub(super) fn expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenS
             }
             LabelEntry::ResultExpression(expression) => {
                 after_body.push(quote! {
-                    let #label_variable: crate::infra::metrics::MetricLabelValue = {
+                    let #label_variable: ::stratus_metrics::MetricLabelValue = {
                         #[allow(unused_variables)]
                         let result = __stratus_metrics_result;
                         #expression
@@ -161,7 +161,7 @@ pub(super) fn expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenS
     let publish = quote! {
         |__stratus_metrics_elapsed, __stratus_metrics_result| {
             #(#after_body)*
-            crate::infra::metrics::#metric_function(
+            ::stratus_metrics::#metric_function(
                 __stratus_metrics_elapsed
                 #(, #label_variables)*
             );
@@ -169,11 +169,11 @@ pub(super) fn expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenS
     };
     let record = if function.sig.asyncness.is_some() {
         quote! {
-            crate::infra::metrics::record_async(|| async #body, #publish).await
+            ::stratus_metrics::record_async(|| async #body, #publish).await
         }
     } else {
         quote! {
-            crate::infra::metrics::record(|| #body, #publish)
+            ::stratus_metrics::record(|| #body, #publish)
         }
     };
 

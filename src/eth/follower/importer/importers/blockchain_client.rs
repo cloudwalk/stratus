@@ -60,12 +60,12 @@ fn client_headers() -> HttpHeaderMap {
     headers
 }
 
-/// Returns the current machine name, falling back to "unknown" when it cannot be resolved.
+/// Returns the current machine name, falling back to "stratus" when it cannot be resolved.
 fn machine_name() -> String {
     match hostname::get() {
         Ok(name) => name.to_string_lossy().into_owned(),
         Err(e) => {
-            tracing::warn!(reason = ?e, "failed to get machine name, using \"stratus\"");
+            tracing::warn!(reason = ?e, r#"failed to get machine name, using "stratus""#);
             "stratus".to_string()
         }
     }

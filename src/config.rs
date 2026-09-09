@@ -10,6 +10,7 @@ use anyhow::anyhow;
 use clap::ArgGroup;
 use clap::Parser;
 use display_json::DebugAsJson;
+use stratus_metrics::MetricsConfig;
 use strum::VariantNames;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
@@ -21,7 +22,6 @@ use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::StorageConfig;
 use crate::infra::build_info;
 use crate::infra::kafka::KafkaConfig;
-use crate::infra::metrics::MetricsConfig;
 use crate::infra::sentry::SentryConfig;
 use crate::infra::tracing::TracingConfig;
 

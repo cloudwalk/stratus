@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::bail;
-use stratus_macros::timed;
+use stratus_metrics::timed;
 
 use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_state::RocksStorageState;

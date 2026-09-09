@@ -41,6 +41,7 @@ sugars = "=3.0.1"
 thiserror = "=2.0.18"
 uuid = { version = "=1.23.3", features = ["v7"]}
 stratus_macros = { path = "./crates/stratus_macros" }
+stratus_metrics = { path = "./crates/stratus_metrics", default-features = false }
 libc = "=0.2.186"
 hostname = "=0.4.2"
 
@@ -97,8 +98,6 @@ bytes = "=1.11.1"
 
 # observability
 log = "=0.4.29"
-metrics = "=0.24.2"
-metrics-exporter-prometheus = { version = "=0.17.2", optional = true }
 opentelemetry = "=0.32.0"
 opentelemetry_sdk = { version = "=0.32.1", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "=0.32.0", features = [
@@ -209,7 +208,7 @@ dev = []
 tools = ["dep:indicatif"]
 
 # Enable runtime metrics collection.
-metrics = ["dep:metrics-exporter-prometheus"]
+metrics = ["stratus_metrics/metrics"]
 
 # Enable runtime rocksdb metrics collection.
 rocks_metrics = ["metrics"]

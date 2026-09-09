@@ -3,14 +3,15 @@ use std::net::SocketAddr;
 use clap::Parser;
 use display_json::DebugAsJson;
 
-use crate::infra::metrics::metrics_for_consensus;
-use crate::infra::metrics::metrics_for_executor;
-use crate::infra::metrics::metrics_for_importer_online;
-use crate::infra::metrics::metrics_for_json_rpc;
-use crate::infra::metrics::metrics_for_kafka;
-use crate::infra::metrics::metrics_for_rocks;
-use crate::infra::metrics::metrics_for_storage_read;
-use crate::infra::metrics::metrics_for_storage_write;
+use crate::metrics_for_consensus;
+use crate::metrics_for_executor;
+use crate::metrics_for_importer_online;
+use crate::metrics_for_json_rpc;
+use crate::metrics_for_kafka;
+use crate::metrics_for_rocks;
+use crate::metrics_for_storage_read;
+use crate::metrics_for_storage_write;
+use crate::set_node_mode_provider;
 
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct MetricsConfig {
@@ -20,8 +21,14 @@ pub struct MetricsConfig {
 }
 
 impl MetricsConfig {
-    /// Inits application global metrics exporter.
-    pub fn init(&self) -> anyhow::Result<()> {
+    /// Inits the application global metrics exporter.
+    ///
+    /// The `node_mode` provider is queried by every recorded metric, so it must
+    /// read the current node mode instead of caching it.
+    pub fn init(&self, node_mode: impl Fn() -> String + Send + Sync + 'static, service_name: &str, version: &str) -> anyhow::Result<()> {
+        // node mode is read live by every recorded metric
+        set_node_mode_provider(node_mode);
+
         tracing::info!(address = %self.metrics_exporter_address, "creating metrics exporter");
 
         // get metric definitions
@@ -36,7 +43,7 @@ impl MetricsConfig {
         metrics.extend(metrics_for_kafka());
 
         // init metric exporter
-        init_metrics_exporter(self.metrics_exporter_address);
+        init_metrics_exporter(self.metrics_exporter_address, service_name, version);
 
         // init metric description (always after provider started)
         for metric in &metrics {
@@ -48,11 +55,11 @@ impl MetricsConfig {
 }
 
 #[cfg(feature = "metrics")]
-fn init_metrics_exporter(address: SocketAddr) {
+fn init_metrics_exporter(address: SocketAddr, service_name: &str, version: &str) {
     tracing::info!(%address, "creating prometheus metrics exporter");
     if let Err(e) = metrics_exporter_prometheus::PrometheusBuilder::new()
-        .add_global_label("service", crate::infra::build_info::service_name())
-        .add_global_label("version", crate::infra::build_info::version())
+        .add_global_label("service", service_name)
+        .add_global_label("version", version)
         .with_http_listener(address)
         .install()
     {
@@ -61,6 +68,6 @@ fn init_metrics_exporter(address: SocketAddr) {
 }
 
 #[cfg(not(feature = "metrics"))]
-fn init_metrics_exporter(_: SocketAddr) {
+fn init_metrics_exporter(_: SocketAddr, _: &str, _: &str) {
     tracing::info!("creating noop metrics exporter");
 }

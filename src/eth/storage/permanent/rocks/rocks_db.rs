@@ -6,12 +6,12 @@ use std::time::Instant;
 use anyhow::Context;
 use rocksdb::DB;
 use rocksdb::Options;
+#[cfg(feature = "metrics")]
+use stratus_metrics as metrics;
 
 use super::rocks_config::CacheSetting;
 use super::rocks_config::ColumnFamilyConfig;
 use super::rocks_config::DbConfig;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 
 fn enable_populate_on_flush_current_state_caches(db: &DB, cf_configs: &BTreeMap<&'static str, ColumnFamilyConfig>) -> anyhow::Result<()> {
     const PREPOPULATE_BLOCK_CACHE_ON_FLUSH: &str = "{prepopulate_block_cache=kFlushOnly;}";

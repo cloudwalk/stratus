@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use alloy_rpc_types_trace::geth::GethTrace;
+use stratus_metrics as metrics;
 
 use crate::GlobalState;
 use crate::eth::executor::ExecutionMetrics;
@@ -21,7 +22,6 @@ use crate::eth::storage::StratusStorage;
 use crate::eth::types::StratusError;
 use crate::eth::types::UnexpectedError;
 use crate::ext::spawn_thread;
-use crate::infra::metrics;
 use crate::infra::tracing::warn_task_tx_closed;
 
 /// Manages EVM pool and communication channels.

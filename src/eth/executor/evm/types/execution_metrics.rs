@@ -3,6 +3,9 @@ use std::ops::AddAssign;
 use std::time::Duration;
 
 #[cfg(feature = "metrics")]
+use stratus_metrics as metrics;
+
+#[cfg(feature = "metrics")]
 use crate::eth::codegen;
 #[cfg(feature = "metrics")]
 use crate::eth::codegen::ContractName;
@@ -13,8 +16,6 @@ use crate::eth::types::Address;
 use crate::eth::types::Bytes;
 use crate::eth::types::ExecutionKind;
 use crate::eth::types::Gas;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ReadStats {

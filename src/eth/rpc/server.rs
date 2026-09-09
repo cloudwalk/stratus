@@ -36,6 +36,7 @@ use parking_lot::RwLock;
 use serde_json::json;
 use serde_json::value::RawValue;
 use serde_json::value::to_raw_value;
+use stratus_metrics as metrics;
 use tokio::runtime::Handle;
 use tokio::select;
 use tokio::sync::Semaphore;
@@ -111,7 +112,6 @@ use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::infra::build_info;
 use crate::infra::kafka::KafkaConfig;
-use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
 // -----------------------------------------------------------------------------
