@@ -36,7 +36,7 @@ temp_*-rocksdb/
 tests/importer-offline-database/*
 
 # Build
-crates/*/target
+crates/**/target
 /target
 vendor
 stratus.log
