@@ -6193,7 +6193,6 @@ dependencies = [
  "alloy-sol-types",
  "alloy-trie",
  "anyhow",
- "async-trait",
  "base64",
  "bincode",
  "bytes",

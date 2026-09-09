@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
+use stratus_macros::timed;
 
 use crate::eth::executor::State;
 use crate::eth::executor::types::state::Incomplete;
@@ -25,10 +25,10 @@ impl ImportData for <ReplicationWorker as ImporterWorker>::DataType {
     }
 }
 
-#[async_trait]
 impl ImporterWorker for ReplicationWorker {
     type DataType = (Block, State<Incomplete>);
 
+    #[timed(import_online_mined_block)]
     async fn import(&self, (block, changes): Self::DataType) -> anyhow::Result<usize> {
         tracing::info!(block_number = %block.number(), "received block with changes");
 

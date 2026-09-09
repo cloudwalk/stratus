@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
-
 use crate::eth::executor::State;
 use crate::eth::executor::types::state::Incomplete;
 use crate::eth::follower::importer::BlockchainClient;
@@ -16,7 +14,6 @@ pub struct BlockWithChangesFetcher {
     pub chain: Arc<BlockchainClient>,
 }
 
-#[async_trait]
 impl DataFetcher for BlockWithChangesFetcher {
     type FetchedType = (BlockRocksdb, BlockChangesRocksdb);
     // If we complete the ExecutionChanges in the fetcher we risk completing with data that is altered by

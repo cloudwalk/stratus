@@ -1,8 +1,8 @@
+pub(crate) mod config;
 mod fetchers;
-pub(crate) mod importer_config;
-#[allow(clippy::module_inception)]
-mod importer_supervisor;
 mod importers;
+#[allow(clippy::module_inception)]
+mod supervisor;
 use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
@@ -10,9 +10,9 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::bail;
-pub use importer_config::ImporterConfig;
-pub use importer_supervisor::ImporterConsensus;
+pub use config::ImporterConfig;
 pub use importers::BlockchainClient;
+pub use supervisor::ImporterConsensus;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 use tracing::Span;
@@ -93,13 +93,12 @@ pub async fn send_block_to_kafka(kafka_connector: &Option<KafkaConnector>, block
 
 /// Record metrics for imported block
 #[cfg(feature = "metrics")]
-fn record_import_metrics(block_tx_len: usize, duration: std::time::Duration) {
+fn record_import_metrics(block_tx_len: usize) {
     metrics::inc_n_importer_online_transactions_total(block_tx_len as u64);
-    metrics::inc_import_online_mined_block(duration);
 }
 
 #[cfg(not(feature = "metrics"))]
-fn record_import_metrics(_block_tx_len: usize, _duration: std::time::Duration) {}
+fn record_import_metrics(_block_tx_len: usize) {}
 
 /// Record metrics for fetched block
 #[cfg(feature = "metrics")]
@@ -315,7 +314,7 @@ mod tests {
     /// Mines a block applying `changes` (mirrors the helper in `stratus_storage` tests).
     fn mine_block(storage: &StratusStorage, state: State<Complete>) {
         let header = storage.read_pending_block_header();
-        let evm_input = TransactionExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
+        let evm_input = TransactionExecutionInput::create(&TransactionInput::default(), header);
 
         let result = TransactionExecutionResult {
             result: ExecutionResult::Success,
@@ -410,7 +409,7 @@ mod tests {
         // Block 3 did not change B.balance, so the committed value must equal block 3's pre-state
         // (block 2 = 200). Completing at import time (perm caught up) yields 200; completing at
         // post-process time (perm behind) would yield the stale 100.
-        let account = storage.read_account(address, ExecutionKind::RPC(PointInTime::Latest)).expect("read account");
+        let (account, _) = storage.read_account(address, ExecutionKind::RPC(PointInTime::Latest)).expect("read account");
         assert_eq!(
             account.balance,
             Wei::from(200u64),

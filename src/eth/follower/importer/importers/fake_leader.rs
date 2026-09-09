@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::bail;
-use async_trait::async_trait;
+use stratus_macros::timed;
 
 use crate::GlobalState;
 use crate::eth::executor::Executor;
@@ -27,16 +27,16 @@ impl ImportData for <FakeLeaderWorker as ImporterWorker>::DataType {
     }
 }
 
-#[async_trait]
 impl ImporterWorker for FakeLeaderWorker {
     type DataType = <FakeLeaderFetcher as DataFetcher>::PostProcessType;
 
+    #[timed(import_online_mined_block)]
     async fn import(&self, ((block, _), (expected_block, expected_changes)): Self::DataType) -> anyhow::Result<usize> {
         let block_tx_len = block.transactions.len();
         self.storage.set_pending_from_external(&block);
         for tx in block.0.transactions.into_transactions() {
             tracing::info!(?tx, "executing tx as fake miner");
-            if let Err(e) = self.executor.execute_local_transaction(tx.try_into()?) {
+            if let Err(e) = self.executor.execute_local_transaction(tx.try_into()?, None) {
                 match e {
                     StratusError::Executor(ExecutorError::Nonce { transaction: _, account: _ }) => {
                         tracing::warn!(reason = ?e, "transaction failed, was this node restarted?");

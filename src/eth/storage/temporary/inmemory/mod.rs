@@ -1,12 +1,16 @@
 //! In-memory storage implementations.
 
+use stratus_macros::timed;
+
 use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::types::state::Complete;
 use crate::eth::storage::StorageError;
+use crate::eth::storage::stratus_storage::label;
 use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTemporaryStorage;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
+use crate::eth::types::BlockInfo;
 use crate::eth::types::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::types::Bytes;
@@ -14,7 +18,6 @@ use crate::eth::types::Hash;
 #[cfg(feature = "dev")]
 use crate::eth::types::Nonce;
 use crate::eth::types::PendingBlock;
-use crate::eth::types::PendingBlockHeader;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::UnixTime;
@@ -35,7 +38,7 @@ impl InMemoryTemporaryStorage {
         }
     }
 
-    pub fn read_pending_block_header(&self) -> PendingBlockHeader {
+    pub fn read_pending_block_header(&self) -> BlockInfo {
         self.transaction_storage.read_pending_block_header()
     }
 
@@ -60,7 +63,8 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.finish_pending_block()
     }
 
-    pub fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
+    #[timed(storage_read_transaction, labels(storage = label::TEMP, hit = result.is_some(), success = true))]
+    pub fn read_pending_execution(&self, hash: Hash) -> Option<TransactionExecution> {
         self.transaction_storage.read_pending_execution(hash)
     }
 
@@ -92,8 +96,9 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.save_account_code(address, code)
     }
 
-    pub fn reset(&self) -> anyhow::Result<(), StorageError> {
-        self.transaction_storage.reset()
+    #[cfg(feature = "dev")]
+    pub fn reset(&self) {
+        self.transaction_storage.reset();
     }
 }
 
