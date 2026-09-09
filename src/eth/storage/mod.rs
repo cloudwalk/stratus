@@ -9,13 +9,14 @@ pub use stratus_storage::MinedPointInTime;
 pub use stratus_storage::StratusStorage;
 pub use temporary::InMemoryTemporaryStorage;
 pub use temporary::TemporaryStorageConfig;
-
+pub use types::FoundAt;
 mod cache;
 mod error;
 pub mod permanent;
 mod resolve_pending;
 mod stratus_storage;
 mod temporary;
+mod types;
 
 use std::sync::Arc;
 
@@ -25,7 +26,6 @@ pub use temporary::compute_pending_block_number;
 
 pub use crate::eth::types::ExecutionKind;
 use crate::eth::types::StratusError;
-pub use crate::eth::types::TxCount;
 
 // -----------------------------------------------------------------------------
 // Config

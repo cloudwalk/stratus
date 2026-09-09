@@ -2,12 +2,16 @@ use std::collections::HashMap;
 
 use serde_with::serde_as;
 
+use crate::eth::executor::types::state::AccountChanges;
+use crate::eth::executor::types::state::Change;
+use crate::eth::executor::types::state::Final;
 use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
 use crate::eth::storage::permanent::rocks::types::SlotIndexRocksdb;
 use crate::eth::storage::permanent::rocks::types::SlotValueRocksdb;
 use crate::eth::storage::permanent::rocks::types::bytecode::BytecodeRocksdb;
 use crate::eth::storage::permanent::rocks::types::nonce::NonceRocksdb;
 use crate::eth::storage::permanent::rocks::types::wei::WeiRocksdb;
+use crate::ext::OptionExt;
 
 #[derive(Debug, Clone, PartialEq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize, Default)]
 #[cfg_attr(test, derive(fake::Dummy))]
@@ -44,5 +48,15 @@ impl BlockChangesRocksdb {
 impl From<()> for BlockChangesRocksdb {
     fn from(_: ()) -> Self {
         unimplemented!()
+    }
+}
+
+impl From<&AccountChanges<Final>> for AccountChangesRocksdb {
+    fn from(value: &AccountChanges<Final>) -> Self {
+        Self {
+            balance: value.balance.changed_ref().copied().map_into(),
+            nonce: value.nonce.changed_ref().copied().map_into(),
+            bytecode: value.bytecode.changed_ref().cloned().map(|opt| opt.map_into()),
+        }
     }
 }

@@ -104,8 +104,10 @@ describe("JSON-RPC", () => {
                 return;
             }
 
-            await send("stratus_disableUnknownClients");
-            await send("stratus_enableUnknownClients");
+            // client identification is required to toggle unknown clients once they are disabled
+            const identifiedHeaders = { "x-app": "test-client" };
+            await send("stratus_disableUnknownClients", [], identifiedHeaders);
+            await send("stratus_enableUnknownClients", [], identifiedHeaders);
 
             // Request without client identification should now succeed
             const blockNumber = await send("eth_blockNumber");

@@ -5,17 +5,20 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::bail;
+use stratus_macros::timed;
 
 use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_state::RocksStorageState;
 use super::types::BlockRocksdb;
 use crate::GlobalState;
-use crate::eth::executor::Changes;
+use crate::eth::executor::State;
+use crate::eth::executor::types::state::Final;
 use crate::eth::rpc::BlockFilter;
 use crate::eth::rpc::LogFilter;
 use crate::eth::storage::MinedPointInTime;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+use crate::eth::storage::stratus_storage::label;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::Block;
@@ -28,6 +31,7 @@ use crate::eth::types::LogMessage;
 use crate::eth::types::Nonce;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
+use crate::eth::types::SlotValue;
 use crate::eth::types::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
@@ -138,11 +142,11 @@ impl RocksPermanentStorage {
     // -------------------------------------------------------------------------
 
     pub fn read_mined_block_number(&self) -> BlockNumber {
-        self.block_number.load(Ordering::SeqCst).into()
+        self.block_number.load(Ordering::Acquire).into()
     }
 
     pub fn set_mined_block_number(&self, number: BlockNumber) {
-        self.block_number.store(number.as_u32(), Ordering::SeqCst);
+        self.block_number.store(number.as_u32(), Ordering::Release);
     }
 
     pub fn has_genesis(&self) -> Result<bool, StorageError> {
@@ -176,6 +180,11 @@ impl RocksPermanentStorage {
             })
     }
 
+    #[allow(clippy::type_complexity)]
+    pub fn read_slots(&self, slot_keys: Vec<(Address, SlotIndex)>) -> anyhow::Result<Vec<((Address, SlotIndex), SlotValue)>, StorageError> {
+        self.state.read_slots(slot_keys).map_err(|err| StorageError::RocksError { err })
+    }
+
     pub fn read_block(&self, selection: BlockFilter) -> anyhow::Result<Option<Block>, StorageError> {
         let block = self.state.read_block(selection).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read block in RocksPermanent");
@@ -196,6 +205,7 @@ impl RocksPermanentStorage {
         result.map_err(|err| StorageError::RocksError { err })
     }
 
+    #[timed(storage_read_transaction, labels(storage = label::PERM, hit = result.as_ref().ok().and_then(Option::as_ref).is_some(), success = result.is_ok()))]
     pub fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>, StorageError> {
         self.state
             .read_transaction(hash)
@@ -211,23 +221,7 @@ impl RocksPermanentStorage {
         })
     }
 
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: Changes) -> anyhow::Result<(), StorageError> {
-        #[cfg(feature = "rocks_metrics")]
-        {
-            self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
-                tracing::error!(reason = ?e, "failed to export metrics in RocksPermanent");
-            })?;
-        }
-
-        self.state
-            .save_genesis_block(block, accounts, account_changes)
-            .map_err(|err| StorageError::RocksError { err })
-            .inspect_err(|e| {
-                tracing::error!(reason = ?e, "failed to save genesis block in RocksPermanent");
-            })
-    }
-
-    pub fn save_block(&self, block: Block, account_changes: Changes) -> anyhow::Result<(), StorageError> {
+    pub fn save_block(&self, block: Block, account_changes: State<Final>) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
             self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {

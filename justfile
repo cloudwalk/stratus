@@ -6,7 +6,7 @@ export RUST_BACKTRACE := env("RUST_BACKTRACE", "0")
 export CARGO_COMMAND := env("CARGO_COMMAND", "")
 
 # Global arguments that can be passed to receipts.
-nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly" } else { "" }
+nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly-2026-05-08" } else { "" }
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 profile_flag := if env("STRATUS_PROFILE", "") != "" { "--profile " + env("STRATUS_PROFILE", "") } else { "" }
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
@@ -62,7 +62,7 @@ doc nightly-version="":
 
 # Stratus: Lint and format code
 lint:
-    @just _lint
+    @just _lint -2026-05-08
 
 # Stratus: Lint and check code formatting
 lint-check nightly-version="" clippy-flags="-D warnings -A clippy::unwrap_used -A clippy::expect_used -A clippy::panic":
@@ -403,6 +403,76 @@ _e2e-leader-follower-up-impl test="brlc" use_block_changes_replication="false":
 e2e-leader-follower-up test="brlc" use_block_changes_replication="false":
     just _e2e-leader-follower-up-impl {{test}} {{use_block_changes_replication}}
     just e2e-leader-follower-down
+
+# E2E: Leader & Follower with small response size limits, to exercise importer response pagination
+e2e-leader-follower-pagination:
+    #!/bin/bash
+
+    # leader with a small response limit, forcing oversized importer responses to be paginated
+    MAX_RESPONSE_SIZE_BYTES=8192 just e2e-leader
+
+    just e2e-follower
+
+    cd e2e
+    if [ ! -d node_modules ]; then npm install; fi
+    npx hardhat test test/follower/e2e-pagination.test.ts --network stratus --bail
+    exit_code=$?
+    cd ..
+
+    just e2e-leader-follower-down
+    exit $exit_code
+
+# E2E: Leader & Follower pagination in block changes replication mode (stratus_getBlockWithChanges)
+e2e-leader-follower-pagination-changes:
+    #!/bin/bash
+
+    # leader with a small response limit, forcing oversized with-changes responses to be paginated
+    MAX_RESPONSE_SIZE_BYTES=8192 just e2e-leader
+
+    # follower in block changes replication mode
+    just e2e-follower test/follower/e2e-pagination-changes.test.ts true
+
+    cd e2e
+    if [ ! -d node_modules ]; then npm install; fi
+    npx hardhat test test/follower/e2e-pagination-changes.test.ts --network stratus --bail
+    exit_code=$?
+    cd ..
+
+    just e2e-leader-follower-down
+    exit $exit_code
+
+# E2E: Leader & Follower pagination catch-up: the follower starts several fat blocks behind
+e2e-leader-follower-pagination-catchup:
+    #!/bin/bash
+
+    rm -f e2e/pagination-catchup.json
+
+    # leader with a small response limit; the follower is still down
+    MAX_RESPONSE_SIZE_BYTES=8192 just e2e-leader
+
+    # mine several fat blocks while the follower is down, persisting them for verification
+    cd e2e
+    if [ ! -d node_modules ]; then npm install; fi
+    npx hardhat test test/follower/e2e-pagination-catchup-setup.test.ts --network stratus --bail
+    exit_code=$?
+    cd ..
+    if [ "$exit_code" -ne 0 ]; then
+        just e2e-leader-follower-down
+        rm -f e2e/pagination-catchup.json
+        exit $exit_code
+    fi
+
+    # follower starts several fat blocks behind
+    just e2e-follower
+
+    cd e2e
+    npx hardhat test test/follower/e2e-pagination-catchup-verify.test.ts --network stratus --bail
+    exit_code=$?
+    cd ..
+
+    just e2e-leader-follower-down
+    rm -f e2e/pagination-catchup.json
+    exit $exit_code
 
 # E2E: Leader & Follower Down
 e2e-leader-follower-down:

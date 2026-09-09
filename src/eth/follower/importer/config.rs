@@ -10,11 +10,11 @@ use crate::NodeMode;
 use crate::eth::executor::Executor;
 use crate::eth::follower::ConsensusError;
 use crate::eth::follower::ImporterError;
+use crate::eth::follower::importer::BlockchainClient;
 use crate::eth::follower::importer::ImporterMode;
-use crate::eth::follower::importer::importer_supervisor::ImporterConsensus;
-use crate::eth::follower::importer::importer_supervisor::start_importer;
+use crate::eth::follower::importer::supervisor::ImporterConsensus;
+use crate::eth::follower::importer::supervisor::start_importer;
 use crate::eth::miner::Miner;
-use crate::eth::rpc::BlockchainClient;
 use crate::eth::rpc::RpcContext;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::BlockNumber;
@@ -40,20 +40,16 @@ pub struct ImporterConfig {
     #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s", required = false)]
     pub external_rpc_timeout: Duration,
 
-    /// Maximum response size in bytes for external RPC requests
-    #[arg(
-        long = "external-rpc-max-response-size-bytes",
-        env = "EXTERNAL_RPC_MAX_RESPONSE_SIZE_BYTES",
-        default_value = "10485760"
-    )]
-    pub external_rpc_max_response_size_bytes: u32,
-
     #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms", required = false)]
     pub sync_interval: Duration,
 
     /// Enable replication of block changes
     #[arg(long = "enable-block-changes-replication", env = "ENABLE_BLOCK_CHANGES_REPLICATION", default_value = "false")]
     pub enable_block_changes_replication: bool,
+
+    /// Compute an access list for transactions before forwarding them to the leader.
+    #[arg(long = "forward-access-list", env = "FORWARD_ACCESS_LIST", default_value = "true", required = false)]
+    pub forward_access_list: bool,
 
     /// Specify the block to stop importing. (useful for validating a follower db against a fake leader)
     #[arg(long = "stop-at-block", env = "STOP_AT_BLOCK")]
@@ -97,19 +93,13 @@ impl ImporterConfig {
     ) -> anyhow::Result<Option<Arc<ImporterConsensus>>> {
         const TASK_NAME: &str = "importer::init";
         tracing::info!("creating importer for follower node");
-        let chain = Arc::new(
-            BlockchainClient::new_http_ws(
-                &self.external_rpc,
-                self.external_rpc_ws.as_deref(),
-                self.external_rpc_timeout,
-                self.external_rpc_max_response_size_bytes,
-            )
-            .await?,
-        );
+        let chain = Arc::new(BlockchainClient::new_http_ws(&self.external_rpc, self.external_rpc_ws.as_deref(), self.external_rpc_timeout).await?);
 
         let consensus = Arc::new(ImporterConsensus {
             storage: Arc::clone(&storage),
             chain: Arc::clone(&chain),
+            executor: Arc::clone(&executor),
+            forward_access_list: self.forward_access_list,
         });
 
         spawn(

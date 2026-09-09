@@ -13,8 +13,9 @@ mod execution_metrics;
 mod input;
 mod output;
 
-pub use execution_metrics::EvmExecutionMetrics;
-pub use execution_metrics::SlotAccessMetrics;
+pub use execution_metrics::ExecutionMetrics;
+pub use execution_metrics::ExecutionMetricsContext;
+pub use execution_metrics::StorageMetrics;
 pub use input::EvmInput;
 pub use input::call_execution::CallExecutionInput;
 pub use input::inspector::InspectorInput;
@@ -22,6 +23,7 @@ pub use input::transaction_execution::TransactionExecutionInput;
 pub use output::access_list::AccessListOutput;
 pub use output::call_execution::CallExecutionOutput;
 pub use output::transaction_execution::TransactionExecutionOutput;
+pub use output::transaction_execution::TransactionExecutionResult;
 
 /// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
 #[cfg(feature = "dev")]

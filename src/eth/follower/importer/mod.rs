@@ -1,8 +1,8 @@
+pub(crate) mod config;
 mod fetchers;
-pub(crate) mod importer_config;
-#[allow(clippy::module_inception)]
-mod importer_supervisor;
 mod importers;
+#[allow(clippy::module_inception)]
+mod supervisor;
 use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
@@ -10,14 +10,14 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::bail;
-pub use importer_config::ImporterConfig;
-pub use importer_supervisor::ImporterConsensus;
+pub use config::ImporterConfig;
+pub use importers::BlockchainClient;
+pub use supervisor::ImporterConsensus;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 use tracing::Span;
 
 use crate::GlobalState;
-use crate::eth::rpc::BlockchainClient;
 use crate::eth::types::Block;
 use crate::eth::types::BlockNumber;
 use crate::ext::DisplayExt;
@@ -93,13 +93,12 @@ pub async fn send_block_to_kafka(kafka_connector: &Option<KafkaConnector>, block
 
 /// Record metrics for imported block
 #[cfg(feature = "metrics")]
-fn record_import_metrics(block_tx_len: usize, duration: std::time::Duration) {
+fn record_import_metrics(block_tx_len: usize) {
     metrics::inc_n_importer_online_transactions_total(block_tx_len as u64);
-    metrics::inc_import_online_mined_block(duration);
 }
 
 #[cfg(not(feature = "metrics"))]
-fn record_import_metrics(_block_tx_len: usize, _duration: std::time::Duration) {}
+fn record_import_metrics(_block_tx_len: usize) {}
 
 /// Record metrics for fetched block
 #[cfg(feature = "metrics")]
@@ -270,20 +269,21 @@ mod tests {
 
     use hash_hasher::HashBuildHasher;
 
-    use crate::eth::executor::AccountChanges;
-    use crate::eth::executor::Changes;
-    use crate::eth::executor::CompleteValue;
+    use super::BlockchainClient;
     use crate::eth::executor::ExecutionResult;
+    use crate::eth::executor::State;
     use crate::eth::executor::TransactionExecution;
     use crate::eth::executor::TransactionExecutionInput;
-    use crate::eth::executor::TransactionExecutionOutput;
+    use crate::eth::executor::TransactionExecutionResult;
+    use crate::eth::executor::types::state::AccountChanges;
+    use crate::eth::executor::types::state::Complete;
+    use crate::eth::executor::types::state::CompleteValue;
     use crate::eth::follower::importer::fetchers::DataFetcher;
     use crate::eth::follower::importer::fetchers::block_with_changes::BlockWithChangesFetcher;
     use crate::eth::follower::importer::importers::ImporterWorker;
     use crate::eth::follower::importer::importers::replication::ReplicationWorker;
     use crate::eth::miner::Miner;
     use crate::eth::miner::MinerMode;
-    use crate::eth::rpc::BlockchainClient;
     use crate::eth::storage::ExecutionKind;
     use crate::eth::storage::StratusStorage;
     use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
@@ -301,7 +301,7 @@ mod tests {
     use crate::eth::types::UnixTime;
     use crate::eth::types::Wei;
 
-    impl AccountChanges {
+    impl AccountChanges<Complete> {
         pub fn from_changed(account: Account) -> Self {
             Self {
                 nonce: CompleteValue::Changed(account.nonce),
@@ -312,26 +312,25 @@ mod tests {
     }
 
     /// Mines a block applying `changes` (mirrors the helper in `stratus_storage` tests).
-    fn mine_block(storage: &StratusStorage, changes: Changes) {
-        let (header, _) = storage.read_pending_block_header();
-        let evm_input = TransactionExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
+    fn mine_block(storage: &StratusStorage, state: State<Complete>) {
+        let header = storage.read_pending_block_header();
+        let evm_input = TransactionExecutionInput::create(&TransactionInput::default(), header);
 
-        let result = TransactionExecutionOutput {
+        let result = TransactionExecutionResult {
             result: ExecutionResult::Success,
-            changes,
             ..Default::default()
         };
 
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
-        storage.save_execution(tx).expect("save execution");
+        storage.save_execution(tx, state).expect("save execution");
 
-        let (block, block_changes) = storage.finish_pending_block().expect("finish pending block");
+        let (block, block_changes) = storage.finish_pending_block();
         storage.save_block(block.into(), block_changes).expect("save block");
     }
 
     /// Builds `ExecutionChanges` that set `address`'s balance to `balance` (nonce/bytecode untouched).
-    fn balance_changes(address: Address, balance: Wei) -> Changes {
-        let mut changes = Changes::default();
+    fn balance_changes(address: Address, balance: Wei) -> State<Complete> {
+        let mut changes = State::default();
         changes
             .accounts
             .insert(address, AccountChanges::from_changed(Account::new_with_balance(address, balance)));
@@ -410,7 +409,7 @@ mod tests {
         // Block 3 did not change B.balance, so the committed value must equal block 3's pre-state
         // (block 2 = 200). Completing at import time (perm caught up) yields 200; completing at
         // post-process time (perm behind) would yield the stale 100.
-        let account = storage.read_account(address, ExecutionKind::RPC(PointInTime::Latest)).expect("read account");
+        let (account, _) = storage.read_account(address, ExecutionKind::RPC(PointInTime::Latest)).expect("read account");
         assert_eq!(
             account.balance,
             Wei::from(200u64),
