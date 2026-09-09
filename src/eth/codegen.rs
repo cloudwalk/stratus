@@ -3,10 +3,10 @@
 use std::borrow::Cow;
 
 use alloy_dyn_abi::DynSolType;
+use stratus_metrics as metrics;
 
 use crate::eth::rpc::LogFilter;
 use crate::eth::types::Address;
-use crate::infra::metrics;
 
 include!(concat!(env!("OUT_DIR"), "/contracts.rs"));
 include!(concat!(env!("OUT_DIR"), "/signatures.rs"));

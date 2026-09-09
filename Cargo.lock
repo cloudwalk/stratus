@@ -6227,8 +6227,6 @@ dependencies = [
  "jsonrpsee",
  "libc",
  "log",
- "metrics",
- "metrics-exporter-prometheus",
  "nanoid",
  "nom 8.0.0",
  "oneshot",
@@ -6262,6 +6260,7 @@ dependencies = [
  "smallvec",
  "static_assertions",
  "stratus_macros",
+ "stratus_metrics",
  "strum",
  "sugars",
  "tempfile",
@@ -6281,6 +6280,31 @@ dependencies = [
 
 [[package]]
 name = "stratus_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.104",
+]
+
+[[package]]
+name = "stratus_metrics"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "display_json",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "serde",
+ "serde_json",
+ "stratus_metrics_macros",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "stratus_metrics_macros"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",

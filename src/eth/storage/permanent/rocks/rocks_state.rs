@@ -17,6 +17,8 @@ use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
 use rocksdb::WriteOptions;
 use serde::Serialize;
+#[cfg(feature = "metrics")]
+use stratus_metrics as metrics;
 use sugars::btmap;
 
 use super::cf_versions::CfAccountSlotsHistoryValue;
@@ -64,8 +66,6 @@ use crate::eth::types::SlotValue;
 use crate::eth::types::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 use crate::log_and_err;
 
 cfg_if::cfg_if! {
@@ -77,7 +77,7 @@ cfg_if::cfg_if! {
         use std::collections::HashMap;
 
 
-        use crate::infra::metrics::{Count, HistogramInt, Sum};
+        use stratus_metrics::{Count, HistogramInt, Sum};
     }
 }
 

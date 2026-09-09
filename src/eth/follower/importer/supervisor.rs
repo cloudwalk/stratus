@@ -4,6 +4,8 @@ use std::time::Duration;
 
 use anyhow::bail;
 use futures::try_join;
+#[cfg(feature = "metrics")]
+use stratus_metrics as metrics;
 use tokio::sync::mpsc;
 
 use crate::eth::executor::Executor;
@@ -28,8 +30,6 @@ use crate::eth::storage::StratusStorage;
 use crate::eth::types::BlockNumber;
 use crate::ext::spawn;
 use crate::infra::kafka::KafkaConnector;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 use crate::utils::DropTimer;
 
 type ReexecutionFollower = ImporterSupervisor<BlockWithReceiptsFetcher, ReexecutionWorker>;

@@ -3,10 +3,9 @@ use std::sync::Arc;
 use derive_more::Deref;
 use parking_lot::Condvar;
 use parking_lot::Mutex;
-use tokio::time::Instant;
-
 #[cfg(feature = "metrics")]
-use crate::infra::metrics;
+use stratus_metrics as metrics;
+use tokio::time::Instant;
 
 /// Amount of bytes in one GB (technically, GiB).
 pub const GIGABYTE: usize = 1024 * 1024 * 1024;

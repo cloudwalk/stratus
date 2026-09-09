@@ -36,6 +36,7 @@ use parking_lot::RwLock;
 use serde_json::json;
 use serde_json::value::RawValue;
 use serde_json::value::to_raw_value;
+use stratus_metrics as metrics;
 use tokio::runtime::Handle;
 use tokio::select;
 use tokio::sync::Semaphore;
@@ -111,7 +112,6 @@ use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::infra::build_info;
 use crate::infra::kafka::KafkaConfig;
-use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
 // -----------------------------------------------------------------------------
@@ -1758,7 +1758,7 @@ mod tests {
     fn create_simple_test_call_structure() -> CallFrame {
         // Create deepest level calls (level 3)
         let deep_call_1 = CallFrame {
-            from: "0x562689c910361ae21d12eadafbfca727b3bcbc24".parse::<Address>().unwrap(), // Maps to Compound_Agent_4
+            from: "0xBfa36148f7c992AFA5519dC51Cc7c11397b98342".parse::<Address>().unwrap(), // Maps to CreditAgentCapybaraV2
             to: Some("0xa9a55a81a4c085ec0c31585aed4cfb09d78dfd53".parse::<Address>().unwrap()), // Maps to BRLCToken
             input: Bytes::from(
                 const_hex::decode(
@@ -1780,8 +1780,8 @@ mod tests {
         };
 
         let deep_call_2 = CallFrame {
-            from: "0x3181ab023a4d4788754258be5a3b8cf3d8276b98".parse::<Address>().unwrap(), // Maps to Cashier_BRLC_v2
-            to: Some("0x6d8da3c039d1d78622f27d4739e1e00b324afaaa".parse::<Address>().unwrap()), // Maps to USJIMToken
+            from: "0x6ac607aBA84f672C092838a5c32c22907765F666".parse::<Address>().unwrap(), // Maps to CashierRootBrlcCommon
+            to: Some("0x6d8da3c039d1d78622f27d4739e1e00b324afaaa".parse::<Address>().unwrap()), // Maps to UsJimToken
             input: Bytes::from(
                 const_hex::decode(
                     "dd62ed3e000000000000000000000000742d35cc6634c0532925a3b8d7c9be8813eeb02e000000000000000000000000a0b86a33e6441366ac2ed2e3a8da88e61c66a5e1", // allowance function
@@ -1803,8 +1803,8 @@ mod tests {
 
         // Create level 2 nested calls using real contract addresses from CONTRACTS map
         let nested_call_1 = CallFrame {
-            from: "0xa9a55a81a4c085ec0c31585aed4cfb09d78dfd53".parse::<Address>().unwrap(), // Maps to BRLCToken
-            to: Some("0x6d8da3c039d1d78622f27d4739e1e00b324afaaa".parse::<Address>().unwrap()), // Maps to USJIMToken
+            from: "0xa9a55a81a4c085ec0c31585aed4cfb09d78dfd53".parse::<Address>().unwrap(), // Maps to BrlcToken
+            to: Some("0x6d8da3c039d1d78622f27d4739e1e00b324afaaa".parse::<Address>().unwrap()), // Maps to UsJimToken
             input: Bytes::from(
                 const_hex::decode(
                     "a9059cbb000000000000000000000000742d35cc6634c0532925a3b8d7c9be8813eeb02e0000000000000000000000000000000000000000000000000de0b6b3a7640000", // transfer function
@@ -1825,8 +1825,8 @@ mod tests {
         };
 
         let nested_call_2 = CallFrame {
-            from: "0x6d8da3c039d1d78622f27d4739e1e00b324afaaa".parse::<Address>().unwrap(), // Maps to USJIMToken
-            to: Some("0x3181ab023a4d4788754258be5a3b8cf3d8276b98".parse::<Address>().unwrap()), // Maps to Cashier_BRLC_v2
+            from: "0x6d8da3c039d1d78622f27d4739e1e00b324afaaa".parse::<Address>().unwrap(), // Maps to BrlcToken
+            to: Some("0x6ac607aBA84f672C092838a5c32c22907765F666".parse::<Address>().unwrap()), // Maps to CashierRootBrlcCommon
             input: Bytes::from(
                 const_hex::decode(
                     "095ea7b3000000000000000000000000742d35cc6634c0532925a3b8d7c9be8813eeb02e0000000000000000000000000000000000000000000000000de0b6b3a7640000", // approve function
@@ -1849,7 +1849,7 @@ mod tests {
         // Create main call containing nested calls (level 1)
         CallFrame {
             from: "0x742d35Cc6634C0532925a3b8D7C9be8813eeb02e".parse::<Address>().unwrap(),
-            to: Some("0xa9a55a81a4c085ec0c31585aed4cfb09d78dfd53".parse::<Address>().unwrap()), // BRLCToken
+            to: Some("0xa9a55a81a4c085ec0c31585aed4cfb09d78dfd53".parse::<Address>().unwrap()), // BrlcToken
             input: Bytes::from(
                 const_hex::decode(
                     "23b872dd000000000000000000000000742d35cc6634c0532925a3b8d7c9be8813eeb02e000000000000000000000000a0b86a33e6441366ac2ed2e3a8da88e61c66a5e10000000000000000000000000000000000000000000000000de0b6b3a7640000", // transferFrom function
@@ -1880,10 +1880,10 @@ mod tests {
         let result = enhance_trace_with_decoded_info(&geth_trace);
         let result_str = serde_json::to_string_pretty(&result).unwrap();
 
-        assert!(result_str.contains("Cashier_BRLC_v2"));
-        assert!(result_str.contains("BRLCToken"));
-        assert!(result_str.contains("USJIMToken"));
-        assert!(result_str.contains("Compound_Agent_4"));
+        assert!(result_str.contains("CashierRootBrlcCommon"));
+        assert!(result_str.contains("BrlcToken"));
+        assert!(result_str.contains("UsJimToken"));
+        assert!(result_str.contains("CreditAgentCapybaraV2"));
 
         // Verify function signature decoding for all the expected functions
         assert!(result_str.contains("transfer(address,uint256)"));

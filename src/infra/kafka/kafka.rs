@@ -12,7 +12,7 @@ use rdkafka::producer::DeliveryFuture;
 use rdkafka::producer::FutureProducer;
 use rdkafka::producer::FutureRecord;
 use rdkafka::producer::future_producer::OwnedDeliveryResult;
-use stratus_macros::timed;
+use stratus_metrics::timed;
 
 use crate::ledger::events::Event;
 use crate::log_and_err;

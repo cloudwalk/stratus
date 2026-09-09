@@ -32,11 +32,14 @@ impl Parse for MacroArgs {
 }
 
 pub(crate) fn derive_fake_enum_impl(input: ItemEnum) -> TokenStream {
+    #[allow(clippy::expect_used)]
     let attr = input
         .attrs
         .iter()
         .find(|attr| attr.path().is_ident("fake_enum"))
         .expect("Expected `fake_enum( generate = \"...\"`");
+
+    #[allow(clippy::expect_used)]
     let fake_enum_attr = attr.parse_args::<MacroArgs>().expect("Expected `fake_enum( generate = \"...\"`");
 
     let func_name = &fake_enum_attr.func_name;

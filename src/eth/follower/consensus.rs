@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use stratus_metrics::timed;
 use strum::AsRefStr;
 
 use crate::eth::executor::AccessListOutput;
@@ -10,8 +11,6 @@ use crate::eth::types::ExecutionKind;
 use crate::eth::types::Hash;
 use crate::eth::types::StratusError;
 use crate::eth::types::TransactionInput;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 
 const MAX_ALLOWED_LAG_BLOCKS: u64 = 3;
 
@@ -68,10 +67,8 @@ pub trait Consensus: Send + Sync {
     ///
     /// The current machine name is sent as the `x-client` header by `BlockchainClient`, so the leader
     /// attributes the transaction to this node automatically.
+    #[timed(consensus_forward)]
     async fn forward_to_leader(&self, tx: TransactionInput, tx_hash: Hash, tx_data: Bytes) -> Result<Hash, StratusError> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
         tracing::info!(%tx_hash, "forwarding transaction to leader");
 
         let access_list = if self.forward_access_list() {
@@ -84,9 +81,6 @@ pub trait Consensus: Send + Sync {
         };
 
         let hash = self.get_client().send_raw_transaction_to_leader(tx_data.into(), access_list).await?;
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_consensus_forward(start.elapsed());
 
         Ok(hash)
     }

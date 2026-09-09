@@ -156,7 +156,8 @@ stratus-fake-leader-test *args="":
 test:
     #!/bin/bash
     source <(just coverage-env)
-    cargo test {{profile_flag}}
+    cargo test --workspace {{profile_flag}} || exit 1
+
     if command -v cargo-llvm-cov >/dev/null 2>&1; then
         mkdir -p target/llvm-cov/reports
         cargo llvm-cov report {{profile_flag}} --html --ignore-filename-regex data_migration.rs

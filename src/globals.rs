@@ -24,6 +24,7 @@ use crate::eth::rpc::RpcClientApp;
 use crate::eth::rpc::RpcContext;
 use crate::ext::not;
 use crate::ext::spawn_signal_handler;
+use crate::infra::build_info;
 use crate::infra::tracing::warn_task_cancellation;
 
 // -----------------------------------------------------------------------------
@@ -74,7 +75,10 @@ where
         });
 
         // init observability services
-        common.metrics.init().expect("failed to init metrics");
+        common
+            .metrics
+            .init(|| GlobalState::get_node_mode().to_string(), &build_info::service_name(), build_info::version())
+            .expect("failed to init metrics");
 
         // init sentry
         let sentry_guard = common
