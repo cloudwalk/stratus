@@ -59,7 +59,7 @@ jobs:
       - name: Prime lint cache
         # Mirrors the clippy invocation in `just lint-check` (justfile_helpers: _lint) so the
         # fingerprints produced here are reused by the PR lint job that restores this cache.
-        run: cargo +nightly-2026-05-08 clippy --all-targets -- -D warnings -A clippy::unwrap_used -A clippy::expect_used -A clippy::panic
+        run: cargo +nightly-2026-05-08 clippy --workspace --all-targets -- -D warnings -A clippy::unwrap_used -A clippy::expect_used -A clippy::panic
 
       - name: Rust Cache - Save lint cache
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0

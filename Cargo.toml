@@ -1,3 +1,10 @@
+[workspace]
+members = [
+    "crates/stratus_macros",
+    "crates/stratus_metrics",
+    "crates/stratus_metrics/macros",
+]
+
 [package]
 name = "stratus"
 version = "0.20.1"
@@ -229,7 +236,7 @@ jeprof = ["tikv-jemallocator/profiling"]
 # Lints
 # ------------------------------------------------------------------------------
 
-[lints.clippy]
+[workspace.lints.clippy]
 clone_on_ref_ptr = "warn"
 cloned_instead_of_copied = "warn"
 default_trait_access = "warn"
@@ -243,6 +250,9 @@ wildcard_imports = "warn"
 unwrap_used = "allow"
 expect_used = "warn"
 panic = "warn"
+
+[lints]
+workspace = true
 
 # CI-only profile: strips debug symbols from dependencies to keep the shared
 # `stable-release` cache small, while keeping full debug info for stratus itself.

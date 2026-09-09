@@ -156,11 +156,7 @@ stratus-fake-leader-test *args="":
 test:
     #!/bin/bash
     source <(just coverage-env)
-    cargo test {{profile_flag}} || exit 1
-
-    for manifest in $(find crates -name Cargo.toml); do
-        (cd "$(dirname "$manifest")" && env -u RUSTFLAGS -u RUSTDOCFLAGS -u LLVM_PROFILE_FILE cargo test) || exit 1
-    done
+    cargo test --workspace {{profile_flag}} || exit 1
 
     if command -v cargo-llvm-cov >/dev/null 2>&1; then
         mkdir -p target/llvm-cov/reports

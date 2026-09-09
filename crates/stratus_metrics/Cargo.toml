@@ -37,17 +37,5 @@ tokio = { version = "=1.50.0", features = ["macros", "rt"] }
 # Lints
 # ------------------------------------------------------------------------------
 
-[lints.clippy]
-clone_on_ref_ptr = "warn"
-cloned_instead_of_copied = "warn"
-default_trait_access = "warn"
-disallowed_names = "warn"
-manual_let_else = "warn"
-semicolon_if_nothing_returned = "warn"
-unused_async = "warn"
-unused_self = "warn"
-used_underscore_binding = "warn"
-wildcard_imports = "warn"
-unwrap_used = "allow"
-expect_used = "warn"
-panic = "warn"
+[lints]
+workspace = true

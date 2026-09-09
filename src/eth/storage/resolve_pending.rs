@@ -97,6 +97,7 @@ impl StratusStorage {
 mod tests {
     use super::super::StratusStorage;
     use super::Resolve;
+    use crate::eth::executor::State;
     use crate::eth::storage::ExecutionKind;
     use crate::eth::types::Address;
     use crate::eth::types::BlockNumber;
@@ -106,13 +107,12 @@ mod tests {
     #[test]
     fn mined_full_call_downgrades_to_minedpast_block_not_prev() {
         let storage = StratusStorage::new_test().expect("failed to build test storage");
-
+        while storage.mine_block_with_mock_execution(State::default()) < 5.into() {}
         let address = Address::ZERO;
         let index = SlotIndex::ZERO;
 
         // Mined Full call: block_number = 5, mined = 5 → valid (b >= mined).
         let call_block = BlockNumber::from(5u64);
-        storage.set_mined_block_number(call_block);
 
         let kind = ExecutionKind::CallLatest(call_block);
 
@@ -131,8 +131,7 @@ mod tests {
             other => panic!("expected Miss, got {other:?}"),
         }
 
-        // A newer block is mined mid-call, advancing the mined tip to 6.
-        storage.set_mined_block_number(BlockNumber::from(6u64));
+        storage.mine_block_with_mock_execution(State::default());
 
         // Stale: b=5 < mined=6. Full → MinedPast(5), NOT MinedPast(4).
         let resolved = Slot::resolve(&storage, (address, index), kind);

@@ -1,5 +1,8 @@
 //! Function-like and attribute macros for the `stratus_metrics` crate.
 
+// Panics in proc macros abort compilation with an error message, so they are safe to use here.
+#![allow(clippy::panic)]
+
 use proc_macro::TokenStream;
 
 mod metrics;
