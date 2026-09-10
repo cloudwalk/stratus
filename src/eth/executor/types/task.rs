@@ -34,9 +34,6 @@ pub struct InspectionTask {
 
 #[derive(Debug, Clone, strum::Display)]
 pub enum EvmRoute {
-    #[strum(to_string = "transaction")]
-    Transaction(TransactionExecutionInput),
-
     #[strum(to_string = "call_present")]
     CallPresent(CallExecutionInput),
 
