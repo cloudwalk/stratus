@@ -7,7 +7,6 @@ use crate::GlobalState;
 use crate::eth::executor::ExecutionMetrics;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::ExecutorError;
-use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::EvmKind;
 use crate::eth::executor::evm::RevmResultAndState;
@@ -26,9 +25,6 @@ use crate::infra::tracing::warn_task_tx_closed;
 
 /// Manages EVM pool and communication channels.
 pub struct EvmWorkerPool {
-    /// Worker for execution of transactions.
-    pub tx: crossbeam_channel::Sender<EvmTask<ExecutionTask<TransactionExecutionInput>>>,
-
     /// Pool for parallel execution of calls (eth_call and eth_estimateGas) reading from current state. Usually contains multiple EVMs.
     pub call_present: crossbeam_channel::Sender<EvmTask<ExecutionTask<CallExecutionInput>>>,
 
@@ -91,13 +87,11 @@ impl EvmWorkerPool {
             evm_tx
         }
 
-        let tx = spawn_evms("evm-tx", 1, EvmKind::Transaction, &storage, config);
         let call_present = spawn_evms("evm-call-present", config.call_present_evms, EvmKind::CallPresent, &storage, config);
         let call_past = spawn_evms("evm-call-past", config.call_past_evms, EvmKind::CallPast, &storage, config);
         let inspector = spawn_evms("inspector", config.inspector_evms, EvmKind::Inspect, &storage, config);
 
         EvmWorkerPool {
-            tx,
             call_present,
             call_past,
             inspector,
@@ -112,10 +106,6 @@ impl EvmWorkerPool {
         let (execution_tx, execution_rx) = oneshot::channel::<Result<(RevmResultAndState, ExecutionMetrics), StratusError>>();
 
         match route {
-            EvmRoute::Transaction(input) => {
-                let task = ExecutionTask::new(input, execution_tx).into();
-                self.tx.send(task)?;
-            }
             EvmRoute::CallPresent(input) => {
                 let task = ExecutionTask::new(input, execution_tx).into();
                 self.call_present.send(task)?;
