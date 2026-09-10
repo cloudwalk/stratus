@@ -10,6 +10,7 @@ use syn::FnArg;
 use syn::Ident;
 use syn::ItemFn;
 use syn::Pat;
+use syn::Stmt;
 use syn::Token;
 
 syn::custom_keyword!(labels);
@@ -157,25 +158,17 @@ pub(super) fn expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenS
     }
 
     let body = &function.block;
+    let timing_window = timing_window(body)?;
     let metric_function = Ident::new(&format!("inc_{}", args.metric), args.metric.span());
-    let publish = quote! {
-        |__stratus_metrics_elapsed, __stratus_metrics_result| {
-            #(#after_body)*
-            ::stratus_metrics::#metric_function(
-                __stratus_metrics_elapsed
-                #(, #label_variables)*
-            );
-        }
+    let publish_body = quote! {
+        #(#after_body)*
+        ::stratus_metrics::#metric_function(
+            __stratus_metrics_elapsed
+            #(, #label_variables)*
+        );
     };
-    let record = if function.sig.asyncness.is_some() {
-        quote! {
-            ::stratus_metrics::record_async(|| async #body, #publish).await
-        }
-    } else {
-        quote! {
-            ::stratus_metrics::record(|| #body, #publish)
-        }
-    };
+    let is_async = function.sig.asyncness.is_some();
+    let body = timing_window.record(is_async, &before_body, &publish_body);
 
     let attributes = &function.attrs;
     let visibility = &function.vis;
@@ -183,16 +176,176 @@ pub(super) fn expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenS
 
     Ok(quote! {
         #(#attributes)*
-        #visibility #signature {
+        #visibility #signature #body
+    })
+}
+
+struct TimingWindow<'a> {
+    statements: &'a [Stmt],
+    start_marker: Option<usize>,
+    end_marker: Option<usize>,
+    duration_marker: Option<(usize, Expr)>,
+}
+
+impl TimingWindow<'_> {
+    fn record(&self, is_async: bool, input_labels: &[TokenStream], publish_body: &TokenStream) -> TokenStream {
+        let start_declaration = match self.start_marker {
+            Some(_) => quote! { let mut __stratus_metrics_start = ::stratus_metrics::now(); },
+            None => quote! { let __stratus_metrics_start = ::stratus_metrics::now(); },
+        };
+        let end_declaration = self.end_marker.map(|_| {
+            quote! {
+                #[cfg(feature = "metrics")]
+                let mut __stratus_metrics_end = None;
+            }
+        });
+        let duration_declaration = self.duration_marker.as_ref().map(|_| {
+            quote! {
+                #[cfg(feature = "metrics")]
+                let mut __stratus_metrics_duration = None;
+            }
+        });
+        let operation_body = self.statements.iter().enumerate().map(|(index, statement)| {
+            if self.start_marker == Some(index) {
+                quote! {
+                    #[cfg(feature = "metrics")]
+                    { __stratus_metrics_start = ::stratus_metrics::now(); }
+                }
+            } else if self.end_marker == Some(index) {
+                quote! {
+                    #[cfg(feature = "metrics")]
+                    { __stratus_metrics_end = Some(::stratus_metrics::now()); }
+                }
+            } else if let Some((duration_index, duration)) = &self.duration_marker {
+                if *duration_index == index {
+                    quote! {
+                        #[cfg(feature = "metrics")]
+                        { __stratus_metrics_duration = Some(#duration); }
+                    }
+                } else {
+                    quote! { #statement }
+                }
+            } else {
+                quote! { #statement }
+            }
+        });
+        let operation = execute_block(quote! { #(#operation_body)* }, is_async);
+        let end_resolution = match self.end_marker {
+            Some(_) => quote! { __stratus_metrics_end.unwrap_or_else(::stratus_metrics::now) },
+            None => quote! { ::stratus_metrics::now() },
+        };
+        let elapsed = if self.duration_marker.is_some() {
+            quote! {
+                match __stratus_metrics_duration {
+                    Some(duration) => duration,
+                    None => {
+                        let end = #end_resolution;
+                        end.duration_since(__stratus_metrics_start)
+                    }
+                }
+            }
+        } else {
+            quote! {
+                {
+                    let end = #end_resolution;
+                    end.duration_since(__stratus_metrics_start)
+                }
+            }
+        };
+        let publish_result = publish_result(publish_body);
+
+        quote! {{
+            #[cfg(feature = "metrics")]
+            #start_declaration
+            #(
+                #[cfg(feature = "metrics")]
+                #input_labels
+            )*
+            #end_declaration
+            #duration_declaration
+
+            let __stratus_metrics_result = #operation;
+
             #[cfg(feature = "metrics")]
             {
-                #(#before_body)*
-                #record
+                let __stratus_metrics_elapsed = #elapsed;
+                #publish_result
             }
 
-            #[cfg(not(feature = "metrics"))]
-            #body
+            __stratus_metrics_result
+        }}
+    }
+}
+
+fn execute_block(body: TokenStream, is_async: bool) -> TokenStream {
+    match is_async {
+        true => quote! { async { #body }.await },
+        false => quote! { (|| { #body })() },
+    }
+}
+
+fn publish_result(publish_body: &TokenStream) -> TokenStream {
+    quote! {
+        let __stratus_metrics_result = &__stratus_metrics_result;
+        #publish_body
+    }
+}
+
+/// Finds and validates the top-level timing markers in a function body.
+fn timing_window(body: &syn::Block) -> syn::Result<TimingWindow<'_>> {
+    let mut start_marker = None;
+    let mut end_marker = None;
+    let mut duration_marker = None;
+
+    for (index, statement) in body.stmts.iter().enumerate() {
+        let Stmt::Macro(statement_macro) = statement else {
+            continue;
+        };
+        let Some(segment) = statement_macro.mac.path.segments.last() else {
+            continue;
+        };
+
+        match segment.ident.to_string().as_str() {
+            "timed_start" | "timed_end" => {
+                if !statement_macro.mac.tokens.is_empty() {
+                    return Err(syn::Error::new(
+                        statement_macro.mac.tokens.span(),
+                        format!("`{}!()` does not accept arguments", segment.ident),
+                    ));
+                }
+                let marker = match segment.ident.to_string().as_str() {
+                    "timed_start" => &mut start_marker,
+                    _ => &mut end_marker,
+                };
+                if marker.replace(index).is_some() {
+                    return Err(syn::Error::new(
+                        statement_macro.span(),
+                        format!("only one `{}!()` marker is allowed", segment.ident),
+                    ));
+                }
+            }
+            "timed_duration" => {
+                let duration = syn::parse2(statement_macro.mac.tokens.clone())
+                    .map_err(|_| syn::Error::new(statement_macro.mac.tokens.span(), "`timed_duration!()` requires one duration expression"))?;
+                if duration_marker.replace((index, duration)).is_some() {
+                    return Err(syn::Error::new(statement_macro.span(), "only one `timed_duration!()` marker is allowed"));
+                }
+            }
+            _ => {}
         }
+    }
+
+    if let (Some(start), Some(end)) = (start_marker, end_marker) {
+        if start >= end {
+            return Err(syn::Error::new(body.stmts[start].span(), "`timed_start!()` must appear before `timed_end!()`"));
+        }
+    }
+
+    Ok(TimingWindow {
+        statements: &body.stmts,
+        start_marker,
+        end_marker,
+        duration_marker,
     })
 }
 
@@ -259,6 +412,22 @@ mod tests {
     }
 
     #[test]
+    fn starts_before_input_labels_without_marker() {
+        let expanded = expand(
+            quote! { executor_inspect, labels(trace_type) },
+            quote! {
+                fn inspect(trace_type: String) {}
+            },
+        )
+        .unwrap()
+        .to_string();
+
+        let timer_start = expanded.find("__stratus_metrics_start").unwrap();
+        let input_label = expanded.find("to_metric_label_value").unwrap();
+        assert!(timer_start < input_label);
+    }
+
+    #[test]
     fn expands_async_function() {
         let expanded = expand(
             quote! { storage_finish_pending_block },
@@ -274,6 +443,170 @@ mod tests {
         assert!(expanded.contains("async"));
         assert!(expanded.contains(". await"));
         assert!(expanded.contains("inc_storage_finish_pending_block"));
+    }
+
+    #[test]
+    fn starts_timing_at_marker_without_duplicating_the_body() {
+        let expanded = expand(
+            quote! { storage_finish_pending_block },
+            quote! {
+                fn finish_pending_block() {
+                    let _guard = acquire_guard();
+                    stratus_metrics::timed_start!();
+                    do_work();
+                }
+            },
+        )
+        .unwrap()
+        .to_string();
+
+        let acquire_guard = expanded.find("acquire_guard").unwrap();
+        let timer_start = expanded.rfind("__stratus_metrics_start =").unwrap();
+        let do_work = expanded.find("do_work").unwrap();
+        assert!(acquire_guard < timer_start);
+        assert!(timer_start < do_work);
+        assert_eq!(expanded.matches("acquire_guard").count(), 1);
+        assert_eq!(expanded.matches("do_work").count(), 1);
+        assert!(!expanded.contains("cfg (not"));
+        assert!(!expanded.contains("timed_start !"));
+    }
+
+    #[test]
+    fn stops_timing_at_end_marker_without_duplicating_the_body() {
+        let expanded = expand(
+            quote! { storage_finish_pending_block },
+            quote! {
+                fn finish_pending_block() {
+                    setup();
+                    timed_start!();
+                    timed_work();
+                    timed_end!();
+                    cleanup();
+                }
+            },
+        )
+        .unwrap()
+        .to_string();
+
+        let setup = expanded.find("setup").unwrap();
+        let timed_work = expanded.find("timed_work").unwrap();
+        let timer_end = expanded.find("__stratus_metrics_end = Some").unwrap();
+        let cleanup = expanded.find("cleanup").unwrap();
+        assert!(setup < timed_work);
+        assert!(timed_work < timer_end);
+        assert!(timer_end < cleanup);
+        assert_eq!(expanded.matches("timed_work").count(), 1);
+        assert_eq!(expanded.matches("cleanup").count(), 1);
+        assert!(!expanded.contains("cfg (not"));
+        assert!(!expanded.contains("timed_start !"));
+        assert!(!expanded.contains("timed_end !"));
+    }
+
+    #[test]
+    fn overrides_elapsed_at_duration_marker_and_keeps_clock_fallback() {
+        let expanded = expand(
+            quote! { storage_finish_pending_block },
+            quote! {
+                fn finish_pending_block() {
+                    timed_start!();
+                    let custom = std::time::Duration::from_millis(5);
+                    timed_duration!(custom);
+                    timed_end!();
+                }
+            },
+        )
+        .unwrap()
+        .to_string();
+
+        let start = expanded.rfind("__stratus_metrics_start =").unwrap();
+        let duration = expanded.find("__stratus_metrics_duration = Some").unwrap();
+        let end = expanded.find("__stratus_metrics_end = Some").unwrap();
+        assert!(start < duration);
+        assert!(duration < end);
+        assert!(expanded.contains("match __stratus_metrics_duration"));
+        assert!(expanded.contains("duration_since"));
+        assert!(!expanded.contains("timed_duration !"));
+    }
+
+    #[test]
+    fn rejects_multiple_duration_markers() {
+        let error = expand(
+            quote! { storage_finish_pending_block },
+            quote! {
+                fn finish_pending_block() {
+                    timed_duration!(first);
+                    timed_duration!(second);
+                }
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("only one `timed_duration!()` marker is allowed"));
+    }
+
+    #[test]
+    fn rejects_missing_duration_expression() {
+        let error = expand(
+            quote! { storage_finish_pending_block },
+            quote! {
+                fn finish_pending_block() {
+                    timed_duration!();
+                }
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("`timed_duration!()` requires one duration expression"));
+    }
+
+    #[test]
+    fn rejects_multiple_timing_markers() {
+        let error = expand(
+            quote! { storage_finish_pending_block },
+            quote! {
+                fn finish_pending_block() {
+                    timed_start!();
+                    do_work();
+                    timed_start!();
+                }
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("only one `timed_start!()` marker is allowed"));
+    }
+
+    #[test]
+    fn rejects_end_before_start_marker() {
+        let error = expand(
+            quote! { storage_finish_pending_block },
+            quote! {
+                fn finish_pending_block() {
+                    timed_end!();
+                    do_work();
+                    timed_start!();
+                }
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("`timed_start!()` must appear before `timed_end!()`"));
+    }
+
+    #[test]
+    fn rejects_timing_marker_arguments() {
+        let error = expand(
+            quote! { storage_finish_pending_block },
+            quote! {
+                fn finish_pending_block() {
+                    timed_start!(now);
+                    do_work();
+                }
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("`timed_start!()` does not accept arguments"));
     }
 
     #[test]

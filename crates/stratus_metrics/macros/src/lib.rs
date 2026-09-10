@@ -58,7 +58,8 @@ pub fn metrics(input: TokenStream) -> TokenStream {
 /// ```
 ///
 /// Bare function parameters are converted to owned `MetricLabelValue`s before
-/// the function runs, without requiring the parameter to implement `Clone`:
+/// the function body runs, without requiring the parameter to implement
+/// `Clone`. This conversion is included in the default timing window:
 ///
 /// ```ignore
 /// #[timed(executor_inspect, labels(trace_type))]
@@ -97,8 +98,36 @@ pub fn metrics(input: TokenStream) -> TokenStream {
 /// }
 /// ```
 ///
-/// Both synchronous and asynchronous functions are supported. `const fn` and
-/// `unsafe fn` are rejected.
+/// A top-level `stratus_metrics::timed_start!()` statement delays the start of
+/// the timer until setup is complete. A top-level
+/// `stratus_metrics::timed_end!()` statement captures elapsed time before
+/// cleanup begins. Values created before either marker retain their normal
+/// lexical lifetime, and the metric is published only after the body completes:
+///
+/// ```ignore
+/// #[timed(executor_local_transaction)]
+/// fn execute(...) -> Result<ExecutionMetrics, StratusError> {
+///     let transaction_guard = transaction_lock.lock();
+///     stratus_metrics::timed_start!();
+///     let result = execute_transaction();
+///     stratus_metrics::timed_end!();
+///     drop(transaction_guard);
+///     result
+/// }
+/// ```
+///
+/// A top-level `stratus_metrics::timed_duration!(duration)` statement overrides
+/// the elapsed duration when reached. It may be combined with the start and end
+/// markers; if control flow returns before reaching it, the normal start/end
+/// duration is used.
+///
+/// Without explicit markers, the start boundary is captured before input-label
+/// preparation and the end boundary follows the completed return of the
+/// function body, including destruction of its local values. Each marker may
+/// appear at most once as a standalone statement directly in the function
+/// body, and the start marker must precede the end marker. Both synchronous and
+/// asynchronous functions are supported. `const fn` and `unsafe fn` are
+/// rejected.
 #[proc_macro_attribute]
 pub fn timed(args: TokenStream, input: TokenStream) -> TokenStream {
     match timed_attribute::expand(args.into(), input.into()) {
