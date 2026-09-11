@@ -195,32 +195,37 @@ impl TimingWindow<'_> {
         };
         let end_declaration = self.end_marker.map(|_| {
             quote! {
-                #[cfg(feature = "metrics")]
-                let mut __stratus_metrics_end = None;
+                ::stratus_metrics::__metrics_enabled! {
+                    let mut __stratus_metrics_end = None;
+                }
             }
         });
         let duration_declaration = self.duration_marker.as_ref().map(|_| {
             quote! {
-                #[cfg(feature = "metrics")]
-                let mut __stratus_metrics_duration = None;
+                ::stratus_metrics::__metrics_enabled! {
+                    let mut __stratus_metrics_duration = None;
+                }
             }
         });
         let operation_body = self.statements.iter().enumerate().map(|(index, statement)| {
             if self.start_marker == Some(index) {
                 quote! {
-                    #[cfg(feature = "metrics")]
-                    { __stratus_metrics_start = ::stratus_metrics::now(); }
+                    ::stratus_metrics::__metrics_enabled! {
+                        __stratus_metrics_start = ::stratus_metrics::now();
+                    }
                 }
             } else if self.end_marker == Some(index) {
                 quote! {
-                    #[cfg(feature = "metrics")]
-                    { __stratus_metrics_end = Some(::stratus_metrics::now()); }
+                    ::stratus_metrics::__metrics_enabled! {
+                        __stratus_metrics_end = Some(::stratus_metrics::now());
+                    }
                 }
             } else if let Some((duration_index, duration)) = &self.duration_marker {
                 if *duration_index == index {
                     quote! {
-                        #[cfg(feature = "metrics")]
-                        { __stratus_metrics_duration = Some(#duration); }
+                        ::stratus_metrics::__metrics_enabled! {
+                            __stratus_metrics_duration = Some(#duration);
+                        }
                     }
                 } else {
                     quote! { #statement }
@@ -255,22 +260,23 @@ impl TimingWindow<'_> {
         let publish_result = publish_result(publish_body);
 
         quote! {{
-            #[cfg(feature = "metrics")]
-            #start_declaration
+            ::stratus_metrics::__metrics_enabled! {
+                #start_declaration
+            }
             #(
-                #[cfg(feature = "metrics")]
-                #input_labels
+                ::stratus_metrics::__metrics_enabled! {
+                    #input_labels
+                }
             )*
             #end_declaration
             #duration_declaration
 
             let __stratus_metrics_result = #operation;
 
-            #[cfg(feature = "metrics")]
-            {
+            ::stratus_metrics::__metrics_enabled! {{
                 let __stratus_metrics_elapsed = #elapsed;
                 #publish_result
-            }
+            }}
 
             __stratus_metrics_result
         }}
@@ -467,7 +473,7 @@ mod tests {
         assert!(timer_start < do_work);
         assert_eq!(expanded.matches("acquire_guard").count(), 1);
         assert_eq!(expanded.matches("do_work").count(), 1);
-        assert!(!expanded.contains("cfg (not"));
+        assert!(!expanded.contains("cfg"));
         assert!(!expanded.contains("timed_start !"));
     }
 
@@ -497,7 +503,7 @@ mod tests {
         assert!(timer_end < cleanup);
         assert_eq!(expanded.matches("timed_work").count(), 1);
         assert_eq!(expanded.matches("cleanup").count(), 1);
-        assert!(!expanded.contains("cfg (not"));
+        assert!(!expanded.contains("cfg"));
         assert!(!expanded.contains("timed_start !"));
         assert!(!expanded.contains("timed_end !"));
     }
