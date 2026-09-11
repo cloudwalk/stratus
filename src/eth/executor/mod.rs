@@ -1,6 +1,7 @@
 mod config;
 mod evm;
 mod evm_worker_pool;
+mod transaction_worker;
 pub mod types;
 
 use std::mem;
@@ -20,9 +21,6 @@ pub use evm::types::ExecutionMetrics;
 pub use evm::types::TransactionExecutionInput;
 pub use evm::types::TransactionExecutionOutput;
 pub use evm::types::TransactionExecutionResult;
-use parking_lot::Mutex;
-use parking_lot::MutexGuard;
-use stratus_metrics as metrics;
 use stratus_metrics::timed;
 use tracing::Span;
 #[cfg(feature = "tracing")]
@@ -35,10 +33,12 @@ pub use types::TransactionExecution;
 
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;
+use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::executor::evm::types::CallExecutionInput;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm_worker_pool::EvmWorkerPool;
+use crate::eth::executor::transaction_worker::TransactionWorker;
 use crate::eth::executor::types::EvmRoute;
 use crate::eth::miner::Miner;
 use crate::eth::storage::ExecutionKind;
@@ -65,22 +65,15 @@ use crate::utils::Semaphore;
 // Executor
 // -----------------------------------------------------------------------------
 
-/// Locks used for local execution.
-#[derive(Default)]
-pub struct ExecutorLocks {
-    transaction: Mutex<()>,
-    transaction_warmup: Semaphore,
-}
-
 pub struct Executor {
-    /// Executor inner locks.
-    locks: ExecutorLocks,
+    /// Limits concurrent transaction warmup and queueing.
+    transaction_warmup: Semaphore,
 
-    /// Channels to send transactions to background EVMs.
+    /// Serial worker that executes and persists transactions.
+    transaction_worker: TransactionWorker,
+
+    /// Channels to send calls and inspections to background EVMs.
     evms: EvmWorkerPool,
-
-    /// Mutex-wrapped miner for creating new blockchain blocks.
-    miner: Arc<Miner>,
 
     /// Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
@@ -93,14 +86,12 @@ impl Executor {
     pub fn new(storage: Arc<StratusStorage>, miner: Arc<Miner>, config: ExecutorConfig) -> Self {
         tracing::info!(?config, "creating executor");
         let reject_not_contract = config.executor_reject_not_contract;
+        let transaction_worker = TransactionWorker::spawn(Arc::clone(&storage), Arc::clone(&miner), &config);
         let evms = EvmWorkerPool::spawn(Arc::clone(&storage), &config);
         Self {
-            locks: ExecutorLocks {
-                transaction_warmup: Semaphore::new(100),
-                ..Default::default()
-            },
+            transaction_warmup: Semaphore::new(100),
+            transaction_worker,
             evms,
-            miner,
             storage,
             reject_not_contract,
         }
@@ -148,8 +139,19 @@ impl Executor {
         let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash()).entered();
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
+        self.transaction_worker.execute_external_transaction(tx, receipt, block_number)
+    }
+
+    fn execute_external_transaction_inner(
+        storage: &StratusStorage,
+        miner: &Miner,
+        evm: &mut Evm<TransactionExecutionInput>,
+        tx: ExternalTransaction,
+        receipt: ExternalReceipt,
+        block_number: BlockNumber,
+    ) -> anyhow::Result<()> {
         let tx_input: TransactionInput = tx.try_into()?;
-        let pending_header = self.storage.read_pending_block_header();
+        let pending_header = storage.read_pending_block_header();
         let mut evm_input = TransactionExecutionInput::create(&tx_input, pending_header);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
@@ -157,7 +159,9 @@ impl Executor {
             // successful external transaction, re-execute locally
             true => {
                 // re-execute transaction
-                let evm_execution = self.evms.execute::<TransactionExecutionOutput>(EvmRoute::Transaction(evm_input.clone()));
+                let evm_execution = evm
+                    .execute(evm_input.clone())
+                    .and_then(|(result, metrics)| Ok((TransactionExecutionOutput::try_from(result)?, metrics)));
 
                 // handle re-execution result
                 let (mut evm_result, _evm_metrics) = match evm_execution {
@@ -190,7 +194,7 @@ impl Executor {
             //
             // failed external transaction, re-create from receipt without re-executing
             false => {
-                let (sender, _) = self.storage.read_account(receipt.from.into(), ExecutionKind::Transaction)?;
+                let (sender, _) = storage.read_account(receipt.from.into(), ExecutionKind::Transaction)?;
                 if tx_input.execution_info.nonce != sender.nonce {
                     bail!(
                         "reverted external transaction should have the correct nonce. address: {:?}, input: {:?}, sender: {:?}",
@@ -212,7 +216,7 @@ impl Executor {
         };
 
         // persist state
-        self.miner.save_execution(tx_execution, state)?;
+        miner.save_execution(tx_execution, state)?;
         Ok(())
     }
 
@@ -237,16 +241,6 @@ impl Executor {
         Ok(())
     }
 
-    #[timed(executor_local_transaction, labels(
-        success = result.is_ok(),
-        contract = |tx| codegen::contract_name(&tx.execution_info.to),
-        function = |tx| codegen::function_sig(&tx.execution_info.input)
-        )
-    )]
-    fn execute_local_transaction_impl(&self, tx: TransactionInput, _transaction_guard: MutexGuard<()>) -> Result<ExecutionMetrics, StratusError> {
-        self.execute_local_transaction_attempts(tx, usize::MAX)
-    }
-
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to, tx_nonce))]
     pub fn execute_local_transaction(&self, tx: TransactionInput, access_list: Option<AccessListOutput>) -> Result<(), StratusError> {
@@ -262,74 +256,15 @@ impl Executor {
             s.rec_str("tx_nonce", &tx.execution_info.nonce);
         });
 
-        let permit = self.locks.transaction_warmup.acquire();
+        let _permit = self.transaction_warmup.acquire();
 
         if let Some(access_list) = access_list {
             self.storage.load_access_list(access_list);
         }
 
-        // Executes transactions serially:
-        // * Uses a Mutex, so a new transactions starts executing only after the previous one is executed and persisted.
-        // * Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.
-        #[cfg(feature = "metrics")]
-        metrics::inc_executor_local_transaction_lock_waiting(1);
-        let transaction_guard = self.locks.transaction.lock();
-        #[cfg(feature = "metrics")]
-        metrics::dec_executor_local_transaction_lock_waiting(1);
-
-        // execute transaction
-        let result = self.execute_local_transaction_impl(tx, transaction_guard);
-        drop(permit);
-
-        result.and(Ok(()))
-    }
-
-    /// Executes a transaction until it reaches the max number of attempts.
-    fn execute_local_transaction_attempts(&self, tx_input: TransactionInput, max_attempts: usize) -> Result<ExecutionMetrics, StratusError> {
-        // executes transaction until no more conflicts
-        let mut attempt = 0;
-        #[cfg(feature = "metrics")]
-        let contract = codegen::contract_name(&tx_input.execution_info.to);
-        #[cfg(feature = "metrics")]
-        let function = codegen::function_sig(&tx_input.execution_info.input);
-
-        loop {
-            attempt += 1;
-
-            // prepare evm input
-            let pending_header = self.storage.read_pending_block_header();
-            let evm_input = TransactionExecutionInput::create(&tx_input, pending_header);
-
-            let (evm_result, evm_metrics): (TransactionExecutionOutput, ExecutionMetrics) = self.evms.execute(EvmRoute::Transaction(evm_input.clone()))?;
-
-            // save execution to temporary storage
-            // in case of failure, retry if conflict or abandon if unexpected error
-            let tx_execution = TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result.outcome);
-
-            if let ExecutionResult::Reverted { reason } = &tx_execution.output.result {
-                tracing::info!(?reason, "local transaction execution reverted");
-                #[cfg(feature = "metrics")]
-                {
-                    metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());
-                }
-            }
-
-            match self.miner.save_execution(tx_execution, evm_result.state) {
-                Ok(_) => {
-                    return Ok(evm_metrics);
-                }
-                Err(e) => match e {
-                    StratusError::Storage(StorageError::EvmInputMismatch { ref expected, ref actual }) => {
-                        tracing::warn!(?expected, ?actual, "evm input and block header mismatch");
-                        if attempt >= max_attempts {
-                            return Err(e);
-                        }
-                        continue;
-                    }
-                    _ => return Err(e),
-                },
-            }
-        }
+        // The transaction worker serializes execution and persistence so that the next transaction
+        // cannot execute against state that the previous transaction has not saved yet.
+        self.transaction_worker.execute_local_transaction(tx).map(|_| ())
     }
 
     /// Executes a read-only call in the local EVM, without persisting state changes.
