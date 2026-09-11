@@ -8,7 +8,8 @@ use proc_macro::TokenStream;
 mod metrics;
 mod timed_attribute;
 
-/// Defines the metrics of a group and generates the functions to record them.
+/// Defines the metrics of one or more groups and generates the functions to
+/// record them.
 ///
 /// Each metric has a description, a kind, a name, and optional labels. The
 /// first metric kind in the list below generates `inc_<name>` and
@@ -17,20 +18,22 @@ mod timed_attribute;
 ///
 /// ```ignore
 /// metrics! {
-///     group: storage_read,
+///     group: storage_read {
+///         "Time executing storage read_block operation."
+///         histogram_duration storage_read_block{storage, success},
 ///
-///     "Time executing storage read_block operation."
-///     histogram_duration storage_read_block{storage, success},
-///
-///     "Number of storage reads."
-///     counter storage_reads{storage, hit},
+///         "Number of storage reads."
+///         counter storage_reads{storage, hit},
+///     }
 /// }
 /// ```
 ///
 /// For each group, the macro also generates a `METRIC_<NAME>` constant for
 /// every metric and a `metrics_for_<group>()` function returning the metric
-/// definitions. Label values are passed as arguments to the generated
-/// functions and must follow the order in the metric definition.
+/// definitions. The macro additionally generates `metrics_for_all()`
+/// returning the definitions of every group. Label values are passed as
+/// arguments to the generated functions and must follow the order in the
+/// metric definition.
 #[proc_macro]
 pub fn metrics(input: TokenStream) -> TokenStream {
     match metrics::expand(input.into()) {
