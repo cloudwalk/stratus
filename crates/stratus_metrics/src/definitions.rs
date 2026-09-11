@@ -199,3 +199,13 @@ metrics! {
     "Time to run KafkaConnector::create_buffer"
     histogram_duration kafka_create_buffer{}
 }
+
+metrics! {
+    group: miner,
+
+    "Time to run Miner::commit"
+    histogram_duration miner_commit{item},
+
+    "Time to run Miner::mine_local"
+    histogram_duration miner_mine_local{},
+}
