@@ -176,7 +176,7 @@ impl StratusStorage {
                         {
                             let cached_value = if matches!(kind, ExecutionKind::AccessList) {
                                 //bench without try_read
-                                E::try_read_latest_cache(self, &key)
+                                E::read_latest_cache(self, &key)
                             } else {
                                 E::read_latest_cache(self, &key)
                             };
