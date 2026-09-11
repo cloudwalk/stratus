@@ -64,6 +64,7 @@ use crate::eth::follower::ImporterError;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::follower::importer::ImporterConsensus;
+use crate::eth::follower::importer::ImporterRuntime;
 use crate::eth::follower::importer::send_block_to_kafka;
 use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
@@ -118,6 +119,7 @@ use crate::log_and_err;
 // Server
 // -----------------------------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 #[derive(Clone, derive_new::new)]
 pub struct Server {
     // services
@@ -125,6 +127,7 @@ pub struct Server {
     pub executor: Arc<Executor>,
     pub miner: Arc<Miner>,
     pub importer: Arc<RwLock<Option<Arc<ImporterConsensus>>>>,
+    pub importer_runtime: Arc<RwLock<Option<ImporterRuntime>>>,
 
     // config
     pub app_config: StratusConfig,
@@ -174,6 +177,10 @@ impl Server {
         };
         let res = join!(server_handle.stopped(), subscriptions.stopped(), health_worker_handle);
         res.2?;
+
+        if let Some(importer_runtime) = this.take_importer_runtime() {
+            importer_runtime.shutdown().await?;
+        }
         Ok(())
     }
 
@@ -264,6 +271,14 @@ impl Server {
         *self.importer.write() = importer;
     }
 
+    pub fn set_importer_runtime(&self, importer_runtime: Option<ImporterRuntime>) {
+        *self.importer_runtime.write() = importer_runtime;
+    }
+
+    fn take_importer_runtime(&self) -> Option<ImporterRuntime> {
+        self.importer_runtime.write().take()
+    }
+
     async fn health(&self) -> bool {
         match GlobalState::get_node_mode() {
             NodeMode::Leader | NodeMode::FakeLeader => true,
@@ -321,7 +336,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_async_method("stratus_changeToLeader", stratus_change_to_leader)?;
     module.register_async_method("stratus_changeToFollower", stratus_change_to_follower)?;
     module.register_async_method("stratus_initImporter", stratus_init_importer)?;
-    module.register_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
+    module.register_async_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
     module.register_async_method("stratus_changeMinerMode", stratus_change_miner_mode)?;
     module.register_async_method("stratus_emitBlockEvents", stratus_emit_block_events)?;
 
@@ -518,7 +533,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     }
 
     tracing::info!("shutting down importer");
-    let shutdown_importer_result = stratus_shutdown_importer(Params::new(None), &ctx, &ext);
+    let shutdown_importer_result = stratus_shutdown_importer(Params::new(None), Arc::clone(&ctx), ext.clone()).await;
     match shutdown_importer_result {
         Ok(_) => tracing::info!("importer shutdown successfully"),
         Err(StratusError::Importer(ImporterError::AlreadyShutdown)) => {
@@ -630,6 +645,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         enable_block_changes_replication: std::env::var("ENABLE_BLOCK_CHANGES_REPLICATION")
             .ok()
             .is_some_and(|val| val == "1" || val == "true"),
+        importer_async_threads: std::env::var("IMPORTER_ASYNC_THREADS").ok().and_then(|value| value.parse().ok()).unwrap_or(4),
         forward_access_list: !matches!(std::env::var("FORWARD_ACCESS_LIST").as_deref(), Ok("0") | Ok("false")),
         stop_at_block: None,
     };
@@ -637,7 +653,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     importer_config.init_follower_importer(ctx).await
 }
 
-fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) -> Result<JsonValue, StratusError> {
+async fn stratus_shutdown_importer(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     ext.authentication().auth_admin()?;
     if GlobalState::get_node_mode() != NodeMode::Follower {
         tracing::error!("node is currently not a follower");
@@ -650,9 +666,17 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) 
     }
 
     ctx.server.set_importer(None);
+    let importer_runtime = ctx.server.take_importer_runtime();
 
     const TASK_NAME: &str = "rpc-server::importer-shutdown";
     GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
+
+    if let Some(importer_runtime) = importer_runtime
+        && let Err(error) = importer_runtime.shutdown().await
+    {
+        tracing::error!(reason = ?error, "failed to shutdown dedicated importer runtime");
+        return Err(ImporterError::InitError.into());
+    }
 
     Ok(json!(true))
 }
