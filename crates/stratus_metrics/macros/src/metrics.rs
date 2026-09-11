@@ -11,6 +11,11 @@ syn::custom_keyword!(group);
 
 /// Input of the `metrics!` macro.
 struct MetricsInput {
+    groups: Vec<MetricsGroup>,
+}
+
+/// The metrics of a single group.
+struct MetricsGroup {
     group: Ident,
     entries: Vec<MetricEntry>,
 }
@@ -57,21 +62,38 @@ impl MetricKind {
 
 impl Parse for MetricsInput {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        input.parse::<group>()?;
-        input.parse::<Token![:]>()?;
-        let group = input.parse::<Ident>()?;
-        input.parse::<Token![,]>()?;
-
-        let mut entries = Vec::new();
+        let mut groups = Vec::new();
         while !input.is_empty() {
-            entries.push(input.parse()?);
+            groups.push(input.parse()?);
             if input.is_empty() {
                 break; // allow trailing comma
             }
             input.parse::<Token![,]>()?;
         }
 
-        Ok(Self { group, entries })
+        Ok(Self { groups })
+    }
+}
+
+impl Parse for MetricsGroup {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        input.parse::<group>()?;
+        input.parse::<Token![:]>()?;
+        let group = input.parse::<Ident>()?;
+
+        let entries;
+        syn::braced!(entries in input);
+
+        let mut entry_list = Vec::new();
+        while !entries.is_empty() {
+            entry_list.push(entries.parse()?);
+            if entries.is_empty() {
+                break; // allow trailing comma
+            }
+            entries.parse::<Token![,]>()?;
+        }
+
+        Ok(Self { group, entries: entry_list })
     }
 }
 
@@ -222,40 +244,65 @@ impl MetricEntry {
 
 pub(super) fn expand(input: TokenStream) -> syn::Result<TokenStream> {
     let input: MetricsInput = syn::parse2(input)?;
-    let group = &input.group;
+    if input.groups.is_empty() {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "expected at least one `group: <name> { ... }` section",
+        ));
+    }
 
-    let constants = input.entries.iter().map(|entry| {
-        let constant = format_ident!("METRIC_{}", entry.name.to_string().to_uppercase());
-        let name = entry.metric_name();
-        quote! { pub const #constant: &str = #name; }
-    });
+    let mut constants = Vec::new();
+    let mut group_functions = Vec::new();
+    let mut functions = Vec::new();
+    let mut aggregate_extends = Vec::new();
 
-    let group_function = format_ident!("metrics_for_{}", group);
-    let definitions = input.entries.iter().map(|entry| {
-        let kind = entry.kind.as_str();
-        let name = entry.metric_name();
-        let description = &entry.description;
-        quote! {
-            crate::Metric {
-                kind: #kind,
-                name: #name,
-                description: stringify!(#description),
+    for MetricsGroup { group, entries } in &input.groups {
+        let group_function = format_ident!("metrics_for_{}", group);
+        let definitions = entries.iter().map(|entry| {
+            let kind = entry.kind.as_str();
+            let name = entry.metric_name();
+            let description = &entry.description;
+            quote! {
+                crate::Metric {
+                    kind: #kind,
+                    name: #name,
+                    description: stringify!(#description),
+                }
             }
-        }
-    });
+        });
 
-    let functions = input.entries.iter().map(|entry| entry.functions(group));
+        constants.extend(entries.iter().map(|entry| {
+            let constant = format_ident!("METRIC_{}", entry.name.to_string().to_uppercase());
+            let name = entry.metric_name();
+            quote! { pub const #constant: &str = #name; }
+        }));
+
+        group_functions.push(quote! {
+            pub fn #group_function() -> Vec<crate::Metric> {
+                vec![
+                    #(#definitions),*
+                ]
+            }
+        });
+
+        aggregate_extends.push(quote! { metrics.extend(#group_function()); });
+
+        functions.extend(entries.iter().map(|entry| entry.functions(group)));
+    }
 
     Ok(quote! {
         #(#constants)*
 
-        pub fn #group_function() -> Vec<crate::Metric> {
-            vec![
-                #(#definitions),*
-            ]
-        }
+        #(#group_functions)*
 
         #(#functions)*
+
+        #[doc = "Metric definitions of every group."]
+        pub fn metrics_for_all() -> Vec<crate::Metric> {
+            let mut metrics = Vec::new();
+            #(#aggregate_extends)*
+            metrics
+        }
     })
 }
 
@@ -268,19 +315,19 @@ mod tests {
     #[test]
     fn expands_all_metric_kinds() {
         let expanded = expand(quote! {
-            group: test_group,
+            group: test_group {
+                "Number of things."
+                counter things{kind},
 
-            "Number of things."
-            counter things{kind},
+                "Size of things."
+                histogram_counter sizes{},
 
-            "Size of things."
-            histogram_counter sizes{},
+                "Duration of things."
+                histogram_duration timings{scope},
 
-            "Duration of things."
-            histogram_duration timings{scope},
-
-            "Level of things."
-            gauge levels{pool, depth},
+                "Level of things."
+                gauge levels{pool, depth},
+            }
         })
         .unwrap()
         .to_string();
@@ -297,15 +344,37 @@ mod tests {
         assert!(expanded.contains("dec_levels"));
         assert!(expanded.contains("crate :: node_mode"));
         assert!(expanded.contains("kind"));
+        assert!(expanded.contains("metrics_for_all"));
+    }
+
+    #[test]
+    fn aggregates_all_groups() {
+        let expanded = expand(quote! {
+            group: one {
+                "Number of things."
+                counter things{},
+            },
+
+            group: two {
+                "Level of things."
+                gauge levels{},
+            }
+        })
+        .unwrap()
+        .to_string();
+
+        assert!(expanded.contains("metrics_for_one"));
+        assert!(expanded.contains("metrics_for_two"));
+        assert_eq!(expanded.matches("metrics . extend").count(), 2);
     }
 
     #[test]
     fn rejects_unknown_metric_kind() {
         let error = expand(quote! {
-            group: test_group,
-
-            "Number of things."
-            metric things{},
+            group: test_group {
+                "Number of things."
+                metric things{},
+            }
         })
         .unwrap_err();
 
@@ -321,5 +390,12 @@ mod tests {
         .unwrap_err();
 
         assert!(error.to_string().contains("expected `group`"));
+    }
+
+    #[test]
+    fn rejects_empty_input() {
+        let error = expand(quote! {}).unwrap_err();
+
+        assert!(error.to_string().contains("at least one `group: <name> { ... }` section"));
     }
 }
