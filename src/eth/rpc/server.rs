@@ -37,7 +37,6 @@ use serde_json::json;
 use serde_json::value::RawValue;
 use serde_json::value::to_raw_value;
 use stratus_metrics as metrics;
-use tokio::runtime::Handle;
 use tokio::select;
 use tokio::sync::Semaphore;
 use tokio::sync::SemaphorePermit;
@@ -1367,37 +1366,62 @@ pub fn eth_send_raw_transaction<'a>(
     });
     drop(enter);
 
-    request.extensions_mut().insert(span);
+    request.extensions_mut().insert(span.clone());
 
     let ext = request.extensions;
     let ext_clone = ext.clone();
 
-    let future = tokio::task::spawn_blocking(move || {
-        let rp = _eth_send_raw_transaction_impl(input, data, access_list, ctx, ext).into_response();
-        MethodResponse::response(id, rp, usize::MAX)
-    })
-    .map(|result| match result {
-        Ok(r) => r,
-        Err(err) => {
-            tracing::error!("Join error for blocking RPC method: {:?}", err);
-            MethodResponse::error(
-                Id::Null,
-                StratusError::Unexpected(crate::eth::types::UnexpectedError::Unexpected(anyhow::anyhow!(err))),
-            )
-            .with_extensions(ext_clone)
-        }
-    })
+    let future = async move {
+        let prepared = tokio::task::spawn_blocking(move || _prepare_eth_send_raw_transaction(input, data, access_list, ctx, ext)).await;
+
+        let response = match prepared {
+            Ok(Ok(PreparedRawTransaction::Complete(result))) => MethodResponse::response(id, result.into_response(), usize::MAX),
+            Ok(Ok(PreparedRawTransaction::Forward {
+                importer,
+                tx_hash,
+                data,
+                access_list,
+            })) => {
+                let result = importer
+                    .forward_to_leader(tx_hash, data, access_list)
+                    .await
+                    .map(hex_data)
+                    .into_response();
+                MethodResponse::response(id, result, usize::MAX)
+            }
+            Ok(Err(err)) => MethodResponse::response(id, Err::<String, _>(err).into_response(), usize::MAX),
+            Err(err) => {
+                tracing::error!("Join error for blocking RPC method: {:?}", err);
+                MethodResponse::error(
+                    Id::Null,
+                    StratusError::Unexpected(crate::eth::types::UnexpectedError::Unexpected(anyhow::anyhow!(err))),
+                )
+            }
+        };
+        response.with_extensions(ext_clone)
+    }
+    .instrument(span)
     .boxed();
     Ok((future, tracing_identifiers))
 }
 
-fn _eth_send_raw_transaction_impl(
+enum PreparedRawTransaction {
+    Complete(Result<String, StratusError>),
+    Forward {
+        importer: Arc<ImporterConsensus>,
+        tx_hash: Hash,
+        data: Bytes,
+        access_list: Option<AccessListOutput>,
+    },
+}
+
+fn _prepare_eth_send_raw_transaction(
     tx: TransactionInput,
     data: Bytes,
     access_list: Option<AccessListOutput>,
     ctx: Arc<RpcContext>,
     ext: Extensions,
-) -> Result<String, StratusError> {
+) -> Result<PreparedRawTransaction, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!(
@@ -1432,20 +1456,28 @@ fn _eth_send_raw_transaction_impl(
         ctx.server.executor.validate_to_is_contract(to_address, ExecutionKind::Transaction)?;
     };
 
-    // execute locally or forward to leader
+    // Execute locally, or prepare synchronous access-list work before forwarding asynchronously.
     match GlobalState::get_node_mode() {
-        NodeMode::Leader | NodeMode::FakeLeader => match ctx.server.executor.execute_local_transaction(tx, access_list) {
-            Ok(_) => Ok(hex_data(tx_hash)),
-            Err(e) => {
-                tracing::warn!(reason = ?e, ?tx_hash, "failed to execute eth_sendRawTransaction");
-                Err(e)
+        NodeMode::Leader | NodeMode::FakeLeader => {
+            let result = match ctx.server.executor.execute_local_transaction(tx, access_list) {
+                Ok(_) => Ok(hex_data(tx_hash)),
+                Err(e) => {
+                    tracing::warn!(reason = ?e, ?tx_hash, "failed to execute eth_sendRawTransaction");
+                    Err(e)
+                }
+            };
+            Ok(PreparedRawTransaction::Complete(result))
+        }
+        NodeMode::Follower => match ctx.server.read_importer() {
+            Some(importer) => {
+                let access_list = importer.prepare_forward_access_list(tx)?;
+                Ok(PreparedRawTransaction::Forward {
+                    importer,
+                    tx_hash,
+                    data,
+                    access_list,
+                })
             }
-        },
-        NodeMode::Follower => match &ctx.server.read_importer() {
-            Some(importer) => match Handle::current().block_on(importer.forward_to_leader(tx, tx_hash, data)) {
-                Ok(hash) => Ok(hex_data(hash)),
-                Err(e) => Err(e),
-            },
             None => {
                 tracing::error!("unable to forward transaction because consensus is temporarily unavailable for follower node");
                 Err(ConsensusError::Unavailable.into())
