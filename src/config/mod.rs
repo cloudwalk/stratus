@@ -15,8 +15,6 @@ use clap::ArgGroup;
 use clap::Parser;
 use display_json::DebugAsJson;
 pub use loader::ConfigLoad;
-pub use stratus_cli_overrides::CliOverrides;
-use stratus_macros::CliOverrides;
 use stratus_metrics::MetricsConfig;
 use strum::VariantNames;
 use tokio::runtime::Builder;
@@ -40,20 +38,22 @@ pub trait WithCommonConfig {
 }
 
 /// Configuration that can be used by any binary.
-#[derive(DebugAsJson, Clone, Parser, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default)]
+///
+/// Argument ids are the dotted TOML paths of the corresponding config file fields; the loader
+/// uses them to apply file values as clap defaults (see [`loader`]).
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct CommonConfig {
     /// Environment where the application is running.
-    #[arg(long = "env", default_value = "local")]
+    #[arg(id = "common.env", long = "env", default_value = "local")]
     pub env: Environment,
 
     /// Number of threads to execute global async tasks.
-    #[arg(long = "async-threads", default_value = "32")]
+    #[arg(id = "common.async_threads", long = "async-threads", default_value = "32")]
     #[serde(rename = "async_threads")]
     pub num_async_threads: usize,
 
     /// Number of threads to execute global blocking tasks.
-    #[arg(long = "blocking-threads", default_value = "512")]
+    #[arg(id = "common.blocking_threads", long = "blocking-threads", default_value = "512")]
     #[serde(rename = "blocking_threads")]
     pub num_blocking_threads: usize,
 
@@ -73,6 +73,7 @@ pub struct CommonConfig {
 
     /// Enables or disables unknown client interactions.
     #[arg(
+        id = "common.unknown_client_enabled",
         long = "unknown-client-enabled",
         default_value = "true",
         default_missing_value = "true",
@@ -83,7 +84,7 @@ pub struct CommonConfig {
 
     /// Comma-separated list of client names that are blocked from interacting with the application.
     /// Client names are matched the same way as the `app`/`client` identification headers/params.
-    #[arg(long = "blocked-clients", value_delimiter = ',')]
+    #[arg(id = "common.blocked_clients", long = "blocked-clients", value_delimiter = ',')]
     pub blocked_clients: Vec<String>,
 }
 
@@ -167,18 +168,17 @@ impl CommonConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for main Stratus service.
-#[derive(DebugAsJson, Clone, Default, Parser, derive_more::Deref, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default)]
+#[derive(DebugAsJson, Clone, Default, Parser, derive_more::Deref, serde::Serialize)]
 #[clap(group = ArgGroup::new("mode").args(&["leader", "follower", "fake_leader"]))]
 pub struct StratusConfig {
-    #[arg(long = "leader", conflicts_with_all = ["follower", "fake_leader", "ImporterConfig"])]
+    #[arg(id = "leader", long = "leader", conflicts_with_all = ["follower", "fake_leader", "ImporterConfig"])]
     pub leader: bool,
 
-    #[arg(long = "follower", conflicts_with_all = ["leader", "fake_leader"])]
+    #[arg(id = "follower", long = "follower", conflicts_with_all = ["leader", "fake_leader"])]
     pub follower: bool,
 
     /// The fake leader imports blocks like a follower, but executes the blocks's txs locally like a leader.
-    #[arg(long = "fake-leader", conflicts_with_all = ["leader", "follower"])]
+    #[arg(id = "fake_leader", long = "fake-leader", conflicts_with_all = ["leader", "follower"])]
     pub fake_leader: bool,
 
     #[clap(flatten)]
@@ -351,11 +351,10 @@ impl FromStr for Environment {
 }
 
 /// Genesis configuration
-#[derive(DebugAsJson, Clone, Parser, Default, serde::Deserialize, serde::Serialize)]
-#[cfg_attr(feature = "dev", derive(CliOverrides))]
+#[derive(DebugAsJson, Clone, Parser, Default, serde::Serialize)]
 pub struct GenesisFileConfig {
     /// Path to the genesis.json file
-    #[arg(long = "genesis-path")]
+    #[arg(id = "storage.permanent.genesis.path", long = "genesis-path")]
     #[serde(rename = "path")]
     pub genesis_path: Option<String>,
 }
@@ -363,166 +362,6 @@ pub struct GenesisFileConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eth::miner::MinerMode;
-
-    #[test]
-    fn test_empty_config_uses_defaults() {
-        let config: StratusConfig = toml::from_str("").unwrap();
-        let default = StratusConfig::default();
-        assert_eq!(serde_json::to_value(&config).unwrap(), serde_json::to_value(&default).unwrap());
-    }
-
-    #[test]
-    fn test_full_config_parsing() {
-        let content = r#"
-            follower = true
-
-            [common]
-            env = "production"
-            async_threads = 8
-            blocking_threads = 64
-            unknown_client_enabled = false
-            blocked_clients = ["metamask", "blockscout"]
-
-            [common.tracing]
-            url = "http://collector:4317"
-            protocol = "http-json"
-            headers = ["key=value"]
-            log_format = "json"
-            filter = "debug"
-
-            [common.sentry]
-            url = "https://sentry.io/123"
-
-            [common.metrics]
-            exporter_address = "0.0.0.0:9001"
-
-            [rpc]
-            address = "0.0.0.0:3001"
-            max_connections = 100
-            max_response_size_bytes = 20971520
-            max_subscriptions = 10
-            health_check_interval_ms = 200
-            batch_request_limit = 50
-            debug_trace_unsuccessful_only = ["blockscout"]
-
-            [executor]
-            chain_id = 100
-            call_present_evms = 1
-            call_past_evms = 2
-            inspector_evms = 3
-            reject_not_contract = false
-            evm_spec = "Cancun"
-
-            [miner]
-            block_mode = "1s"
-
-            [storage.cache]
-            account_history_cache_capacity = 30000
-            slot_history_cache_capacity = 400000
-
-            [storage.permanent]
-            path_prefix = "temp_3001"
-            shutdown_timeout = "1m"
-            disable_sync_write = true
-            cf_size_metrics_interval = "30s"
-            file_descriptors_limit = 1024
-
-            [storage.permanent.cf_cache]
-            accounts = 1000
-            accounts_history = 2000
-            account_slots = 3000
-            account_slots_history = 4000
-            transactions = 5000
-            blocks_by_number = 6000
-            blocks_by_hash = 7000
-            blocks_by_timestamp = 8000
-            block_changes = 9000
-
-            {GENESIS_SECTION}
-
-            [importer]
-            external_rpc = "http://localhost:3000/"
-            external_rpc_ws = "ws://localhost:3000/"
-            external_rpc_timeout = "5s"
-            sync_interval = "250ms"
-            enable_block_changes_replication = true
-            forward_access_list = false
-            stop_at_block = "0x2a"
-
-            [kafka]
-            bootstrap_servers = "localhost:29092"
-            topic = "stratus-events"
-            client_id = "stratus-producer"
-            group_id = "stratus-group"
-            security_protocol = "sasl-ssl"
-            sasl_mechanisms = "plain"
-            sasl_username = "user"
-            sasl_password = "pass"
-            ssl_ca_location = "/ca.pem"
-            ssl_certificate_location = "/cert.pem"
-            ssl_key_location = "/key.pem"
-        "#;
-
-        #[cfg(feature = "dev")]
-        const GENESIS_SECTION: &str = "[storage.permanent.genesis]\n            path = \"config/genesis.local.json\"";
-        #[cfg(not(feature = "dev"))]
-        const GENESIS_SECTION: &str = "";
-
-        let content = content.replace("{GENESIS_SECTION}", GENESIS_SECTION);
-        let config: StratusConfig = toml::from_str(&content).unwrap();
-
-        assert!(!config.leader);
-        assert!(config.follower);
-        assert_eq!(config.common.env, Environment::Production);
-        assert_eq!(config.common.num_async_threads, 8);
-        assert_eq!(config.common.num_blocking_threads, 64);
-        assert!(!config.common.unknown_client_enabled);
-        assert_eq!(config.common.blocked_clients, ["metamask", "blockscout"]);
-        assert_eq!(config.common.tracing.tracing_url.as_deref(), Some("http://collector:4317"));
-        assert_eq!(config.common.tracing.tracing_log_format.to_string(), "json");
-        assert_eq!(config.common.tracing.tracing_filter.as_deref(), Some("debug"));
-        assert_eq!(config.common.sentry.as_ref().unwrap().sentry_url, "https://sentry.io/123");
-        assert_eq!(config.common.metrics.metrics_exporter_address.to_string(), "0.0.0.0:9001");
-        assert_eq!(config.rpc_server.rpc_address.to_string(), "0.0.0.0:3001");
-        assert_eq!(config.rpc_server.rpc_max_connections, 100);
-        assert_eq!(config.rpc_server.rpc_max_response_size_bytes, 20971520);
-        assert_eq!(config.rpc_server.rpc_debug_trace_unsuccessful_only.as_ref().unwrap().len(), 1);
-        assert_eq!(config.executor.executor_chain_id, 100);
-        assert_eq!(config.executor.call_present_evms, 1);
-        assert!(!config.executor.executor_reject_not_contract);
-        assert_eq!(config.executor.executor_evm_spec.to_string(), "Cancun");
-        assert_eq!(config.miner.block_mode, MinerMode::Interval(std::time::Duration::from_secs(1)));
-        assert_eq!(config.storage.cache.account_history_cache_capacity, 30000);
-        assert_eq!(config.storage.perm_storage.rocks_path_prefix.as_deref(), Some("temp_3001"));
-        assert_eq!(config.storage.perm_storage.rocks_shutdown_timeout, std::time::Duration::from_secs(60));
-        assert!(config.storage.perm_storage.rocks_disable_sync_write);
-        assert_eq!(
-            config.storage.perm_storage.rocks_cf_size_metrics_interval,
-            Some(std::time::Duration::from_secs(30))
-        );
-        assert_eq!(config.storage.perm_storage.rocks_cf_cache.accounts, 1000);
-        #[cfg(feature = "dev")]
-        assert_eq!(
-            config.storage.perm_storage.genesis_file.genesis_path.as_deref(),
-            Some("config/genesis.local.json")
-        );
-        assert_eq!(config.importer.as_ref().unwrap().external_rpc, "http://localhost:3000/");
-        assert_eq!(config.importer.as_ref().unwrap().external_rpc_timeout, std::time::Duration::from_secs(5));
-        assert_eq!(config.importer.as_ref().unwrap().sync_interval, std::time::Duration::from_millis(250));
-        assert!(config.importer.as_ref().unwrap().enable_block_changes_replication);
-        assert!(!config.importer.as_ref().unwrap().forward_access_list);
-        assert_eq!(
-            config.importer.as_ref().unwrap().stop_at_block,
-            Some(crate::eth::types::BlockNumber::from(42u64))
-        );
-        let kafka = config.kafka_config.as_ref().unwrap();
-        assert_eq!(kafka.bootstrap_servers, "localhost:29092");
-        assert_eq!(kafka.topic, "stratus-events");
-
-        // the full example must pass validation
-        config.validate().unwrap();
-    }
 
     #[test]
     fn test_default_true_flags_accept_explicit_false() {

@@ -21,7 +21,6 @@ use opentelemetry_sdk::Resource as SdkResource;
 use opentelemetry_sdk::trace::BatchConfigBuilder;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use opentelemetry_sdk::trace::Tracer as SdkTracer;
-use stratus_macros::CliOverrides;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 use tracing_subscriber::filter::LevelFilter;
@@ -39,32 +38,31 @@ use crate::infra::tracing::TracingMinimalTimer;
 // Config
 // -----------------------------------------------------------------------------
 
-#[derive(DebugAsJson, Clone, Parser, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default)]
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct TracingConfig {
     /// OpenTelemetry server URL.
-    #[arg(long = "tracing-url", alias = "tracing-collector-url")]
+    #[arg(id = "common.tracing.url", long = "tracing-url", alias = "tracing-collector-url")]
     #[serde(rename = "url")]
     pub tracing_url: Option<String>,
 
     /// OpenTelemetry server communication protocol.
-    #[arg(long = "tracing-protocol", default_value = "grpc")]
+    #[arg(id = "common.tracing.protocol", long = "tracing-protocol", default_value = "grpc")]
     #[serde(rename = "protocol")]
     pub tracing_protocol: TracingProtocol,
 
     /// OpenTelemetry additional HTTP headers or GRPC metadata.
-    #[arg(long = "tracing-headers", value_delimiter = ',')]
+    #[arg(id = "common.tracing.headers", long = "tracing-headers", value_delimiter = ',')]
     #[serde(rename = "headers")]
     pub tracing_headers: Vec<String>,
 
     /// How tracing events will be formatted when displayed in stdout.
-    #[arg(long = "tracing-log-format", default_value = "normal")]
+    #[arg(id = "common.tracing.log_format", long = "tracing-log-format", default_value = "normal")]
     #[serde(rename = "log_format")]
     pub tracing_log_format: TracingLogFormat,
 
     /// Directives filter for tracing events, in the same syntax as the `RUST_LOG` environment variable.
     /// When absent, the `RUST_LOG` environment variable is used instead.
-    #[arg(long = "tracing-filter")]
+    #[arg(id = "common.tracing.filter", long = "tracing-filter")]
     #[serde(rename = "filter")]
     pub tracing_filter: Option<String>,
 }

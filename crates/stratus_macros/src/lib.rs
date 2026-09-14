@@ -13,13 +13,7 @@ use syn::ItemEnum;
 use syn::Lit;
 use syn::Meta;
 
-mod cli_overrides;
 mod fake_enum_variants;
-
-#[proc_macro_derive(CliOverrides)]
-pub fn derive_cli_overrides(input: TokenStream) -> TokenStream {
-    cli_overrides::expand(input)
-}
 
 #[proc_macro_derive(FakeEnum, attributes(fake_enum))]
 pub fn derive_fake_enum(input: TokenStream) -> TokenStream {

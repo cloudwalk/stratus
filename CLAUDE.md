@@ -144,6 +144,7 @@ Stratus is a high-performance EVM-compatible blockchain infrastructure written i
 - `config/stratus-follower.toml` - Local development configuration (follower), selected via `--config`
 - `config/stratus.example.toml` - Fully documented example with all available options
 - File resolution: `--config <path>` when provided, otherwise `config/{binary}.{env}.toml` (env from `--env`, default `local`)
+- File values are applied as clap argument defaults (an argument's `id` is the dotted TOML path of its field), so clap enforces the precedence and validates file values with the CLI value parsers
 - Precedence: defaults < config file < explicitly provided CLI arguments
 - Unknown fields in the config file are ignored with a warning (surfaced in the logs)
 

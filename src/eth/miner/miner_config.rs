@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use clap::Parser;
 use display_json::DebugAsJson;
-use stratus_macros::CliOverrides;
 
 use crate::GlobalState;
 use crate::NodeMode;
@@ -17,11 +16,10 @@ use crate::ext::parse_duration;
 // Config
 // -----------------------------------------------------------------------------
 
-#[derive(Parser, DebugAsJson, Clone, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default)]
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct MinerConfig {
     /// Target block time.
-    #[arg(long = "block-mode", default_value = "automine")]
+    #[arg(id = "miner.block_mode", long = "block-mode", default_value = "automine")]
     pub block_mode: MinerMode,
 }
 
