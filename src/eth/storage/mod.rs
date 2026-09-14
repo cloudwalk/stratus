@@ -22,7 +22,6 @@ use std::sync::Arc;
 
 use clap::Parser;
 use display_json::DebugAsJson;
-use stratus_macros::CliOverrides;
 pub use temporary::compute_pending_block_number;
 
 pub use crate::eth::types::ExecutionKind;
@@ -33,8 +32,7 @@ use crate::eth::types::StratusError;
 // -----------------------------------------------------------------------------
 
 /// Configuration that can be used by any binary that interacts with Stratus storage.
-#[derive(Parser, DebugAsJson, Clone, Default, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default)]
+#[derive(Parser, DebugAsJson, Clone, Default, serde::Serialize)]
 pub struct StorageConfig {
     #[clap(flatten)]
     #[serde(rename = "temporary")]

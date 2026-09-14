@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "crates/stratus_cli_overrides",
     "crates/stratus_macros",
     "crates/stratus_metrics",
     "crates/stratus_metrics/macros",
@@ -49,7 +48,6 @@ sugars = "=3.0.1"
 thiserror = "=2.0.18"
 uuid = { version = "=1.23.3", features = ["v7"]}
 stratus_macros = { path = "./crates/stratus_macros" }
-stratus_cli_overrides = { path = "./crates/stratus_cli_overrides" }
 stratus_metrics = { path = "./crates/stratus_metrics", default-features = false }
 libc = "=0.2.186"
 hostname = "=0.4.2"
@@ -63,9 +61,8 @@ tokio = { version = "=1.50.0", features = [
 tokio-util = "=0.7.18"
 
 # config
-clap = { version = "=4.5.60", features = ["derive"] }
+clap = { version = "=4.5.60", features = ["derive", "string"] }
 toml = "=1.1.5"
-serde_ignored = "=0.1.14"
 
 # serialization
 bincode = { version = "=2.0.1", features = ["derive"] }

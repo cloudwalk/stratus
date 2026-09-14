@@ -11,7 +11,6 @@ clap = { version = "=4.5.60", features = ["derive", "env"] }
 display_json = "=0.2.1"
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.149"
-stratus_cli_overrides = { path = "../stratus_cli_overrides" }
 stratus_macros = { path = "../stratus_macros" }
 
 # metrics

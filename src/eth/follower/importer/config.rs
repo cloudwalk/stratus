@@ -4,7 +4,6 @@ use std::time::Duration;
 use clap::Parser;
 use display_json::DebugAsJson;
 use serde_json::json;
-use stratus_macros::CliOverrides;
 
 use crate::GlobalState;
 use crate::NodeMode;
@@ -27,28 +26,33 @@ use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::infra::kafka::KafkaConnector;
 
-#[derive(Parser, DebugAsJson, Clone, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default)]
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct ImporterConfig {
     /// External RPC HTTP endpoint to sync blocks with Stratus. Empty by default; `validate()` rejects it after the merge.
-    #[arg(short = 'r', long = "external-rpc", default_value = "", required = false)]
+    #[arg(id = "importer.external_rpc", short = 'r', long = "external-rpc", default_value = "", required = false)]
     pub external_rpc: String,
 
     /// External RPC WS endpoint to sync blocks with Stratus.
-    #[arg(short = 'w', long = "external-rpc-ws", required = false)]
+    #[arg(id = "importer.external_rpc_ws", short = 'w', long = "external-rpc-ws", required = false)]
     pub external_rpc_ws: Option<String>,
 
     /// Timeout for blockchain requests (importer online)
-    #[arg(long = "external-rpc-timeout", value_parser = parse_duration, default_value = "2s", required = false)]
+    #[arg(
+        id = "importer.external_rpc_timeout",
+        long = "external-rpc-timeout",
+        value_parser = parse_duration,
+        default_value = "2s",
+        required = false
+    )]
     #[serde(with = "duration_serde")]
     pub external_rpc_timeout: Duration,
 
-    #[arg(long = "sync-interval", value_parser = parse_duration, default_value = "100ms", required = false)]
+    #[arg(id = "importer.sync_interval", long = "sync-interval", value_parser = parse_duration, default_value = "100ms", required = false)]
     #[serde(with = "duration_serde")]
     pub sync_interval: Duration,
 
     /// Enable replication of block changes
-    #[arg(long = "enable-block-changes-replication", default_value = "false")]
+    #[arg(id = "importer.enable_block_changes_replication", long = "enable-block-changes-replication", default_value = "false")]
     pub enable_block_changes_replication: bool,
 
     /// Number of Tokio worker threads dedicated to the online importer.
@@ -57,6 +61,7 @@ pub struct ImporterConfig {
 
     /// Compute an access list for transactions before forwarding them to the leader.
     #[arg(
+        id = "importer.forward_access_list",
         long = "forward-access-list",
         default_value = "true",
         default_missing_value = "true",
@@ -67,7 +72,7 @@ pub struct ImporterConfig {
     pub forward_access_list: bool,
 
     /// Specify the block to stop importing. (useful for validating a follower db against a fake leader)
-    #[arg(long = "stop-at-block")]
+    #[arg(id = "importer.stop_at_block", long = "stop-at-block")]
     pub stop_at_block: Option<BlockNumber>,
 }
 

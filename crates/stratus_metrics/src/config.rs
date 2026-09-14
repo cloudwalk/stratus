@@ -2,16 +2,14 @@ use std::net::SocketAddr;
 
 use clap::Parser;
 use display_json::DebugAsJson;
-use stratus_macros::CliOverrides;
 
 use crate::metrics_for_all;
 use crate::set_node_mode_provider;
 
-#[derive(DebugAsJson, Clone, Parser, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default)]
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct MetricsConfig {
     /// Metrics exporter binding address.
-    #[arg(long = "metrics-exporter-address", default_value = "0.0.0.0:9000")]
+    #[arg(id = "common.metrics.exporter_address", long = "metrics-exporter-address", default_value = "0.0.0.0:9000")]
     #[serde(rename = "exporter_address")]
     pub metrics_exporter_address: SocketAddr,
 }

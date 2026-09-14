@@ -4,7 +4,6 @@ mod inmemory;
 
 use clap::Parser;
 use display_json::DebugAsJson;
-use stratus_macros::CliOverrides;
 
 use super::RocksPermanentStorage;
 use crate::eth::types::BlockNumber;
@@ -14,7 +13,7 @@ use crate::eth::types::BlockNumber;
 // -----------------------------------------------------------------------------
 
 /// Temporary storage configuration.
-#[derive(Parser, DebugAsJson, Clone, Default, serde::Deserialize, serde::Serialize, CliOverrides)]
+#[derive(Parser, DebugAsJson, Clone, Default, serde::Serialize)]
 pub struct TemporaryStorageConfig {
     // No configuration needed for InMemoryTemporaryStorage
 }

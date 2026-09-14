@@ -5857,16 +5857,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_ignored"
-version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "115dffd5f3853e06e746965a20dcbae6ee747ae30b543d91b0e089668bb07798"
-dependencies = [
- "serde",
- "serde_core",
-]
-
-[[package]]
 name = "serde_json"
 version = "1.0.149"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6265,14 +6255,12 @@ dependencies = [
  "sentry",
  "sentry-tracing",
  "serde",
- "serde_ignored",
  "serde_json",
  "serde_plain",
  "serde_urlencoded",
  "serde_with",
  "smallvec",
  "static_assertions",
- "stratus_cli_overrides",
  "stratus_macros",
  "stratus_metrics",
  "strum",
@@ -6294,10 +6282,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "stratus_cli_overrides"
-version = "0.1.0"
-
-[[package]]
 name = "stratus_macros"
 version = "0.1.0"
 dependencies = [
@@ -6317,7 +6301,6 @@ dependencies = [
  "metrics-exporter-prometheus",
  "serde",
  "serde_json",
- "stratus_cli_overrides",
  "stratus_macros",
  "stratus_metrics_macros",
  "tokio",

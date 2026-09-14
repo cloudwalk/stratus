@@ -12,47 +12,46 @@ use rdkafka::producer::DeliveryFuture;
 use rdkafka::producer::FutureProducer;
 use rdkafka::producer::FutureRecord;
 use rdkafka::producer::future_producer::OwnedDeliveryResult;
-use stratus_macros::CliOverrides;
 use stratus_metrics::timed;
 
 use crate::ledger::events::Event;
 use crate::log_and_err;
 
-#[derive(Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize, Default, CliOverrides)]
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize, Default)]
 #[serde(default)]
 pub struct KafkaConfig {
     /// Kafka bootstrap servers. Empty by default; the all-or-none rule is enforced by `validate()` after the merge.
-    #[arg(long = "kafka-bootstrap-servers", default_value = "", required = false)]
+    #[arg(id = "kafka.bootstrap_servers", long = "kafka-bootstrap-servers", default_value = "", required = false)]
     pub bootstrap_servers: String,
 
-    #[arg(long = "kafka-topic", group = "kafka", default_value = "", required = false)]
+    #[arg(id = "kafka.topic", long = "kafka-topic", group = "kafka", default_value = "", required = false)]
     pub topic: String,
 
-    #[arg(long = "kafka-client-id", default_value = "", required = false)]
+    #[arg(id = "kafka.client_id", long = "kafka-client-id", default_value = "", required = false)]
     pub client_id: String,
 
-    #[arg(long = "kafka-group-id", required = false)]
+    #[arg(id = "kafka.group_id", long = "kafka-group-id", required = false)]
     pub group_id: Option<String>,
 
-    #[arg(long = "kafka-security-protocol", required = false, default_value_t)]
+    #[arg(id = "kafka.security_protocol", long = "kafka-security-protocol", required = false, default_value_t)]
     pub security_protocol: KafkaSecurityProtocol,
 
-    #[arg(long = "kafka-sasl-mechanisms", required = false)]
+    #[arg(id = "kafka.sasl_mechanisms", long = "kafka-sasl-mechanisms", required = false)]
     pub sasl_mechanisms: Option<String>,
 
-    #[arg(long = "kafka-sasl-username", required = false)]
+    #[arg(id = "kafka.sasl_username", long = "kafka-sasl-username", required = false)]
     pub sasl_username: Option<String>,
 
-    #[arg(long = "kafka-sasl-password", required = false)]
+    #[arg(id = "kafka.sasl_password", long = "kafka-sasl-password", required = false)]
     pub sasl_password: Option<String>,
 
-    #[arg(long = "kafka-ssl-ca-location", required = false)]
+    #[arg(id = "kafka.ssl_ca_location", long = "kafka-ssl-ca-location", required = false)]
     pub ssl_ca_location: Option<String>,
 
-    #[arg(long = "kafka-ssl-certificate-location", required = false)]
+    #[arg(id = "kafka.ssl_certificate_location", long = "kafka-ssl-certificate-location", required = false)]
     pub ssl_certificate_location: Option<String>,
 
-    #[arg(long = "kafka-ssl-key-location", required = false)]
+    #[arg(id = "kafka.ssl_key_location", long = "kafka-ssl-key-location", required = false)]
     pub ssl_key_location: Option<String>,
 }
 
