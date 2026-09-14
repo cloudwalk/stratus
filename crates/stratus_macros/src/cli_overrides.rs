@@ -1,7 +1,7 @@
-//! Derives `apply_cli_overrides` for config structs.
+//! Derives the `CliOverrides` trait impl for config structs.
 //!
 //! Config structs are dual-natured: they are deserialized from the TOML config file and
-//! also parsed by clap for CLI arguments. This derive generates the method that merges
+//! also parsed by clap for CLI arguments. This derive generates the trait impl that merges
 //! the two layers: values from arguments explicitly provided in the command line
 //! override the values loaded from the config file.
 //!
@@ -16,6 +16,9 @@
 //! - Fields skipped by serde (`#[serde(skip)]`) are not part of the config file, so their
 //!   only possible source is the CLI and the CLI value is always applied.
 //! - `#[cfg(...)]` attributes on fields are propagated to the generated code.
+//!
+//! The generated impl targets `crate::config::CliOverrides`, the trait defined in the main
+//! `stratus` crate, so this derive can only be used inside `stratus` itself.
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -86,7 +89,7 @@ fn flattened_statement(field: &syn::Field, field_name: &syn::Ident, cfg_attribut
     } else {
         quote! {
             #(#cfg_attributes)*
-            self.#field_name.apply_cli_overrides(&cli.#field_name, explicit);
+            crate::config::CliOverrides::apply_cli_overrides(&mut self.#field_name, &cli.#field_name, explicit);
         }
     }
 }
@@ -97,7 +100,7 @@ fn optional_section_statement(field_name: &syn::Ident, cfg_attributes: &[&syn::A
         #(#cfg_attributes)*
         match (&mut self.#field_name, &cli.#field_name) {
             (::std::option::Option::Some(file_section), ::std::option::Option::Some(cli_section)) => {
-                file_section.apply_cli_overrides(cli_section, explicit);
+                crate::config::CliOverrides::apply_cli_overrides(file_section, cli_section, explicit);
             }
             (::std::option::Option::None, ::std::option::Option::Some(cli_section)) => {
                 self.#field_name = ::std::option::Option::Some(::std::clone::Clone::clone(cli_section));
@@ -118,7 +121,7 @@ fn plain_statement(field_name: &syn::Ident, cfg_attributes: &[&syn::Attribute]) 
     }
 }
 
-/// Wraps the merge statements in the `apply_cli_overrides` method.
+/// Wraps the merge statements in the `CliOverrides` trait impl.
 fn method_impl(struct_name: &syn::Ident, statements: Vec<TokenStream2>) -> TokenStream2 {
     // structs without overridable fields still need the method so parents can recurse into them
     let (lint_allow, body) = if statements.is_empty() {
@@ -129,9 +132,9 @@ fn method_impl(struct_name: &syn::Ident, statements: Vec<TokenStream2>) -> Token
 
     quote! {
         #[automatically_derived]
-        impl #struct_name {
+        impl crate::config::CliOverrides for #struct_name {
             #lint_allow
-            pub(crate) fn apply_cli_overrides(&mut self, cli: &Self, explicit: &::std::collections::HashSet<::std::string::String>) {
+            fn apply_cli_overrides(&mut self, cli: &Self, explicit: &::std::collections::HashSet<::std::string::String>) {
                 #body
             }
         }
@@ -202,8 +205,8 @@ mod tests {
         });
         let expected = quote! {
             #[automatically_derived]
-            impl ExampleConfig {
-                pub(crate) fn apply_cli_overrides(&mut self, cli: &Self, explicit: &::std::collections::HashSet<::std::string::String>) {
+            impl crate::config::CliOverrides for ExampleConfig {
+                fn apply_cli_overrides(&mut self, cli: &Self, explicit: &::std::collections::HashSet<::std::string::String>) {
                     if explicit.contains("value") {
                         self.value = ::std::clone::Clone::clone(&cli.value);
                     }
@@ -230,12 +233,12 @@ mod tests {
         });
         let expected = quote! {
             #[automatically_derived]
-            impl ParentConfig {
-                pub(crate) fn apply_cli_overrides(&mut self, cli: &Self, explicit: &::std::collections::HashSet<::std::string::String>) {
-                    self.child.apply_cli_overrides(&cli.child, explicit);
+            impl crate::config::CliOverrides for ParentConfig {
+                fn apply_cli_overrides(&mut self, cli: &Self, explicit: &::std::collections::HashSet<::std::string::String>) {
+                    crate::config::CliOverrides::apply_cli_overrides(&mut self.child, &cli.child, explicit);
                     match (&mut self.optional, &cli.optional) {
                         (::std::option::Option::Some(file_section), ::std::option::Option::Some(cli_section)) => {
-                            file_section.apply_cli_overrides(cli_section, explicit);
+                            crate::config::CliOverrides::apply_cli_overrides(file_section, cli_section, explicit);
                         }
                         (::std::option::Option::None, ::std::option::Option::Some(cli_section)) => {
                             self.optional = ::std::option::Option::Some(::std::clone::Clone::clone(cli_section));
@@ -263,11 +266,11 @@ mod tests {
         });
         let expected = quote! {
             #[automatically_derived]
-            impl ExampleConfig {
-                pub(crate) fn apply_cli_overrides(&mut self, cli: &Self, explicit: &::std::collections::HashSet<::std::string::String>) {
+            impl crate::config::CliOverrides for ExampleConfig {
+                fn apply_cli_overrides(&mut self, cli: &Self, explicit: &::std::collections::HashSet<::std::string::String>) {
                     self.skipped = ::std::clone::Clone::clone(&cli.skipped);
                     #[cfg(feature = "dev")]
-                    self.child.apply_cli_overrides(&cli.child, explicit);
+                    crate::config::CliOverrides::apply_cli_overrides(&mut self.child, &cli.child, explicit);
                 }
             }
         };
@@ -285,8 +288,8 @@ mod tests {
         });
         let expected = quote! {
             #[automatically_derived]
-            impl EmptyConfig {
-                pub(crate) fn apply_cli_overrides(&mut self, cli: &Self, explicit: &::std::collections::HashSet<::std::string::String>) {
+            impl crate::config::CliOverrides for EmptyConfig {
+                fn apply_cli_overrides(&mut self, cli: &Self, explicit: &::std::collections::HashSet<::std::string::String>) {
                     self.skipped = ::std::clone::Clone::clone(&cli.skipped);
                 }
             }

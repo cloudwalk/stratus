@@ -22,7 +22,7 @@ const DEFAULT_BLOCK_CHANGES_CACHE: usize = 2 * GIGABYTE;
 /// This replaces the previous cache_size_multiplier approach with
 /// individual cache size settings for each Column Family.
 #[derive(DebugAsJson, Clone, Parser, serde::Deserialize, Serialize, CliOverrides)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct RocksCfCacheConfig {
     /// Cache size in bytes for the 'accounts' column family.
     #[arg(

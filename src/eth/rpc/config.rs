@@ -10,7 +10,7 @@ use crate::eth::rpc::RpcClientApp;
 use crate::eth::rpc::pagination;
 
 #[derive(Parser, Clone, DebugAsJson, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default, deny_unknown_fields, rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub struct RpcServerConfig {
     /// JSON-RPC server binding address.
     #[arg(short = 'a', long = "address", default_value = "0.0.0.0:3000")]

@@ -18,7 +18,7 @@ use crate::ext::parse_duration;
 // -----------------------------------------------------------------------------
 
 #[derive(Parser, DebugAsJson, Clone, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct MinerConfig {
     /// Target block time.
     #[arg(long = "block-mode", default_value = "automine")]

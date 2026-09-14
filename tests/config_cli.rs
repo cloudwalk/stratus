@@ -77,17 +77,31 @@ fn test_malformed_toml_fails() {
 }
 
 #[test]
-fn test_unknown_field_fails() {
-    assert_config_error(
-        &[],
+fn test_unknown_field_warns_but_does_not_fail() {
+    // unknown fields are ignored with a warning instead of failing, so a file with stale or
+    // unrecognized options does not prevent startup; the config below also lacks a node mode,
+    // which makes the process exit during validation instead of booting a node
+    let mut command = Command::new(env!("CARGO_BIN_EXE_stratus"));
+    let config = with_config(
+        &mut command,
         r#"
-            leader = true
             unknown_field = 1
 
             [executor]
             chain_id = 2008
         "#,
-        "unknown field `unknown_field`",
+    );
+    let output = run(command);
+    drop(config);
+    assert!(!output.status.success(), "expected the binary to fail, but it succeeded");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("warning: unknown field in config file"),
+        "expected unknown field warning in output\n  output: {stdout}"
+    );
+    assert!(
+        stdout.contains("no node mode configured"),
+        "expected validation failure for missing node mode\n  output: {stdout}"
     );
 }
 

@@ -15,7 +15,7 @@ use crate::metrics_for_storage_write;
 use crate::set_node_mode_provider;
 
 #[derive(DebugAsJson, Clone, Parser, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct MetricsConfig {
     /// Metrics exporter binding address.
     #[arg(long = "metrics-exporter-address", default_value = "0.0.0.0:9000")]

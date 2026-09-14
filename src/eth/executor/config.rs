@@ -11,7 +11,7 @@ use crate::eth::miner::Miner;
 use crate::eth::storage::StratusStorage;
 
 #[derive(Parser, DebugAsJson, Clone, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct ExecutorConfig {
     /// Chain ID of the network.
     #[arg(long = "executor-chain-id", alias = "chain-id", default_value = "0")]

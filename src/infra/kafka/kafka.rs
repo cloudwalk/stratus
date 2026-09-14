@@ -19,7 +19,7 @@ use crate::ledger::events::Event;
 use crate::log_and_err;
 
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize, Default, CliOverrides)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct KafkaConfig {
     /// Kafka bootstrap servers. Empty by default; the all-or-none rule is enforced by `validate()` after the merge.
     #[arg(long = "kafka-bootstrap-servers", default_value = "", required = false)]

@@ -25,7 +25,7 @@ pub struct StorageCache {
 }
 
 #[derive(DebugAsJson, Clone, Parser, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct CacheConfig {
     /// Capacity of account history cache
     #[arg(long = "account-history-cache-capacity", default_value = "20000")]

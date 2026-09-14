@@ -145,7 +145,7 @@ Stratus is a high-performance EVM-compatible blockchain infrastructure written i
 - `config/stratus.example.toml` - Fully documented example with all available options
 - File resolution: `--config <path>` when provided, otherwise `config/{binary}.{env}.toml` (env from `--env`, default `local`)
 - Precedence: defaults < config file < explicitly provided CLI arguments
-- Unknown fields in the config file are rejected (typos fail loudly)
+- Unknown fields in the config file are ignored with a warning (surfaced in the logs)
 
 ### Remaining Environment Variables
 
