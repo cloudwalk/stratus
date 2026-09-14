@@ -9,7 +9,7 @@ use crate::eth::executor::Executor;
 use crate::eth::miner::Miner;
 use crate::eth::storage::StratusStorage;
 
-#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+#[derive(Parser, DebugAsJson, Clone, Copy, serde::Serialize)]
 pub struct ExecutorConfig {
     /// Chain ID of the network.
     #[arg(long = "executor-chain-id", alias = "chain-id", env = "EXECUTOR_CHAIN_ID")]

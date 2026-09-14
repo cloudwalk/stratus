@@ -76,7 +76,7 @@ impl EvmWorkerPool {
             for evm_index in 1..=num_evms {
                 let evm_task_name = format!("{task_name}-{evm_index}");
                 let evm_storage = Arc::clone(storage);
-                let evm_config = config.clone();
+                let evm_config = *config;
                 let evm_rx = evm_rx.clone();
                 let thread_name = evm_task_name.clone();
                 spawn_thread(&thread_name, move || {

@@ -293,7 +293,12 @@ impl Executor {
         );
 
         let filter = kind.into();
-        let Some(block_info) = self.storage.read_block_info(filter)? else {
+        let block_info_opt = if matches!(kind, ExecutionKind::AccessList) {
+            Some(self.storage.read_latest_block_info_relaxed())
+        } else {
+            self.storage.read_block_info(filter)?
+        };
+        let Some(block_info) = block_info_opt else {
             return Err(StorageError::BlockNotFound { filter }.into());
         };
 
