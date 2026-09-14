@@ -5,7 +5,6 @@
 
 pub mod loader;
 
-use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -16,7 +15,9 @@ use clap::ArgGroup;
 use clap::Parser;
 use display_json::DebugAsJson;
 pub use loader::ConfigLoad;
+pub use stratus_cli_overrides::CliOverrides;
 use stratus_macros::CliOverrides;
+use stratus_metrics::MetricsConfig;
 use strum::VariantNames;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
@@ -27,24 +28,8 @@ use crate::eth::miner::MinerConfig;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::StorageConfig;
 use crate::infra::kafka::KafkaConfig;
-use stratus_metrics::MetricsConfig;
 use crate::infra::sentry::SentryConfig;
 use crate::infra::tracing::TracingConfig;
-
-// -----------------------------------------------------------------------------
-// Trait: CLI overrides
-// -----------------------------------------------------------------------------
-
-/// Merges values from explicitly provided CLI arguments over values loaded from the config file.
-///
-/// Implemented by the `CliOverrides` derive from `stratus_macros` for each config struct. The
-/// derive generates the merge from the struct fields: plain fields are copied when their
-/// argument was explicitly provided in the command line, flattened sections recurse into the
-/// child struct, and serde-skipped fields are always taken from the CLI.
-pub trait CliOverrides {
-    /// Applies `cli` values over `self`, restricted to the arguments in `explicit`.
-    fn apply_cli_overrides(&mut self, cli: &Self, explicit: &HashSet<String>);
-}
 
 // -----------------------------------------------------------------------------
 // Config: Common
