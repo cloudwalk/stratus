@@ -52,7 +52,11 @@ pub struct ImporterConfig {
     pub sync_interval: Duration,
 
     /// Enable replication of block changes
-    #[arg(id = "importer.enable_block_changes_replication", long = "enable-block-changes-replication", default_value = "false")]
+    #[arg(
+        id = "importer.enable_block_changes_replication",
+        long = "enable-block-changes-replication",
+        default_value = "false"
+    )]
     pub enable_block_changes_replication: bool,
 
     /// Compute an access list for transactions before forwarding them to the leader.
@@ -96,7 +100,7 @@ impl ImporterConfig {
     ) -> anyhow::Result<Option<Arc<ImporterConsensus>>> {
         match GlobalState::get_node_mode() {
             NodeMode::Leader => Ok(None),
-            NodeMode::Follower =>
+            NodeMode::Follower => {
                 self.init_follower(
                     executor,
                     miner,
@@ -108,7 +112,8 @@ impl ImporterConfig {
                         ImporterMode::ReexecutionFollower
                     },
                 )
-                .await,
+                .await
+            }
             NodeMode::FakeLeader => self.init_follower(executor, miner, storage, kafka_connector, ImporterMode::FakeLeader).await,
         }
     }
