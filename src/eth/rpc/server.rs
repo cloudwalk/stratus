@@ -37,6 +37,7 @@ use serde_json::json;
 use serde_json::value::RawValue;
 use serde_json::value::to_raw_value;
 use stratus_metrics as metrics;
+use tokio::net::TcpSocket;
 use tokio::select;
 use tokio::sync::Semaphore;
 use tokio::sync::SemaphorePermit;
@@ -227,13 +228,22 @@ impl Server {
             .set_batch_request_config(BatchRequestConfig::Limit(this.rpc_config.batch_request_limit))
             .build();
 
+        // Tokio's default TCP listener backlog is 1024, which is too small for benchmark connection bursts.
+        const RPC_LISTEN_BACKLOG: u32 = 4096;
+        let socket = match this.rpc_config.rpc_address {
+            std::net::SocketAddr::V4(_) => TcpSocket::new_v4()?,
+            std::net::SocketAddr::V6(_) => TcpSocket::new_v6()?,
+        };
+        socket.set_reuseaddr(true)?;
+        socket.bind(this.rpc_config.rpc_address)?;
+        let listener = socket.listen(RPC_LISTEN_BACKLOG)?.into_std()?;
+
         // serve module
         let server = RpcServer::builder()
             .set_rpc_middleware(rpc_middleware)
             .set_http_middleware(http_middleware)
             .set_config(server_config)
-            .build(this.rpc_config.rpc_address)
-            .await?;
+            .build_from_tcp(listener)?;
 
         let handle_rpc_server = server.start(module);
         Ok((handle_rpc_server, subs.handles))

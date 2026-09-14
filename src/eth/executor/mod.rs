@@ -225,11 +225,7 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Validates that the target account is a contract, reading it from storage at the given point in time.
-    pub fn validate_to_is_contract(&self, to_address: Address, mut kind: ExecutionKind) -> Result<(), StratusError> {
-        // small warm up
-        if matches!(kind, ExecutionKind::Transaction) {
-            kind = ExecutionKind::RPC(PointInTime::Pending);
-        }
+    pub fn validate_to_is_contract(&self, to_address: Address, kind: ExecutionKind) -> Result<(), StratusError> {
         let (account, _) = self.storage.read_account(to_address, kind)?;
         if account.bytecode.is_none() {
             if self.reject_not_contract {
