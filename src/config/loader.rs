@@ -3,7 +3,8 @@
 //! Loading rules:
 //!
 //! 1. The config file is resolved: `--config <path>` when provided, otherwise `config/{binary}.{env}.toml`.
-//! 2. The file is parsed with [`toml`]; any field absent from the file falls back to its default value.
+//! 2. The file is parsed with [`toml`]; any field absent from the file falls back to its default value,
+//!    and fields unknown to the configuration are ignored with a warning instead of failing.
 //! 3. CLI arguments explicitly provided in the command line override the corresponding file values.
 //!    Arguments that only have clap defaults do not override the file.
 //! 4. The merged configuration is validated for invariants that depend on file and CLI values together.
@@ -17,8 +18,10 @@ use clap::ArgMatches;
 use clap::Command;
 use clap::CommandFactory;
 use clap::FromArgMatches;
+use clap::Parser;
 use clap::parser::ValueSource;
 
+use crate::config::CliOverrides;
 use crate::config::StratusConfig;
 use crate::infra::build_info;
 
@@ -29,7 +32,6 @@ pub trait ConfigLoad: Sized {
 }
 
 impl ConfigLoad for StratusConfig {
-    #[allow(clippy::expect_used)]
     fn load_config() -> Self {
         Self::load().unwrap_or_else(|error| {
             println!("failed to load configuration | reason={error:?}");
@@ -38,18 +40,38 @@ impl ConfigLoad for StratusConfig {
     }
 }
 
-impl StratusConfig {
-    /// Loads the configuration: config file as base, explicitly provided CLI arguments as overrides.
-    pub fn load() -> anyhow::Result<Self> {
-        let command = Self::command();
-        let matches = command.clone().get_matches();
-        Self::load_from_matches(&command, &matches)
+/// Command-line entrypoint for configuration parsing.
+///
+/// `--config` lives in its own struct, separate from [`StratusConfig`], because it decides which
+/// file to load before any configuration value can exist; the remaining arguments are the
+/// configuration itself, flattened and parsed together in a single pass.
+#[derive(Parser)]
+#[command(author, version, about = "Stratus: EVM executor and JSON-RPC server", long_about = None)]
+struct ConfigCli {
+    /// Path to the TOML configuration file. When absent, `config/{binary}.{env}.toml` is used.
+    #[arg(long = "config", value_name = "FILE")]
+    config_path: Option<PathBuf>,
+
+    #[command(flatten)]
+    config: StratusConfig,
+}
+
+impl ConfigCli {
+    /// Resolves the config file path: `--config <path>` when provided, otherwise `config/{binary}.{env}.toml`.
+    fn resolve_config_path(&self) -> (PathBuf, bool) {
+        match &self.config_path {
+            Some(path) => (path.clone(), true),
+            None => {
+                let path = PathBuf::from(format!("config/{}.{}.toml", build_info::binary_name(), self.config.common.env));
+                (path, false)
+            }
+        }
     }
 
-    /// Loads the configuration from already parsed CLI matches, reading the resolved config file from disk.
-    pub(crate) fn load_from_matches(command: &Command, matches: &ArgMatches) -> anyhow::Result<Self> {
+    /// Loads the configuration from the command line, reading the resolved config file from disk.
+    fn load_config(&self, command: &Command, matches: &ArgMatches) -> anyhow::Result<StratusConfig> {
         // resolve the config file path
-        let (config_path, explicit_path) = resolve_config_path(matches);
+        let (config_path, explicit_path) = self.resolve_config_path();
 
         // read the config file, falling back to defaults when the default file does not exist
         let file_content = match std::fs::read_to_string(&config_path) {
@@ -67,18 +89,17 @@ impl StratusConfig {
         };
 
         println!("reading config file | path={}", config_path.display());
-        Self::load_from_matches_with_content(command, matches, &file_content)
+        self.load_config_with_content(command, matches, &file_content)
     }
 
     /// Loads the configuration from already parsed CLI matches and the given config file content.
-    fn load_from_matches_with_content(command: &Command, matches: &ArgMatches, file_content: &str) -> anyhow::Result<Self> {
+    fn load_config_with_content(&self, command: &Command, matches: &ArgMatches, file_content: &str) -> anyhow::Result<StratusConfig> {
         // parse the config file
-        let mut config: StratusConfig = toml::from_str(file_content).with_context(|| "failed to parse config file".to_string())?;
+        let mut config: StratusConfig = parse_config_file(file_content)?;
 
         // merge explicitly provided CLI arguments over the file values
-        let cli = StratusConfig::from_arg_matches(matches)?;
         let explicit = explicit_arg_ids(command, matches);
-        config.apply_cli_overrides(&cli, &explicit);
+        config.apply_cli_overrides(&self.config, &explicit);
 
         // validate the merged configuration
         config.validate()?;
@@ -87,18 +108,26 @@ impl StratusConfig {
     }
 }
 
-/// Resolves the config file path: `--config <path>` when provided, otherwise `config/{binary}.{env}.toml`.
-fn resolve_config_path(matches: &ArgMatches) -> (PathBuf, bool) {
-    if let Some(path) = matches.get_one::<String>("config_path") {
-        return (PathBuf::from(path), true);
+impl StratusConfig {
+    /// Loads the configuration: config file as base, explicitly provided CLI arguments as overrides.
+    pub fn load() -> anyhow::Result<Self> {
+        let command = ConfigCli::command();
+        let matches = command.clone().get_matches();
+        let cli = ConfigCli::from_arg_matches(&matches)?;
+        cli.load_config(&command, &matches)
     }
+}
 
-    let env = matches
-        .get_one::<crate::config::Environment>("env")
-        .copied()
-        .unwrap_or(crate::config::Environment::Local);
-    let path = PathBuf::from(format!("config/{}.{}.toml", build_info::binary_name(), env));
-    (path, false)
+/// Parses the config file content, warning about fields unknown to the configuration.
+///
+/// Unknown fields warn instead of fail so a file with stale or unrecognized options does not
+/// prevent startup; typos are still surfaced in the logs.
+fn parse_config_file(file_content: &str) -> anyhow::Result<StratusConfig> {
+    let deserializer = toml::Deserializer::parse(file_content).context("failed to parse config file")?;
+    serde_ignored::deserialize(deserializer, |path| {
+        println!("warning: unknown field in config file, ignored | field={path}");
+    })
+    .context("failed to parse config file")
 }
 
 /// Collects the ids of arguments explicitly provided in the command line.
@@ -115,6 +144,7 @@ fn explicit_arg_ids(command: &Command, matches: &ArgMatches) -> HashSet<String> 
 #[cfg(test)]
 mod tests {
     use clap::CommandFactory;
+    use clap::FromArgMatches;
     use clap::Parser;
 
     use crate::config::Environment;
@@ -123,9 +153,10 @@ mod tests {
 
     /// Parses CLI arguments and merges them over the given config file content.
     fn load_with(args: &[&str], file_content: &str) -> anyhow::Result<StratusConfig> {
-        let command = StratusConfig::command();
+        let command = super::ConfigCli::command();
         let matches = command.clone().try_get_matches_from(std::iter::once("stratus").chain(args.iter().copied()))?;
-        StratusConfig::load_from_matches_with_content(&command, &matches, file_content)
+        let cli = super::ConfigCli::from_arg_matches(&matches)?;
+        cli.load_config_with_content(&command, &matches, file_content)
     }
 
     #[test]
@@ -179,6 +210,23 @@ mod tests {
         assert_eq!(config.common.num_async_threads, 8);
         assert_eq!(config.common.num_blocking_threads, 64);
         assert_eq!(config.executor.call_present_evms, 11);
+    }
+
+    #[test]
+    fn test_unknown_fields_are_ignored() {
+        // fields unknown to the configuration are ignored (with a warning) instead of failing,
+        // so a file with stale options does not prevent startup
+        let file = r#"
+            leader = true
+            misspelled_field = "typo"
+
+            [executor]
+            chain_id = 2008
+            incorect_name = 3
+        "#;
+        let config = load_with(&[], file).unwrap();
+        assert!(config.leader);
+        assert_eq!(config.executor.executor_chain_id, 2008);
     }
 
     #[test]
@@ -241,9 +289,10 @@ mod tests {
 
     #[test]
     fn test_env_arg_selects_file_path() {
-        let command = StratusConfig::command();
+        let command = super::ConfigCli::command();
         let matches = command.clone().try_get_matches_from(["stratus", "--env", "production"]).unwrap();
-        let (path, explicit) = super::resolve_config_path(&matches);
+        let cli = super::ConfigCli::from_arg_matches(&matches).unwrap();
+        let (path, explicit) = cli.resolve_config_path();
         assert!(!explicit);
         assert_eq!(
             path,
@@ -251,7 +300,8 @@ mod tests {
         );
 
         let matches = command.try_get_matches_from(["stratus", "--config", "/etc/stratus.toml"]).unwrap();
-        let (path, explicit) = super::resolve_config_path(&matches);
+        let cli = super::ConfigCli::from_arg_matches(&matches).unwrap();
+        let (path, explicit) = cli.resolve_config_path();
         assert!(explicit);
         assert_eq!(path, std::path::PathBuf::from("/etc/stratus.toml"));
     }
@@ -421,7 +471,7 @@ mod tests {
         #[cfg(feature = "dev")]
         args.extend(["--genesis-path", "config/genesis.local.json"]);
 
-        for arg in StratusConfig::command().get_arguments() {
+        for arg in super::ConfigCli::command().get_arguments() {
             let Some(long) = arg.get_long() else { continue };
             if ["config", "help", "version", "leader", "fake-leader"].contains(&long) {
                 continue;

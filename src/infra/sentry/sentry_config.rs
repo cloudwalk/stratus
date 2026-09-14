@@ -8,7 +8,7 @@ use crate::ext::not;
 use crate::infra::build_info;
 
 #[derive(DebugAsJson, Clone, Default, Parser, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct SentryConfig {
     /// Sentry server URL.
     #[arg(long = "sentry-url", required = false)]

@@ -34,7 +34,7 @@ use crate::eth::types::StratusError;
 
 /// Configuration that can be used by any binary that interacts with Stratus storage.
 #[derive(Parser, DebugAsJson, Clone, Default, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct StorageConfig {
     #[clap(flatten)]
     #[serde(rename = "temporary")]

@@ -5,6 +5,7 @@
 
 pub mod loader;
 
+use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -31,6 +32,21 @@ use crate::infra::sentry::SentryConfig;
 use crate::infra::tracing::TracingConfig;
 
 // -----------------------------------------------------------------------------
+// Trait: CLI overrides
+// -----------------------------------------------------------------------------
+
+/// Merges values from explicitly provided CLI arguments over values loaded from the config file.
+///
+/// Implemented by the `CliOverrides` derive from `stratus_macros` for each config struct. The
+/// derive generates the merge from the struct fields: plain fields are copied when their
+/// argument was explicitly provided in the command line, flattened sections recurse into the
+/// child struct, and serde-skipped fields are always taken from the CLI.
+pub trait CliOverrides {
+    /// Applies `cli` values over `self`, restricted to the arguments in `explicit`.
+    fn apply_cli_overrides(&mut self, cli: &Self, explicit: &HashSet<String>);
+}
+
+// -----------------------------------------------------------------------------
 // Config: Common
 // -----------------------------------------------------------------------------
 
@@ -40,8 +56,7 @@ pub trait WithCommonConfig {
 
 /// Configuration that can be used by any binary.
 #[derive(DebugAsJson, Clone, Parser, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default, deny_unknown_fields)]
-#[command(author, version, about, long_about = None)]
+#[serde(default)]
 pub struct CommonConfig {
     /// Environment where the application is running.
     #[arg(long = "env", default_value = "local")]
@@ -168,7 +183,7 @@ impl CommonConfig {
 
 /// Configuration for main Stratus service.
 #[derive(DebugAsJson, Clone, Default, Parser, derive_more::Deref, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 #[clap(group = ArgGroup::new("mode").args(&["leader", "follower", "fake_leader"]))]
 pub struct StratusConfig {
     #[arg(long = "leader", conflicts_with_all = ["follower", "fake_leader", "ImporterConfig"])]
@@ -180,11 +195,6 @@ pub struct StratusConfig {
     /// The fake leader imports blocks like a follower, but executes the blocks's txs locally like a leader.
     #[arg(long = "fake-leader", conflicts_with_all = ["leader", "follower"])]
     pub fake_leader: bool,
-
-    /// Path to the TOML configuration file. When absent, `config/{binary}.{env}.toml` is used.
-    #[arg(long = "config", value_name = "FILE")]
-    #[serde(skip)]
-    pub config_path: Option<String>,
 
     #[clap(flatten)]
     #[serde(rename = "rpc")]
@@ -358,7 +368,6 @@ impl FromStr for Environment {
 /// Genesis configuration
 #[derive(DebugAsJson, Clone, Parser, Default, serde::Deserialize, serde::Serialize)]
 #[cfg_attr(feature = "dev", derive(CliOverrides))]
-#[serde(deny_unknown_fields)]
 pub struct GenesisFileConfig {
     /// Path to the genesis.json file
     #[arg(long = "genesis-path")]

@@ -40,7 +40,7 @@ use crate::infra::tracing::TracingMinimalTimer;
 // -----------------------------------------------------------------------------
 
 #[derive(DebugAsJson, Clone, Parser, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct TracingConfig {
     /// OpenTelemetry server URL.
     #[arg(long = "tracing-url", alias = "tracing-collector-url")]

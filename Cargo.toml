@@ -63,6 +63,7 @@ tokio-util = "=0.7.18"
 # config
 clap = { version = "=4.5.60", features = ["derive"] }
 toml = "=1.1.5"
+serde_ignored = "=0.1.14"
 
 # serialization
 bincode = { version = "=2.0.1", features = ["derive"] }

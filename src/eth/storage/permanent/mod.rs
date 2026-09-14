@@ -23,7 +23,7 @@ use crate::ext::parse_duration;
 
 /// Permanent storage configuration.
 #[derive(DebugAsJson, Clone, Parser, serde::Deserialize, serde::Serialize, CliOverrides)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct PermanentStorageConfig {
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
     #[arg(long = "rocks-path-prefix")]
