@@ -18,7 +18,7 @@ pub mod block_with_receipts;
 pub mod fake_leader;
 
 /// Number of blocks that are downloaded in parallel.
-const PARALLEL_BLOCKS: usize = 3;
+const PARALLEL_BLOCKS: usize = 50;
 
 pub trait DataFetcher: Send + Sync + Sized {
     type FetchedType: Send + 'static;
