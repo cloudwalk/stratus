@@ -532,7 +532,9 @@ mod tests {
         assert_eq!(genesis_from_clap.config.chainId, 2008);
 
         // Test 3: struct construction (the config file loader applies file values as clap defaults)
-        let config = GenesisFileConfig { genesis_path: Some(file_path.to_string()) };
+        let config = GenesisFileConfig {
+            genesis_path: Some(file_path.to_string()),
+        };
         assert_eq!(config.genesis_path, Some(file_path.to_string()));
 
         // Load the file using the path obtained from the config file

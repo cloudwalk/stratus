@@ -26,7 +26,11 @@ pub struct StorageCache {
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct CacheConfig {
     /// Capacity of account history cache
-    #[arg(id = "storage.cache.account_history_cache_capacity", long = "account-history-cache-capacity", default_value = "20000")]
+    #[arg(
+        id = "storage.cache.account_history_cache_capacity",
+        long = "account-history-cache-capacity",
+        default_value = "20000"
+    )]
     pub account_history_cache_capacity: usize,
 
     /// Capacity of slot history cache

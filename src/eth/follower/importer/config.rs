@@ -52,7 +52,11 @@ pub struct ImporterConfig {
     pub sync_interval: Duration,
 
     /// Enable replication of block changes
-    #[arg(id = "importer.enable_block_changes_replication", long = "enable-block-changes-replication", default_value = "false")]
+    #[arg(
+        id = "importer.enable_block_changes_replication",
+        long = "enable-block-changes-replication",
+        default_value = "false"
+    )]
     pub enable_block_changes_replication: bool,
 
     /// Number of Tokio worker threads dedicated to the online importer.
