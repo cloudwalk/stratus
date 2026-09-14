@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/stratus_cli_overrides",
     "crates/stratus_macros",
     "crates/stratus_metrics",
     "crates/stratus_metrics/macros",
@@ -48,6 +49,7 @@ sugars = "=3.0.1"
 thiserror = "=2.0.18"
 uuid = { version = "=1.23.3", features = ["v7"]}
 stratus_macros = { path = "./crates/stratus_macros" }
+stratus_cli_overrides = { path = "./crates/stratus_cli_overrides" }
 stratus_metrics = { path = "./crates/stratus_metrics", default-features = false }
 libc = "=0.2.186"
 hostname = "=0.4.2"

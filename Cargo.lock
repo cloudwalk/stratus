@@ -6272,6 +6272,7 @@ dependencies = [
  "serde_with",
  "smallvec",
  "static_assertions",
+ "stratus_cli_overrides",
  "stratus_macros",
  "stratus_metrics",
  "strum",
@@ -6293,6 +6294,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "stratus_cli_overrides"
+version = "0.1.0"
+
+[[package]]
 name = "stratus_macros"
 version = "0.1.0"
 dependencies = [
@@ -6312,6 +6317,8 @@ dependencies = [
  "metrics-exporter-prometheus",
  "serde",
  "serde_json",
+ "stratus_cli_overrides",
+ "stratus_macros",
  "stratus_metrics_macros",
  "tokio",
  "tracing",
