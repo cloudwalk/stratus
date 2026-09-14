@@ -59,7 +59,7 @@ pub struct ImporterConfig {
     #[arg(
         long = "importer-async-threads",
         env = "IMPORTER_ASYNC_THREADS",
-        default_value = "4",
+        default_value = "8",
         value_parser = parse_thread_count,
         required = false
     )]
