@@ -100,7 +100,7 @@ impl ImporterConfig {
     ) -> anyhow::Result<Option<Arc<ImporterConsensus>>> {
         match GlobalState::get_node_mode() {
             NodeMode::Leader => Ok(None),
-            NodeMode::Follower => {
+            NodeMode::Follower =>
                 self.init_follower(
                     executor,
                     miner,
@@ -112,8 +112,7 @@ impl ImporterConfig {
                         ImporterMode::ReexecutionFollower
                     },
                 )
-                .await
-            }
+                .await,
             NodeMode::FakeLeader => self.init_follower(executor, miner, storage, kafka_connector, ImporterMode::FakeLeader).await,
         }
     }
