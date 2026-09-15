@@ -213,6 +213,33 @@ impl WithCommonConfig for StratusConfig {
 }
 
 impl StratusConfig {
+    /// Ignores follower-only sections when running as leader.
+    ///
+    /// `[importer]` and `[kafka]` only apply to follower and fake-leader nodes; a leader receiving them
+    /// (e.g. from a config file shared with a follower) ignores them instead of failing to start.
+    pub(crate) fn ignore_follower_sections(&mut self) {
+        if self.active_node_modes().as_slice() != ["leader"] {
+            return;
+        }
+        if self.importer.take().is_some() {
+            println!("warning: ignoring [importer] config in leader mode");
+        }
+        if self.kafka_config.take().is_some() {
+            println!("warning: ignoring [kafka] config in leader mode");
+        }
+    }
+
+    /// Ignores the sentry section when its url is empty.
+    ///
+    /// Sentry is non-essential: an empty url disables the exporter instead of failing to start,
+    /// the same way a sentry exporter that fails to start is handled at runtime.
+    pub(crate) fn ignore_sentry_without_url(&mut self) {
+        if self.common.sentry.as_ref().is_some_and(|sentry| sentry.sentry_url.is_empty()) {
+            println!("warning: ignoring [common.sentry] config: url is empty");
+            self.common.sentry = None;
+        }
+    }
+
     /// Validates configuration invariants that clap cannot enforce.
     ///
     /// Clap's value parsers already validate per-value syntax and ranges for both file and CLI values, because file
@@ -224,15 +251,21 @@ impl StratusConfig {
         self.validate_executor()?;
         self.validate_importer()?;
         self.validate_kafka()?;
-        self.validate_sentry()?;
         Ok(())
+    }
+
+    /// Returns the names of the active node modes.
+    fn active_node_modes(&self) -> Vec<&'static str> {
+        [(self.leader, "leader"), (self.follower, "follower"), (self.fake_leader, "fake-leader")]
+            .into_iter()
+            .filter(|(active, _)| *active)
+            .map(|(_, name)| name)
+            .collect()
     }
 
     /// Validates that exactly one node mode is configured.
     fn validate_node_mode(&self) -> anyhow::Result<()> {
-        let modes = [(self.leader, "leader"), (self.follower, "follower"), (self.fake_leader, "fake-leader")];
-        let active: Vec<&str> = modes.iter().filter(|(active, _)| *active).map(|(_, name)| *name).collect();
-        match active.as_slice() {
+        match self.active_node_modes().as_slice() {
             [_mode] => Ok(()),
             [] => anyhow::bail!("no node mode configured: set exactly one of `leader`, `follower` or `fake_leader` (config file or CLI flag)"),
             many => anyhow::bail!(
@@ -250,11 +283,8 @@ impl StratusConfig {
         Ok(())
     }
 
-    /// Validates the importer requirements for the configured node mode.
+    /// Validates the importer requirements for follower and fake-leader modes.
     fn validate_importer(&self) -> anyhow::Result<()> {
-        if self.leader && self.importer.is_some() {
-            anyhow::bail!("leader mode cannot be used with `[importer]` configuration");
-        }
         if self.follower || self.fake_leader {
             let Some(importer) = &self.importer else {
                 anyhow::bail!("follower and fake-leader modes require `[importer]` configuration");
@@ -266,12 +296,9 @@ impl StratusConfig {
         Ok(())
     }
 
-    /// Validates the kafka section: all-or-none fields, and only with an importer (follower or fake-leader).
+    /// Validates the kafka section: all-or-none fields, for follower and fake-leader modes.
     fn validate_kafka(&self) -> anyhow::Result<()> {
         let Some(kafka) = &self.kafka_config else { return Ok(()) };
-        if self.leader {
-            anyhow::bail!("`[kafka]` configuration requires follower or fake-leader mode");
-        }
         let missing = [
             ("bootstrap_servers", kafka.bootstrap_servers.is_empty()),
             ("topic", kafka.topic.is_empty()),
@@ -283,17 +310,6 @@ impl StratusConfig {
                 "incomplete `[kafka]` configuration: `bootstrap_servers`, `topic` and `client_id` are all required (missing: {})",
                 missing.join(", ")
             );
-        }
-        Ok(())
-    }
-
-    /// Validates that the sentry section has a non-empty url when present.
-    ///
-    /// The url cannot be rejected by a clap value parser because its clap default is `""` (an empty default keeps
-    /// the optional section materializable when it is absent).
-    fn validate_sentry(&self) -> anyhow::Result<()> {
-        if self.common.sentry.as_ref().is_some_and(|sentry| sentry.sentry_url.is_empty()) {
-            anyhow::bail!("`[sentry]` configuration requires a non-empty `url`");
         }
         Ok(())
     }

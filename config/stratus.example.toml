@@ -39,7 +39,7 @@
 # filter = "info"
 
 # [common.sentry]
-# Sentry server URL. When the section is absent, the Sentry exporter is disabled.
+# Sentry server URL. When the section is absent or the url is empty, the Sentry exporter is disabled.
 # url = "https://sentry.io/123"
 
 [common.metrics]
@@ -116,7 +116,7 @@ chain_id = 2008
 
 # [importer]
 # External RPC HTTP endpoint to sync blocks with Stratus.
-# Required for follower and fake-leader modes.
+# Required for follower and fake-leader modes; ignored in leader mode.
 # external_rpc = "http://localhost:3000/"
 # External RPC WS endpoint to sync blocks with Stratus.
 # external_rpc_ws = "ws://localhost:3000/"
@@ -134,6 +134,7 @@ chain_id = 2008
 # [kafka]
 # Kafka configuration is all-or-none: when the section is present,
 # `bootstrap_servers`, `topic` and `client_id` are all required.
+# Applies to follower and fake-leader modes; ignored in leader mode.
 # bootstrap_servers = "localhost:29092"
 # topic = "stratus-events"
 # client_id = "stratus-producer"
