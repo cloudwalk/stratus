@@ -1372,30 +1372,33 @@ pub fn eth_send_raw_transaction<'a>(
     let ext = request.extensions;
     let ext_clone = ext.clone();
 
-    let future = async move {
-        let prepared = tokio::task::spawn_blocking(move || _prepare_eth_send_raw_transaction(input, data, access_list, ctx, ext)).await;
+    let future = {
+        let prepared_handle = tokio::task::spawn_blocking(move || _prepare_eth_send_raw_transaction(input, data, access_list, ctx, ext));
+        async move {
+            let prepared = prepared_handle.await;
 
-        let response = match prepared {
-            Ok(Ok(PreparedRawTransaction::Complete(result))) => MethodResponse::response(id, result.into_response(), usize::MAX),
-            Ok(Ok(PreparedRawTransaction::Forward {
-                importer,
-                tx_hash,
-                data,
-                access_list,
-            })) => {
-                let result = importer.forward_to_leader(tx_hash, data, access_list).await.map(hex_data).into_response();
-                MethodResponse::response(id, result, usize::MAX)
-            }
-            Ok(Err(err)) => MethodResponse::response(id, Err::<String, _>(err).into_response(), usize::MAX),
-            Err(err) => {
-                tracing::error!("Join error for blocking RPC method: {:?}", err);
-                MethodResponse::error(
-                    Id::Null,
-                    StratusError::Unexpected(crate::eth::types::UnexpectedError::Unexpected(anyhow::anyhow!(err))),
-                )
-            }
-        };
-        response.with_extensions(ext_clone)
+            let response = match prepared {
+                Ok(Ok(PreparedRawTransaction::Complete(result))) => MethodResponse::response(id, result.into_response(), usize::MAX),
+                Ok(Ok(PreparedRawTransaction::Forward {
+                    importer,
+                    tx_hash,
+                    data,
+                    access_list,
+                })) => {
+                    let result = importer.forward_to_leader(tx_hash, data, access_list).await.map(hex_data).into_response();
+                    MethodResponse::response(id, result, usize::MAX)
+                }
+                Ok(Err(err)) => MethodResponse::response(id, Err::<String, _>(err).into_response(), usize::MAX),
+                Err(err) => {
+                    tracing::error!("Join error for blocking RPC method: {:?}", err);
+                    MethodResponse::error(
+                        Id::Null,
+                        StratusError::Unexpected(crate::eth::types::UnexpectedError::Unexpected(anyhow::anyhow!(err))),
+                    )
+                }
+            };
+            response.with_extensions(ext_clone)
+        }
     }
     .instrument(span)
     .boxed();
