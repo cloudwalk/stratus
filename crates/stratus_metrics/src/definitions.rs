@@ -86,7 +86,7 @@ metrics! {
         counter executor_local_transaction_reverts{contract, function, reason},
 
         "Time executing a transaction received with eth_call or eth_estimateGas."
-        histogram_duration executor_local_call{success, contract, function},
+        histogram_duration executor_local_call{success, contract, function, kind},
 
         "Number of account reads from one storage location during an EVM execution."
         counter evm_execution_account_reads{execution_kind, found_at, contract, function},
