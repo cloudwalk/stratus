@@ -72,13 +72,14 @@ struct ConfigCli {
 
 impl ConfigCli {
     /// Resolves the config file path: `--config <path>` when provided, otherwise `config/{binary}.{env}.toml`.
-    fn resolve_config_path(&self) -> (PathBuf, bool) {
+    ///
+    /// An explicitly provided path must exist; the default path is allowed to be absent, in which case
+    /// the caller falls back to the built-in defaults.
+    fn resolve_config_path(&self) -> anyhow::Result<PathBuf> {
         match &self.config_path {
-            Some(path) => (path.clone(), true),
-            None => {
-                let path = PathBuf::from(format!("config/{}.{}.toml", build_info::binary_name(), self.config.common.env));
-                (path, false)
-            }
+            Some(path) if !path.exists() => Err(anyhow!("config file not found | path={}", path.display())),
+            Some(path) => Ok(path.clone()),
+            None => Ok(PathBuf::from(format!("config/{}.{}.toml", build_info::binary_name(), self.config.common.env))),
         }
     }
 }
@@ -90,15 +91,13 @@ impl StratusConfig {
         let command = ConfigCli::command();
         let matches = command.clone().get_matches();
         let cli = ConfigCli::from_arg_matches(&matches)?;
-        let (config_path, explicit_path) = cli.resolve_config_path();
+        let config_path = cli.resolve_config_path()?;
 
         // read the config file, falling back to defaults when the default file does not exist
+        // (an explicit path was verified to exist, so this arm is only reachable for the default path)
         let file_content = match std::fs::read_to_string(&config_path) {
             Ok(content) => content,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                if explicit_path {
-                    return Err(anyhow!("config file not found | path={}", config_path.display()));
-                }
                 println!("config file not found, using defaults | path={}", config_path.display());
                 String::new()
             }
@@ -333,6 +332,79 @@ mod tests {
     }
 
     #[test]
+    fn test_file_values_are_validated_by_clap() {
+        // file values are applied as argument defaults and go through the same value parsers as the
+        // command line, so invalid values fail during the second parse
+        let file = r#"
+            leader = true
+
+            [miner]
+            block_mode = "not-a-mode"
+        "#;
+        let error = load_with(&[], file).unwrap_err();
+        assert!(error.to_string().contains("invalid value"), "unexpected error: {error:#}");
+
+        let file = r#"
+            leader = true
+
+            [rpc]
+            max_response_size_bytes = 300
+        "#;
+        let error = load_with(&[], file).unwrap_err();
+        assert!(error.to_string().contains("must be at least"), "unexpected error: {error:#}");
+
+        // invalid tracing directives are rejected by the value parser instead of being silently
+        // dropped by `EnvFilter`
+        let file = r#"
+            leader = true
+
+            [common.tracing]
+            filter = "!!!not-a-directive"
+        "#;
+        let error = load_with(&[], file).unwrap_err();
+        assert!(error.to_string().contains("invalid tracing filter"), "unexpected error: {error:#}");
+    }
+
+    #[test]
+    fn test_cross_field_invariants_between_cli_and_file() {
+        // clap's conflict and requirement checks only consider explicitly provided arguments, so
+        // values that come from the config file (applied as clap defaults) are invisible to them:
+        // the parses below succeed, and the invariants are caught by `validate()` instead
+
+        // CLI flag conflicting with a file-only section: clap accepts, validate() rejects
+        let file = r#"
+            [executor]
+            chain_id = 2008
+
+            [importer]
+            external_rpc = "http://localhost:3000/"
+        "#;
+        let command = super::ConfigCli::command();
+        let table = super::parse_config_table(file).unwrap();
+        let command = super::apply_file_defaults(command, &table);
+        let matches = command.try_get_matches_from(["stratus", "--leader"]).unwrap();
+        let error = super::config_from_matches(&matches, &table).unwrap_err();
+        assert!(
+            error.to_string().contains("leader mode cannot be used with `[importer]`"),
+            "unexpected error: {error:#}"
+        );
+
+        // node mode split between file and CLI: clap accepts, validate() rejects
+        let file = r#"
+            leader = true
+
+            [executor]
+            chain_id = 2008
+        "#;
+        let command = super::ConfigCli::command();
+        let table = super::parse_config_table(file).unwrap();
+        let command = super::apply_file_defaults(command, &table);
+        let matches = command.try_get_matches_from(["stratus", "--follower"]).unwrap();
+        let error = super::config_from_matches(&matches, &table).unwrap_err();
+        assert!(error.to_string().contains("multiple node modes"), "unexpected error: {error:#}");
+    }
+
+    #[test]
     fn test_mode_flags_from_cli() {
         // follower flag from CLI + importer from file
         let file = r#"
@@ -386,18 +458,21 @@ mod tests {
         let command = super::ConfigCli::command();
         let matches = command.clone().try_get_matches_from(["stratus", "--env", "production"]).unwrap();
         let cli = super::ConfigCli::from_arg_matches(&matches).unwrap();
-        let (path, explicit) = cli.resolve_config_path();
-        assert!(!explicit);
         assert_eq!(
-            path,
+            cli.resolve_config_path().unwrap(),
             std::path::PathBuf::from(format!("config/{}.production.toml", crate::infra::build_info::binary_name()))
         );
 
-        let matches = command.try_get_matches_from(["stratus", "--config", "/etc/stratus.toml"]).unwrap();
+        // an explicitly provided path must exist
+        let matches = command.clone().try_get_matches_from(["stratus", "--config", "/etc/stratus.toml"]).unwrap();
         let cli = super::ConfigCli::from_arg_matches(&matches).unwrap();
-        let (path, explicit) = cli.resolve_config_path();
-        assert!(explicit);
-        assert_eq!(path, std::path::PathBuf::from("/etc/stratus.toml"));
+        let error = cli.resolve_config_path().unwrap_err();
+        assert!(error.to_string().contains("config file not found | path=/etc/stratus.toml"));
+
+        // an existing explicitly provided path is resolved as is
+        let matches = command.try_get_matches_from(["stratus", "--config", "config/stratus.local.toml"]).unwrap();
+        let cli = super::ConfigCli::from_arg_matches(&matches).unwrap();
+        assert_eq!(cli.resolve_config_path().unwrap(), std::path::PathBuf::from("config/stratus.local.toml"));
     }
 
     #[test]
