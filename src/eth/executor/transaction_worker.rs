@@ -48,6 +48,7 @@ impl TransactionWorker {
         let (task_tx, task_rx) = crossbeam_channel::bounded::<TransactionTask>(4096);
         let config = *config;
 
+
         spawn_thread(TASK_NAME, move || {
             let mut evm = Evm::new(Arc::clone(&storage), &config, EvmKind::Transaction);
 
