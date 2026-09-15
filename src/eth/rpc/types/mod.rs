@@ -8,6 +8,7 @@ mod timestamp_filter;
 pub use block_filter::BlockFilter;
 pub use error::MulticallError;
 pub use error::RpcError;
+pub use error::TransactionDecodeError;
 pub use log_filter::LogFilter;
 pub use log_filter_input::LogFilterInput;
 pub use log_filter_input::LogFilterInputTopic;
