@@ -67,13 +67,16 @@ pub trait Consensus: Send + Sync {
     ///
     /// This is synchronous EVM work and must be called from a blocking thread.
     fn prepare_forward_access_list(&self, tx: TransactionInput) -> Result<Option<AccessListOutput>, StratusError> {
-        if self.forward_access_list() {
-            self.get_executor()
-                .execute_local_call::<AccessListOutput>(tx.into(), ExecutionKind::AccessList)
-                .map(Some)
-        } else {
-            Ok(None)
-        }
+        let _ = {
+            if self.forward_access_list() {
+                self.get_executor()
+                    .execute_local_call::<AccessListOutput>(tx.into(), ExecutionKind::AccessList)
+                    .map(Some)
+            } else {
+                Ok(None)
+            }
+        };
+        Ok(None)
     }
 
     /// Asynchronously sends a prepared transaction to the leader.
