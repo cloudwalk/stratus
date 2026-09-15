@@ -8,7 +8,9 @@
 //!    itself (built-in defaults < config file < explicitly provided CLI arguments) and validates file
 //!    values with the same value parsers used for the command line. Fields unknown to the configuration
 //!    are ignored with a warning instead of failing.
-//! 3. The merged configuration is validated for invariants that depend on file and CLI values together.
+//! 3. A node mode explicitly provided in the command line overrides the file's, and a leader ignores
+//!    follower-only sections (`[importer]`, `[kafka]`) instead of failing on them.
+//! 4. The merged configuration is validated for invariants that depend on file and CLI values together.
 //!
 //! Config structs declare the correspondence between file fields and arguments through the argument
 //! `id`: each config argument's id is the dotted path of the corresponding TOML field.
@@ -31,6 +33,10 @@ use crate::infra::build_info;
 
 /// Arguments that never take values from the config file.
 const CLI_ONLY_ARGUMENTS: &[&str] = &["config_path", "nocapture", "help", "version"];
+
+/// Node mode flags: when one is explicitly provided in the command line, file mode values are not
+/// applied, so the CLI mode is authoritative over the file's.
+const NODE_MODE_ARGUMENTS: &[&str] = &["leader", "follower", "fake_leader"];
 
 /// Sections parsed and ignored when the `dev` feature is not enabled, so config files stay
 /// portable across binaries built with different features.
@@ -82,6 +88,14 @@ impl ConfigCli {
             None => Ok(PathBuf::from(format!("config/{}.{}.toml", build_info::binary_name(), self.config.common.env))),
         }
     }
+
+    /// Returns whether a node mode flag is explicitly provided in the command line.
+    ///
+    /// The mode flags have no clap defaults and file values are not applied in the first pass, so
+    /// they are true exactly when explicitly provided.
+    fn provides_node_mode(&self) -> bool {
+        self.config.leader || self.config.follower || self.config.fake_leader
+    }
 }
 
 impl StratusConfig {
@@ -115,7 +129,7 @@ impl StratusConfig {
 
         // second pass over the same arguments: file values are the defaults now, so clap itself
         // enforces the precedence and validates file values with the command line value parsers
-        let command = apply_file_defaults(command, &table);
+        let command = apply_file_defaults(command, &table, cli.provides_node_mode());
         let matches = command
             .try_get_matches_from(std::env::args_os())
             .context("failed to apply config file values")?;
@@ -135,6 +149,10 @@ fn config_from_matches(matches: &ArgMatches, table: &Table) -> anyhow::Result<St
     config.importer = file_only_section(matches, table, "importer", config.importer)?;
     config.kafka_config = file_only_section(matches, table, "kafka", config.kafka_config)?;
 
+    // a leader ignores follower-only sections instead of failing on them
+    config.ignore_follower_sections();
+    config.ignore_sentry_without_url();
+
     // validate the merged configuration
     config.validate()?;
     Ok(config)
@@ -145,12 +163,14 @@ fn parse_config_table(file_content: &str) -> anyhow::Result<Table> {
     toml::from_str(file_content).context("failed to parse config file")
 }
 
-/// Applies every config file value as the default of the argument whose id matches the value's dotted path.
-fn apply_file_defaults(command: Command, table: &Table) -> Command {
+/// Applies every config file value as the default of the argument whose id matches the value's dotted path,
+/// except node mode values when the CLI provides a mode explicitly.
+fn apply_file_defaults(command: Command, table: &Table, cli_node_mode: bool) -> Command {
     let defaults: Vec<(String, String)> = command
         .get_arguments()
         .map(|arg| arg.get_id().as_str().to_string())
         .filter(|id| !CLI_ONLY_ARGUMENTS.contains(&id.as_str()))
+        .filter(|id| !(cli_node_mode && NODE_MODE_ARGUMENTS.contains(&id.as_str())))
         .filter_map(|id| table_lookup(table, &id).and_then(toml_value_as_string).map(|value| (id, value)))
         .collect();
 
@@ -248,10 +268,12 @@ mod tests {
 
     /// Parses CLI arguments over the given config file content and builds the merged configuration.
     fn load_with(args: &[&str], file_content: &str) -> anyhow::Result<StratusConfig> {
+        let argv = || std::iter::once("stratus").chain(args.iter().copied());
         let command = super::ConfigCli::command();
+        let cli = super::ConfigCli::from_arg_matches(&command.clone().try_get_matches_from(argv())?)?;
         let table = super::parse_config_table(file_content)?;
-        let command = super::apply_file_defaults(command, &table);
-        let matches = command.try_get_matches_from(std::iter::once("stratus").chain(args.iter().copied()))?;
+        let command = super::apply_file_defaults(command, &table, cli.provides_node_mode());
+        let matches = command.try_get_matches_from(argv())?;
         super::config_from_matches(&matches, &table)
     }
 
@@ -366,42 +388,144 @@ mod tests {
     }
 
     #[test]
-    fn test_cross_field_invariants_between_cli_and_file() {
-        // clap's conflict and requirement checks only consider explicitly provided arguments, so
-        // values that come from the config file (applied as clap defaults) are invisible to them:
-        // the parses below succeed, and the invariants are caught by `validate()` instead
-
-        // CLI flag conflicting with a file-only section: clap accepts, validate() rejects
+    fn test_leader_ignores_follower_sections() {
+        // #2567: a leader ignores follower-only sections instead of failing on them; the
+        // incomplete [kafka] would fail validation for a follower
         let file = r#"
+            leader = true
+
             [executor]
             chain_id = 2008
 
             [importer]
             external_rpc = "http://localhost:3000/"
-        "#;
-        let command = super::ConfigCli::command();
-        let table = super::parse_config_table(file).unwrap();
-        let command = super::apply_file_defaults(command, &table);
-        let matches = command.try_get_matches_from(["stratus", "--leader"]).unwrap();
-        let error = super::config_from_matches(&matches, &table).unwrap_err();
-        assert!(
-            error.to_string().contains("leader mode cannot be used with `[importer]`"),
-            "unexpected error: {error:#}"
-        );
 
-        // node mode split between file and CLI: clap accepts, validate() rejects
+            [kafka]
+            topic = "stratus-events"
+        "#;
+        let config = load_with(&[], file).unwrap();
+        assert!(config.leader);
+        assert!(config.importer.is_none());
+        assert!(config.kafka_config.is_none());
+    }
+
+    #[test]
+    fn test_empty_sentry_url_is_ignored() {
+        // an empty sentry url disables the exporter instead of failing to start
+        let file = r#"
+            leader = true
+
+            [executor]
+            chain_id = 2008
+
+            [common.sentry]
+        "#;
+        let config = load_with(&[], file).unwrap();
+        assert!(config.common.sentry.is_none());
+
+        let file = r#"
+            leader = true
+
+            [executor]
+            chain_id = 2008
+
+            [common.sentry]
+            url = ""
+        "#;
+        let config = load_with(&[], file).unwrap();
+        assert!(config.common.sentry.is_none());
+
         let file = r#"
             leader = true
 
             [executor]
             chain_id = 2008
         "#;
+        let config = load_with(&["--sentry-url", ""], file).unwrap();
+        assert!(config.common.sentry.is_none());
+    }
+
+    #[test]
+    fn test_cli_node_mode_overrides_file() {
+        // an explicit CLI node mode is authoritative over the file's, so a config file shared
+        // between leader and follower deployments works for both
+        let file = r#"
+            follower = true
+
+            [executor]
+            chain_id = 2008
+
+            [importer]
+            external_rpc = "http://localhost:3000/"
+        "#;
+        let config = load_with(&["--leader"], file).unwrap();
+        assert!(config.leader);
+        assert!(!config.follower);
+        assert!(config.importer.is_none()); // follower section ignored in leader mode
+
+        let file = r#"
+            leader = true
+
+            [executor]
+            chain_id = 2008
+
+            [importer]
+            external_rpc = "http://localhost:3000/"
+        "#;
+        let config = load_with(&["--follower"], file).unwrap();
+        assert!(config.follower);
+        assert!(!config.leader);
+        assert!(
+            config
+                .importer
+                .as_ref()
+                .is_some_and(|importer| importer.external_rpc == "http://localhost:3000/")
+        );
+    }
+
+    #[test]
+    fn test_cli_node_mode_requires_explicit_flag() {
+        // provides_node_mode relies on the mode flags being false unless explicitly provided
         let command = super::ConfigCli::command();
-        let table = super::parse_config_table(file).unwrap();
-        let command = super::apply_file_defaults(command, &table);
-        let matches = command.try_get_matches_from(["stratus", "--follower"]).unwrap();
-        let error = super::config_from_matches(&matches, &table).unwrap_err();
+        let cli = super::ConfigCli::from_arg_matches(&command.try_get_matches_from(["stratus"]).unwrap()).unwrap();
+        assert!(!cli.provides_node_mode());
+    }
+
+    #[test]
+    fn test_cli_leader_conflicts_with_cli_importer_args() {
+        // an explicit CLI contradiction errors at the clap parse
+        let command = super::ConfigCli::command();
+        let error = command
+            .try_get_matches_from(["stratus", "--leader", "-r", "http://localhost:3000/"])
+            .unwrap_err();
+        assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn test_file_only_mode_conflicts_still_fail() {
+        // clap cannot see file-provided values, so mode exclusivity between file entries is
+        // enforced by validate()
+        let file = r#"
+            leader = true
+            follower = true
+
+            [executor]
+            chain_id = 2008
+        "#;
+        let error = load_with(&[], file).unwrap_err();
         assert!(error.to_string().contains("multiple node modes"), "unexpected error: {error:#}");
+    }
+
+    #[test]
+    fn test_follower_still_requires_importer() {
+        let file = r#"
+            follower = true
+
+            [executor]
+            chain_id = 2008
+        "#;
+        let error = load_with(&[], file).unwrap_err();
+        assert!(error.to_string().contains("require `[importer]`"), "unexpected error: {error:#}");
     }
 
     #[test]
@@ -484,7 +608,7 @@ mod tests {
             let table = super::parse_config_table(&content).unwrap_or_else(|e| panic!("failed to parse {path}: {e}"));
             let command = super::ConfigCli::command();
             assert!(super::unknown_fields(&table, &command).is_empty(), "unknown fields in {path}");
-            let command = super::apply_file_defaults(command, &table);
+            let command = super::apply_file_defaults(command, &table, false);
             command
                 .try_get_matches_from(["stratus"])
                 .unwrap_or_else(|e| panic!("failed to apply values from {path}: {e}"));
@@ -618,7 +742,7 @@ mod tests {
         // exclusive node modes (their ids are still guarded by the unknown-field check above)
         for arg in super::ConfigCli::command().get_arguments() {
             let id = arg.get_id().as_str();
-            if super::CLI_ONLY_ARGUMENTS.contains(&id) || ["leader", "follower", "fake_leader"].contains(&id) {
+            if super::CLI_ONLY_ARGUMENTS.contains(&id) || super::NODE_MODE_ARGUMENTS.contains(&id) {
                 continue;
             }
             assert!(
