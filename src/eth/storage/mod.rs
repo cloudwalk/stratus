@@ -32,12 +32,14 @@ use crate::eth::types::StratusError;
 // -----------------------------------------------------------------------------
 
 /// Configuration that can be used by any binary that interacts with Stratus storage.
-#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+#[derive(Parser, DebugAsJson, Clone, Default, serde::Serialize)]
 pub struct StorageConfig {
     #[clap(flatten)]
+    #[serde(rename = "temporary")]
     pub temp_storage: TemporaryStorageConfig,
 
     #[clap(flatten)]
+    #[serde(rename = "permanent")]
     pub perm_storage: PermanentStorageConfig,
 
     #[clap(flatten)]

@@ -6,10 +6,11 @@ use crate::config::Environment;
 use crate::ext::not;
 use crate::infra::build_info;
 
-#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+#[derive(DebugAsJson, Clone, Default, Parser, serde::Serialize)]
 pub struct SentryConfig {
     /// Sentry server URL.
-    #[arg(long = "sentry-url", env = "SENTRY_URL", required = false)]
+    #[arg(id = "common.sentry.url", long = "sentry-url", default_value = "", required = false)]
+    #[serde(rename = "url")]
     pub sentry_url: String,
 }
 

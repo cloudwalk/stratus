@@ -18,39 +18,40 @@ use crate::ledger::events::Event;
 use crate::log_and_err;
 
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize, Default)]
-#[group(requires_all = ["bootstrap_servers", "topic", "client_id", "ImporterConfig"])]
+#[serde(default)]
 pub struct KafkaConfig {
-    #[arg(long = "kafka-bootstrap-servers", env = "KAFKA_BOOTSTRAP_SERVERS", required = false)]
+    /// Kafka bootstrap servers. Empty by default; the all-or-none rule is enforced by `validate()` after the merge.
+    #[arg(id = "kafka.bootstrap_servers", long = "kafka-bootstrap-servers", default_value = "", required = false)]
     pub bootstrap_servers: String,
 
-    #[arg(long = "kafka-topic", env = "KAFKA_TOPIC", group = "kafka", required = false)]
+    #[arg(id = "kafka.topic", long = "kafka-topic", group = "kafka", default_value = "", required = false)]
     pub topic: String,
 
-    #[arg(long = "kafka-client-id", env = "KAFKA_CLIENT_ID", required = false)]
+    #[arg(id = "kafka.client_id", long = "kafka-client-id", default_value = "", required = false)]
     pub client_id: String,
 
-    #[arg(long = "kafka-group-id", env = "KAFKA_GROUP_ID", required = false)]
+    #[arg(id = "kafka.group_id", long = "kafka-group-id", required = false)]
     pub group_id: Option<String>,
 
-    #[arg(long = "kafka-security-protocol", env = "KAFKA_SECURITY_PROTOCOL", required = false, default_value_t)]
+    #[arg(id = "kafka.security_protocol", long = "kafka-security-protocol", required = false, default_value_t)]
     pub security_protocol: KafkaSecurityProtocol,
 
-    #[arg(long = "kafka-sasl-mechanisms", env = "KAFKA_SASL_MECHANISMS", required = false)]
+    #[arg(id = "kafka.sasl_mechanisms", long = "kafka-sasl-mechanisms", required = false)]
     pub sasl_mechanisms: Option<String>,
 
-    #[arg(long = "kafka-sasl-username", env = "KAFKA_SASL_USERNAME", required = false)]
+    #[arg(id = "kafka.sasl_username", long = "kafka-sasl-username", required = false)]
     pub sasl_username: Option<String>,
 
-    #[arg(long = "kafka-sasl-password", env = "KAFKA_SASL_PASSWORD", required = false)]
+    #[arg(id = "kafka.sasl_password", long = "kafka-sasl-password", required = false)]
     pub sasl_password: Option<String>,
 
-    #[arg(long = "kafka-ssl-ca-location", env = "KAFKA_SSL_CA_LOCATION", required = false)]
+    #[arg(id = "kafka.ssl_ca_location", long = "kafka-ssl-ca-location", required = false)]
     pub ssl_ca_location: Option<String>,
 
-    #[arg(long = "kafka-ssl-certificate-location", env = "KAFKA_SSL_CERTIFICATE_LOCATION", required = false)]
+    #[arg(id = "kafka.ssl_certificate_location", long = "kafka-ssl-certificate-location", required = false)]
     pub ssl_certificate_location: Option<String>,
 
-    #[arg(long = "kafka-ssl-key-location", env = "KAFKA_SSL_KEY_LOCATION", required = false)]
+    #[arg(id = "kafka.ssl_key_location", long = "kafka-ssl-key-location", required = false)]
     pub ssl_key_location: Option<String>,
 }
 
@@ -69,8 +70,13 @@ pub struct KafkaConnector {
 #[derive(Clone, Copy, serde::Serialize, serde::Deserialize, ValueEnum, Default)]
 pub enum KafkaSecurityProtocol {
     #[default]
+    #[serde(rename = "none")]
     None,
+
+    #[serde(rename = "sasl-ssl")]
     SaslSsl,
+
+    #[serde(rename = "ssl")]
     Ssl,
 }
 
