@@ -37,7 +37,6 @@ use serde_json::json;
 use serde_json::value::RawValue;
 use serde_json::value::to_raw_value;
 use stratus_metrics as metrics;
-use tokio::net::TcpSocket;
 use tokio::select;
 use tokio::sync::Semaphore;
 use tokio::sync::SemaphorePermit;
@@ -181,6 +180,7 @@ impl Server {
         if let Some(importer_runtime) = this.take_importer_runtime() {
             importer_runtime.shutdown().await?;
         }
+
         Ok(())
     }
 
@@ -228,22 +228,13 @@ impl Server {
             .set_batch_request_config(BatchRequestConfig::Limit(this.rpc_config.batch_request_limit))
             .build();
 
-        // Tokio's default TCP listener backlog is 1024, which is too small for benchmark connection bursts.
-        const RPC_LISTEN_BACKLOG: u32 = 4096;
-        let socket = match this.rpc_config.rpc_address {
-            std::net::SocketAddr::V4(_) => TcpSocket::new_v4()?,
-            std::net::SocketAddr::V6(_) => TcpSocket::new_v6()?,
-        };
-        socket.set_reuseaddr(true)?;
-        socket.bind(this.rpc_config.rpc_address)?;
-        let listener = socket.listen(RPC_LISTEN_BACKLOG)?.into_std()?;
-
         // serve module
         let server = RpcServer::builder()
             .set_rpc_middleware(rpc_middleware)
             .set_http_middleware(http_middleware)
             .set_config(server_config)
-            .build_from_tcp(listener)?;
+            .build(this.rpc_config.rpc_address)
+            .await?;
 
         let handle_rpc_server = server.start(module);
         Ok((handle_rpc_server, subs.handles))
@@ -1392,11 +1383,7 @@ pub fn eth_send_raw_transaction<'a>(
                 data,
                 access_list,
             })) => {
-                let result = importer
-                    .forward_to_leader(tx_hash, data, access_list)
-                    .await
-                    .map(hex_data)
-                    .into_response();
+                let result = importer.forward_to_leader(tx_hash, data, access_list).await.map(hex_data).into_response();
                 MethodResponse::response(id, result, usize::MAX)
             }
             Ok(Err(err)) => MethodResponse::response(id, Err::<String, _>(err).into_response(), usize::MAX),

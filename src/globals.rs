@@ -156,7 +156,7 @@ static START_TIME: LazyLock<DateTime<Utc>> = LazyLock::new(Utc::now);
 static HEALTH: LazyLock<Sender<bool>> = LazyLock::new(|| tokio::sync::watch::Sender::new(false));
 
 /// Should stratus restart when unhealthy?
-static RESTART_ON_UNHEALTHY: AtomicBool = AtomicBool::new(false);
+static RESTART_ON_UNHEALTHY: AtomicBool = AtomicBool::new(true);
 
 #[derive(Serialize, Debug)]
 pub struct GlobalState;

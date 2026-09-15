@@ -25,14 +25,6 @@ use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::infra::kafka::KafkaConnector;
 
-fn parse_thread_count(value: &str) -> Result<usize, String> {
-    let value = value.parse::<usize>().map_err(|error| error.to_string())?;
-    if value == 0 {
-        return Err("thread count must be greater than zero".to_owned());
-    }
-    Ok(value)
-}
-
 #[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize)]
 #[group(requires_all = ["external_rpc", "follower"])]
 pub struct ImporterConfig {
@@ -56,13 +48,7 @@ pub struct ImporterConfig {
     pub enable_block_changes_replication: bool,
 
     /// Number of Tokio worker threads dedicated to the online importer.
-    #[arg(
-        long = "importer-async-threads",
-        env = "IMPORTER_ASYNC_THREADS",
-        default_value = "8",
-        value_parser = parse_thread_count,
-        required = false
-    )]
+    #[arg(long = "importer-async-threads", env = "IMPORTER_ASYNC_THREADS", default_value = "4", required = false)]
     pub importer_async_threads: usize,
 
     /// Compute an access list for transactions before forwarding them to the leader.
@@ -84,8 +70,8 @@ impl ImporterConfig {
     ) -> anyhow::Result<Option<(Arc<ImporterConsensus>, ImporterRuntime)>> {
         match GlobalState::get_node_mode() {
             NodeMode::Leader => Ok(None),
-            NodeMode::Follower =>
-                self.init_follower(
+            NodeMode::Follower => self
+                .init_follower(
                     executor,
                     miner,
                     storage,
@@ -96,8 +82,12 @@ impl ImporterConfig {
                         ImporterMode::ReexecutionFollower
                     },
                 )
-                .await,
-            NodeMode::FakeLeader => self.init_follower(executor, miner, storage, kafka_connector, ImporterMode::FakeLeader).await,
+                .await
+                .map(Some),
+            NodeMode::FakeLeader => self
+                .init_follower(executor, miner, storage, kafka_connector, ImporterMode::FakeLeader)
+                .await
+                .map(Some),
         }
     }
 
@@ -108,7 +98,7 @@ impl ImporterConfig {
         storage: Arc<StratusStorage>,
         kafka_connector: Option<KafkaConnector>,
         importer_mode: ImporterMode,
-    ) -> anyhow::Result<Option<(Arc<ImporterConsensus>, ImporterRuntime)>> {
+    ) -> anyhow::Result<(Arc<ImporterConsensus>, ImporterRuntime)> {
         tracing::info!(importer_async_threads = self.importer_async_threads, "creating importer for follower node");
 
         // Forwarding stays on the RPC runtime and uses an independent Hyper connection pool.
@@ -135,7 +125,7 @@ impl ImporterConfig {
         })
         .await?;
 
-        Ok(Some((consensus, importer_runtime)))
+        Ok((consensus, importer_runtime))
     }
 
     pub async fn init_follower_importer(&self, ctx: Arc<RpcContext>) -> Result<serde_json::Value, StratusError> {

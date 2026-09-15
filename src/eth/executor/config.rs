@@ -46,7 +46,7 @@ impl ExecutorConfig {
     ///
     /// Note: Should be called only after async runtime is initialized.
     pub fn init(&self, storage: Arc<StratusStorage>, miner: Arc<Miner>) -> Arc<Executor> {
-        let config = self.clone();
+        let config = *self;
         tracing::info!(?config, "creating executor");
 
         let executor = Executor::new(storage, miner, config);

@@ -174,13 +174,7 @@ impl StratusStorage {
                         MinedPointInTime::Latest(_, _) =>
                         // Latest: try latest cache while guard is held, then fall through to perm.
                         {
-                            let cached_value = if matches!(kind, ExecutionKind::AccessList) {
-                                //bench without try_read
-                                E::read_latest_cache(self, &key)
-                            } else {
-                                E::read_latest_cache(self, &key)
-                            };
-                            if let Some(value) = cached_value {
+                            if let Some(value) = E::read_latest_cache(self, &key) {
                                 break 'query (value, FoundAt::Cache);
                             }
                             // If it wasnt found in the cache and we still have the guard the value can only be read in perm latest

@@ -280,14 +280,6 @@ impl Executor {
             s.rec_opt("from", &call_input.from);
             s.rec_opt("to", &call_input.to);
         });
-        //tracing::info!(
-        //    from = ?call_input.from,
-        //    to = ?call_input.to,
-        //    data_len = call_input.data.len(),
-        //    data = %call_input.data,
-        //    ?kind,
-        //    "executing read-only local transaction"
-        //);
 
         let filter = kind.into();
         let block_info_opt = if matches!(kind, ExecutionKind::AccessList) {

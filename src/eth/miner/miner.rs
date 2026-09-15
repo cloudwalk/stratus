@@ -41,13 +41,11 @@ cfg_if::cfg_if! {
 
 /// Represents different types of items that can be committed to storage
 #[allow(clippy::large_enum_variant)]
-#[derive(strum::Display)]
+#[derive(strum::AsRefStr)]
 pub enum CommitItem {
     /// A block
-    #[strum(to_string = "block")]
     Block(Block),
     /// A block that wasn't executed in this node and instead contains all changes already pre-computed
-    #[strum(to_string = "replication-block")]
     ReplicationBlock(Block),
 }
 
@@ -302,7 +300,7 @@ impl Miner {
         (block.into(), changes)
     }
 
-    #[timed(miner_commit, labels(item = || item.to_string()))]
+    #[timed(miner_commit, labels(item = || item.as_ref()))]
     pub fn commit(&self, item: CommitItem, changes: State<Complete>) -> anyhow::Result<(), StorageError> {
         match item {
             CommitItem::Block(block) => self.commit_block(block, changes),

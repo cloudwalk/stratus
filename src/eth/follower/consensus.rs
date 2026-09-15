@@ -12,7 +12,7 @@ use crate::eth::types::Hash;
 use crate::eth::types::StratusError;
 use crate::eth::types::TransactionInput;
 
-const MAX_ALLOWED_LAG_BLOCKS: u64 = 3;
+const MAX_ALLOWED_LAG_BLOCKS: u64 = 20;
 
 #[derive(Clone, Copy, Debug, AsRefStr)]
 #[strum(serialize_all = "lowercase")]

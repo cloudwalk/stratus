@@ -15,12 +15,9 @@ use crate::eth::types::BlockNumber;
 use crate::infra::kafka::KafkaConnector;
 
 /// Owns the thread on which the importer's dedicated Tokio runtime runs.
-///
-/// Dropping the handle detaches the thread. The importer itself is stopped through the existing
-/// global importer/application shutdown signals, just like the previous main-runtime task.
 pub struct ImporterRuntime {
     shutdown: CancellationToken,
-    thread: Option<std::thread::JoinHandle<anyhow::Result<()>>>,
+    handle: Option<std::thread::JoinHandle<anyhow::Result<()>>>,
 }
 
 pub struct ImporterRuntimeConfig {
@@ -52,7 +49,7 @@ impl ImporterRuntime {
         match initialized_rx.await {
             Ok(Ok(())) => Ok(Self {
                 shutdown,
-                thread: Some(thread),
+                handle: Some(thread),
             }),
             Ok(Err(reason)) => {
                 let _ = thread.join();
@@ -68,10 +65,10 @@ impl ImporterRuntime {
     /// Requests shutdown and asynchronously joins the runtime owner thread.
     pub async fn shutdown(mut self) -> anyhow::Result<()> {
         self.shutdown.cancel();
-        let Some(thread) = self.thread.take() else {
+        let Some(handle) = self.handle.take() else {
             return Ok(());
         };
-        tokio::task::spawn_blocking(move || match thread.join() {
+        tokio::task::spawn_blocking(move || match handle.join() {
             Ok(result) => result,
             Err(panic) => anyhow::bail!("dedicated importer runtime panicked: {panic:?}"),
         })
