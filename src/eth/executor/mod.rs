@@ -268,7 +268,8 @@ impl Executor {
     #[timed(executor_local_call, labels(
         success = result.is_ok(),
         contract = |call_input| codegen::contract_name(&call_input.to),
-        function = |call_input| codegen::function_sig(&call_input.data)
+        function = |call_input| codegen::function_sig(&call_input.data),
+        kind = |kind| kind.as_ref()
         )
     )]
     pub fn execute_local_call<Output>(&self, call_input: CallInput, kind: ExecutionKind) -> Result<Output, StratusError>
