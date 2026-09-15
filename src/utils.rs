@@ -68,6 +68,8 @@ impl Semaphore {
         drop(permits);
         #[cfg(feature = "metrics")]
         metrics::dec_executor_local_transaction_semaphore_waiting(1);
+        #[cfg(feature = "metrics")]
+        metrics::inc_executor_local_transaction_permit_holders(1);
         Permit { sem: Arc::clone(&self.sem) }
     }
 }
@@ -77,6 +79,8 @@ impl Drop for Permit {
         let mut permits = self.sem.permits.lock();
         *permits += 1;
         self.sem.cvar.notify_one();
+        #[cfg(feature = "metrics")]
+        metrics::dec_executor_local_transaction_permit_holders(1);
     }
 }
 
