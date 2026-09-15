@@ -633,7 +633,7 @@ impl StratusStorage {
         Ok(())
     }
 
-    #[timed(load_access_list)]
+    #[timed(storage_load_access_list)]
     pub fn load_access_list(&self, access_list: AccessListOutput) {
         // can error
         let mut account_addresses = vec![];
