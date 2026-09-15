@@ -16,6 +16,7 @@ use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 
 use crate::eth::executor::ExecutorConfig;
+use crate::eth::exporter::ExporterConfig;
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::MinerConfig;
 use crate::eth::rpc::RpcServerConfig;
@@ -209,6 +210,9 @@ pub struct StratusConfig {
 
     #[clap(flatten)]
     pub miner: MinerConfig,
+
+    #[clap(flatten)]
+    pub exporter: ExporterConfig,
 
     #[deref]
     #[clap(flatten)]

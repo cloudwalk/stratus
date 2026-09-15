@@ -37,6 +37,7 @@ use serde_json::json;
 use serde_json::value::RawValue;
 use serde_json::value::to_raw_value;
 use stratus_metrics as metrics;
+use tokio::net::TcpSocket;
 use tokio::runtime::Handle;
 use tokio::select;
 use tokio::sync::Semaphore;
@@ -59,11 +60,13 @@ use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::CallExecutionOutput;
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorError;
+use crate::eth::exporter::ExporterRuntime;
 use crate::eth::follower::ConsensusError;
 use crate::eth::follower::ImporterError;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::follower::importer::ImporterConsensus;
+use crate::eth::follower::importer::ImporterRuntime;
 use crate::eth::follower::importer::send_block_to_kafka;
 use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
@@ -102,6 +105,7 @@ use crate::eth::types::StateError;
 use crate::eth::types::StratusError;
 use crate::eth::types::TransactionInput;
 use crate::eth::types::TransactionStage;
+use crate::eth::types::UnexpectedError;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
 use crate::ext::InfallibleExt;
@@ -118,6 +122,7 @@ use crate::log_and_err;
 // Server
 // -----------------------------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 #[derive(Clone, derive_new::new)]
 pub struct Server {
     // services
@@ -125,6 +130,8 @@ pub struct Server {
     pub executor: Arc<Executor>,
     pub miner: Arc<Miner>,
     pub importer: Arc<RwLock<Option<Arc<ImporterConsensus>>>>,
+    pub importer_runtime: Arc<RwLock<Option<ImporterRuntime>>>,
+    pub exporter_runtime: Arc<RwLock<Option<ExporterRuntime>>>,
 
     // config
     pub app_config: StratusConfig,
@@ -148,7 +155,7 @@ impl Server {
         let mut health = GlobalState::get_health_receiver();
         health.mark_unchanged();
         let (server_handle, subscriptions) = loop {
-            let (server_handle, subscriptions) = this._serve().await?;
+            let (server_handle, subscriptions) = this._serve()?;
             let server_handle_watch = server_handle.clone();
 
             // await for cancellation or jsonrpsee to stop (should not happen) or health changes
@@ -174,11 +181,18 @@ impl Server {
         };
         let res = join!(server_handle.stopped(), subscriptions.stopped(), health_worker_handle);
         res.2?;
+
+        if let Some(importer_runtime) = this.take_importer_runtime() {
+            importer_runtime.shutdown().await?;
+        }
+        if let Some(exporter_runtime) = this.take_exporter_runtime() {
+            exporter_runtime.shutdown().await?;
+        }
         Ok(())
     }
 
     /// Starts JSON-RPC server.
-    async fn _serve(&self) -> anyhow::Result<(ServerHandle, RpcSubscriptionsHandles)> {
+    fn _serve(&self) -> anyhow::Result<(ServerHandle, RpcSubscriptionsHandles)> {
         let this = self.clone();
         const TASK_NAME: &str = "rpc-server";
         tracing::info!(%this.rpc_config.rpc_address, %this.rpc_config.rpc_max_connections, "creating {}", TASK_NAME);
@@ -221,13 +235,22 @@ impl Server {
             .set_batch_request_config(BatchRequestConfig::Limit(this.rpc_config.batch_request_limit))
             .build();
 
+        // Tokio's default TCP listener backlog is 1024, which is too small for benchmark connection bursts.
+        const RPC_LISTEN_BACKLOG: u32 = 4096;
+        let socket = match this.rpc_config.rpc_address {
+            std::net::SocketAddr::V4(_) => TcpSocket::new_v4()?,
+            std::net::SocketAddr::V6(_) => TcpSocket::new_v6()?,
+        };
+        socket.set_reuseaddr(true)?;
+        socket.bind(this.rpc_config.rpc_address)?;
+        let listener = socket.listen(RPC_LISTEN_BACKLOG)?.into_std()?;
+
         // serve module
         let server = RpcServer::builder()
             .set_rpc_middleware(rpc_middleware)
             .set_http_middleware(http_middleware)
             .set_config(server_config)
-            .build(this.rpc_config.rpc_address)
-            .await?;
+            .build_from_tcp(listener)?;
 
         let handle_rpc_server = server.start(module);
         Ok((handle_rpc_server, subs.handles))
@@ -262,6 +285,23 @@ impl Server {
 
     pub fn set_importer(&self, importer: Option<Arc<ImporterConsensus>>) {
         *self.importer.write() = importer;
+    }
+
+    pub fn set_importer_runtime(&self, importer_runtime: Option<ImporterRuntime>) {
+        *self.importer_runtime.write() = importer_runtime;
+    }
+
+    fn take_importer_runtime(&self) -> Option<ImporterRuntime> {
+        self.importer_runtime.write().take()
+    }
+
+    fn take_exporter_runtime(&self) -> Option<ExporterRuntime> {
+        self.exporter_runtime.write().take()
+    }
+
+    /// Handle of the dedicated exporter runtime, when enabled, for dispatching importer-facing requests.
+    fn exporter_handle(&self) -> Option<Handle> {
+        self.exporter_runtime.read().as_ref().map(|runtime| runtime.handle().clone())
     }
 
     async fn health(&self) -> bool {
@@ -321,7 +361,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_async_method("stratus_changeToLeader", stratus_change_to_leader)?;
     module.register_async_method("stratus_changeToFollower", stratus_change_to_follower)?;
     module.register_async_method("stratus_initImporter", stratus_init_importer)?;
-    module.register_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
+    module.register_async_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
     module.register_async_method("stratus_changeMinerMode", stratus_change_miner_mode)?;
     module.register_async_method("stratus_emitBlockEvents", stratus_emit_block_events)?;
 
@@ -343,11 +383,21 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("eth_gasPrice", eth_gas_price)?;
 
     // stratus importing helpers
-    module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
-    module.register_blocking_method("stratus_getBlockWithChanges", stratus_get_block_with_changes)?;
+    // dispatched to the dedicated exporter runtime, so importer requests cannot stall behind a
+    // saturated main blocking pool (which makes followers fall behind)
+    module.register_async_method("stratus_getBlockAndReceipts", |params, ctx, ext| {
+        dispatch_exporter_method(stratus_get_block_and_receipts, params, ctx, ext)
+    })?;
+    module.register_async_method("stratus_getBlockWithChanges", |params, ctx, ext| {
+        dispatch_exporter_method(stratus_get_block_with_changes, params, ctx, ext)
+    })?;
 
     // block
-    module.register_blocking_method("eth_blockNumber", eth_block_number)?;
+    // `eth_blockNumber` is on the follower sync critical path (polled every sync interval), so it
+    // is also dispatched to the dedicated exporter runtime
+    module.register_async_method("eth_blockNumber", |params, ctx, ext| {
+        dispatch_exporter_method(eth_block_number, params, ctx, ext)
+    })?;
     module.register_blocking_method("eth_getBlockByNumber", eth_get_block_by_number)?;
     module.register_blocking_method("eth_getBlockByHash", eth_get_block_by_hash)?;
     module.register_blocking_method("stratus_getBlockByTimestamp", stratus_get_block_by_timestamp)?;
@@ -379,6 +429,27 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_subscription("eth_subscribe", "eth_subscription", "eth_unsubscribe", eth_subscribe)?;
 
     Ok(module)
+}
+
+/// Dispatches an importer-facing blocking method onto the dedicated exporter runtime.
+///
+/// These methods are on the follower sync critical path: when the main blocking pool saturates with
+/// external traffic (`eth_call`, `eth_getLogs`, ...), queued importer requests stall and followers
+/// fall behind. The exporter runtime's dedicated blocking pool keeps them isolated. Falls back to
+/// the main runtime's blocking pool when the exporter is disabled.
+async fn dispatch_exporter_method<T, F>(handler: F, params: Params<'static>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<T, StratusError>
+where
+    T: Send + 'static,
+    F: FnOnce(Params<'static>, Arc<RpcContext>, Extensions) -> Result<T, StratusError> + Send + 'static,
+{
+    let response = match ctx.server.exporter_handle() {
+        Some(handle) => handle.spawn_blocking(move || handler(params, ctx, ext)).await,
+        None => tokio::task::spawn_blocking(move || handler(params, ctx, ext)).await,
+    };
+    response.unwrap_or_else(|error| {
+        tracing::error!(reason = ?error, "exporter blocking method failed to join");
+        Err(StratusError::Unexpected(UnexpectedError::Unexpected(anyhow::anyhow!(error))))
+    })
 }
 
 // -----------------------------------------------------------------------------
@@ -518,7 +589,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     }
 
     tracing::info!("shutting down importer");
-    let shutdown_importer_result = stratus_shutdown_importer(Params::new(None), &ctx, &ext);
+    let shutdown_importer_result = stratus_shutdown_importer(Params::new(None), Arc::clone(&ctx), ext.clone()).await;
     match shutdown_importer_result {
         Ok(_) => tracing::info!("importer shutdown successfully"),
         Err(StratusError::Importer(ImporterError::AlreadyShutdown)) => {
@@ -630,6 +701,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         enable_block_changes_replication: std::env::var("ENABLE_BLOCK_CHANGES_REPLICATION")
             .ok()
             .is_some_and(|val| val == "1" || val == "true"),
+        importer_async_threads: std::env::var("IMPORTER_ASYNC_THREADS").ok().and_then(|value| value.parse().ok()).unwrap_or(4),
         forward_access_list: !matches!(std::env::var("FORWARD_ACCESS_LIST").as_deref(), Ok("0") | Ok("false")),
         stop_at_block: None,
     };
@@ -637,7 +709,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     importer_config.init_follower_importer(ctx).await
 }
 
-fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) -> Result<JsonValue, StratusError> {
+async fn stratus_shutdown_importer(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     ext.authentication().auth_admin()?;
     if GlobalState::get_node_mode() != NodeMode::Follower {
         tracing::error!("node is currently not a follower");
@@ -650,9 +722,17 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) 
     }
 
     ctx.server.set_importer(None);
+    let importer_runtime = ctx.server.take_importer_runtime();
 
     const TASK_NAME: &str = "rpc-server::importer-shutdown";
     GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
+
+    if let Some(importer_runtime) = importer_runtime
+        && let Err(error) = importer_runtime.shutdown().await
+    {
+        tracing::error!(reason = ?error, "failed to shutdown dedicated importer runtime");
+        return Err(ImporterError::InitError.into());
+    }
 
     Ok(json!(true))
 }
@@ -1343,37 +1423,58 @@ pub fn eth_send_raw_transaction<'a>(
     });
     drop(enter);
 
-    request.extensions_mut().insert(span);
+    request.extensions_mut().insert(span.clone());
 
     let ext = request.extensions;
     let ext_clone = ext.clone();
 
-    let future = tokio::task::spawn_blocking(move || {
-        let rp = _eth_send_raw_transaction_impl(input, data, access_list, ctx, ext).into_response();
-        MethodResponse::response(id, rp, usize::MAX)
-    })
-    .map(|result| match result {
-        Ok(r) => r,
-        Err(err) => {
-            tracing::error!("Join error for blocking RPC method: {:?}", err);
-            MethodResponse::error(
-                Id::Null,
-                StratusError::Unexpected(crate::eth::types::UnexpectedError::Unexpected(anyhow::anyhow!(err))),
-            )
-            .with_extensions(ext_clone)
-        }
-    })
+    let future = async move {
+        let prepared = tokio::task::spawn_blocking(move || _prepare_eth_send_raw_transaction(input, data, access_list, ctx, ext)).await;
+
+        let response = match prepared {
+            Ok(Ok(PreparedRawTransaction::Complete(result))) => MethodResponse::response(id, result.into_response(), usize::MAX),
+            Ok(Ok(PreparedRawTransaction::Forward {
+                importer,
+                tx_hash,
+                data,
+                access_list,
+            })) => {
+                let result = importer.forward_to_leader(tx_hash, data, access_list).await.map(hex_data).into_response();
+                MethodResponse::response(id, result, usize::MAX)
+            }
+            Ok(Err(err)) => MethodResponse::response(id, Err::<String, _>(err).into_response(), usize::MAX),
+            Err(err) => {
+                tracing::error!("Join error for blocking RPC method: {:?}", err);
+                MethodResponse::error(
+                    Id::Null,
+                    StratusError::Unexpected(crate::eth::types::UnexpectedError::Unexpected(anyhow::anyhow!(err))),
+                )
+            }
+        };
+        response.with_extensions(ext_clone)
+    }
+    .instrument(span)
     .boxed();
     Ok((future, tracing_identifiers))
 }
 
-fn _eth_send_raw_transaction_impl(
+enum PreparedRawTransaction {
+    Complete(Result<String, StratusError>),
+    Forward {
+        importer: Arc<ImporterConsensus>,
+        tx_hash: Hash,
+        data: Bytes,
+        access_list: Option<AccessListOutput>,
+    },
+}
+
+fn _prepare_eth_send_raw_transaction(
     tx: TransactionInput,
     data: Bytes,
     access_list: Option<AccessListOutput>,
     ctx: Arc<RpcContext>,
     ext: Extensions,
-) -> Result<String, StratusError> {
+) -> Result<PreparedRawTransaction, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!(
@@ -1408,20 +1509,28 @@ fn _eth_send_raw_transaction_impl(
         ctx.server.executor.validate_to_is_contract(to_address, ExecutionKind::Transaction)?;
     };
 
-    // execute locally or forward to leader
+    // Execute locally, or prepare synchronous access-list work before forwarding asynchronously.
     match GlobalState::get_node_mode() {
-        NodeMode::Leader | NodeMode::FakeLeader => match ctx.server.executor.execute_local_transaction(tx, access_list) {
-            Ok(_) => Ok(hex_data(tx_hash)),
-            Err(e) => {
-                tracing::warn!(reason = ?e, ?tx_hash, "failed to execute eth_sendRawTransaction");
-                Err(e)
+        NodeMode::Leader | NodeMode::FakeLeader => {
+            let result = match ctx.server.executor.execute_local_transaction(tx, access_list) {
+                Ok(_) => Ok(hex_data(tx_hash)),
+                Err(e) => {
+                    tracing::warn!(reason = ?e, ?tx_hash, "failed to execute eth_sendRawTransaction");
+                    Err(e)
+                }
+            };
+            Ok(PreparedRawTransaction::Complete(result))
+        }
+        NodeMode::Follower => match ctx.server.read_importer() {
+            Some(importer) => {
+                let access_list = importer.prepare_forward_access_list(tx)?;
+                Ok(PreparedRawTransaction::Forward {
+                    importer,
+                    tx_hash,
+                    data,
+                    access_list,
+                })
             }
-        },
-        NodeMode::Follower => match &ctx.server.read_importer() {
-            Some(importer) => match Handle::current().block_on(importer.forward_to_leader(tx, tx_hash, data)) {
-                Ok(hash) => Ok(hex_data(hash)),
-                Err(e) => Err(e),
-            },
             None => {
                 tracing::error!("unable to forward transaction because consensus is temporarily unavailable for follower node");
                 Err(ConsensusError::Unavailable.into())

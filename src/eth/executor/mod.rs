@@ -225,11 +225,7 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Validates that the target account is a contract, reading it from storage at the given point in time.
-    pub fn validate_to_is_contract(&self, to_address: Address, mut kind: ExecutionKind) -> Result<(), StratusError> {
-        // small warm up
-        if matches!(kind, ExecutionKind::Transaction) {
-            kind = ExecutionKind::RPC(PointInTime::Pending);
-        }
+    pub fn validate_to_is_contract(&self, to_address: Address, kind: ExecutionKind) -> Result<(), StratusError> {
         let (account, _) = self.storage.read_account(to_address, kind)?;
         if account.bytecode.is_none() {
             if self.reject_not_contract {
@@ -284,17 +280,22 @@ impl Executor {
             s.rec_opt("from", &call_input.from);
             s.rec_opt("to", &call_input.to);
         });
-        tracing::info!(
-            from = ?call_input.from,
-            to = ?call_input.to,
-            data_len = call_input.data.len(),
-            data = %call_input.data,
-            ?kind,
-            "executing read-only local transaction"
-        );
+        //tracing::info!(
+        //    from = ?call_input.from,
+        //    to = ?call_input.to,
+        //    data_len = call_input.data.len(),
+        //    data = %call_input.data,
+        //    ?kind,
+        //    "executing read-only local transaction"
+        //);
 
         let filter = kind.into();
-        let Some(block_info) = self.storage.read_block_info(filter)? else {
+        let block_info_opt = if matches!(kind, ExecutionKind::AccessList) {
+            Some(self.storage.read_latest_block_info_relaxed())
+        } else {
+            self.storage.read_block_info(filter)?
+        };
+        let Some(block_info) = block_info_opt else {
             return Err(StorageError::BlockNotFound { filter }.into());
         };
 

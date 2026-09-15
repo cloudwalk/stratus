@@ -63,26 +63,27 @@ pub trait Consensus: Send + Sync {
     /// Whether transactions forwarded to the leader should carry a pre-computed access list.
     fn forward_access_list(&self) -> bool;
 
-    /// Forwards a transaction to leader.
+    /// Computes the access list to send with a forwarded transaction.
+    ///
+    /// This is synchronous EVM work and must be called from a blocking thread.
+    fn prepare_forward_access_list(&self, tx: TransactionInput) -> Result<Option<AccessListOutput>, StratusError> {
+        if self.forward_access_list() {
+            self.get_executor()
+                .execute_local_call::<AccessListOutput>(tx.into(), ExecutionKind::AccessList)
+                .map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Asynchronously sends a prepared transaction to the leader.
     ///
     /// The current machine name is sent as the `x-client` header by `BlockchainClient`, so the leader
     /// attributes the transaction to this node automatically.
     #[timed(consensus_forward)]
-    async fn forward_to_leader(&self, tx: TransactionInput, tx_hash: Hash, tx_data: Bytes) -> Result<Hash, StratusError> {
+    async fn forward_to_leader(&self, tx_hash: Hash, tx_data: Bytes, access_list: Option<AccessListOutput>) -> Result<Hash, StratusError> {
         tracing::info!(%tx_hash, "forwarding transaction to leader");
-
-        let access_list = if self.forward_access_list() {
-            Some(
-                self.get_executor()
-                    .execute_local_call::<AccessListOutput>(tx.into(), ExecutionKind::AccessList)?,
-            )
-        } else {
-            None
-        };
-
-        let hash = self.get_client().send_raw_transaction_to_leader(tx_data.into(), access_list).await?;
-
-        Ok(hash)
+        self.get_client().send_raw_transaction_to_leader(tx_data.into(), access_list).await
     }
 
     fn get_client(&self) -> &Arc<BlockchainClient>;
