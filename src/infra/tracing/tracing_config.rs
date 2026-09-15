@@ -62,7 +62,7 @@ pub struct TracingConfig {
 
     /// Directives filter for tracing events, in the same syntax as the `RUST_LOG` environment variable.
     /// When absent, the `RUST_LOG` environment variable is used instead.
-    #[arg(id = "common.tracing.filter", long = "tracing-filter")]
+    #[arg(id = "common.tracing.filter", long = "tracing-filter", value_parser = Self::parse_tracing_filter)]
     #[serde(rename = "filter")]
     pub tracing_filter: Option<String>,
 }
@@ -100,15 +100,13 @@ impl TracingConfig {
         }
     }
 
-    /// Checks that the configured filter is a valid directives string.
+    /// Parses a tracing directives filter.
     ///
-    /// [`EnvFilter::new`] silently drops invalid directives, which would hide typos in the config file; this makes them
-    /// fail loudly during configuration validation instead.
-    pub fn validate_filter(&self) -> anyhow::Result<()> {
-        if let Some(filter) = &self.tracing_filter {
-            EnvFilter::try_new(filter).map_err(|error| anyhow!("invalid filter {filter:?}: {error}"))?;
-        }
-        Ok(())
+    /// [`EnvFilter::new`] silently drops invalid directives, which would hide typos in the config file or the command
+    /// line; parsing here makes them fail loudly instead.
+    fn parse_tracing_filter(input: &str) -> Result<String, String> {
+        EnvFilter::try_new(input).map_err(|error| format!("invalid tracing filter {input:?}: {error}"))?;
+        Ok(input.to_string())
     }
 
     pub fn create_subscriber(&self, sentry_config: &Option<SentryConfig>) -> impl SubscriberInitExt {

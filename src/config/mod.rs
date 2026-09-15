@@ -213,16 +213,18 @@ impl WithCommonConfig for StratusConfig {
 }
 
 impl StratusConfig {
-    /// Validates configuration invariants that cannot be enforced by clap or serde alone,
-    /// because values may come from the config file, the CLI, or both.
+    /// Validates configuration invariants that clap cannot enforce.
+    ///
+    /// Clap's value parsers already validate per-value syntax and ranges for both file and CLI values, because file
+    /// values are applied as argument defaults and parsed by the same value parsers. What clap cannot see are
+    /// relations between values: its conflict and requirement checks only consider explicitly provided arguments,
+    /// so file-provided values (clap defaults) are invisible to them. The checks below are exactly those invariants.
     pub fn validate(&self) -> anyhow::Result<()> {
         self.validate_node_mode()?;
         self.validate_executor()?;
         self.validate_importer()?;
         self.validate_kafka()?;
-        self.validate_rpc()?;
         self.validate_sentry()?;
-        self.validate_tracing_filter()?;
         Ok(())
     }
 
@@ -285,29 +287,13 @@ impl StratusConfig {
         Ok(())
     }
 
-    /// Validates the rpc response size floor (same rule as the CLI value parser).
-    fn validate_rpc(&self) -> anyhow::Result<()> {
-        if self.rpc_server.rpc_max_response_size_bytes < crate::eth::rpc::pagination::MIN_RESPONSE_SIZE_BYTES {
-            anyhow::bail!(
-                "`rpc.max_response_size_bytes` must be at least {} bytes, otherwise importer pagination cannot fit a chunk",
-                crate::eth::rpc::pagination::MIN_RESPONSE_SIZE_BYTES
-            );
-        }
-        Ok(())
-    }
-
     /// Validates that the sentry section has a non-empty url when present.
+    ///
+    /// The url cannot be rejected by a clap value parser because its clap default is `""` (an empty default keeps
+    /// the optional section materializable when it is absent).
     fn validate_sentry(&self) -> anyhow::Result<()> {
         if self.common.sentry.as_ref().is_some_and(|sentry| sentry.sentry_url.is_empty()) {
             anyhow::bail!("`[sentry]` configuration requires a non-empty `url`");
-        }
-        Ok(())
-    }
-
-    /// Validates the tracing filter, rejecting invalid directive strings that `EnvFilter` would silently drop.
-    fn validate_tracing_filter(&self) -> anyhow::Result<()> {
-        if let Err(error) = self.common.tracing.validate_filter() {
-            anyhow::bail!("`[common.tracing] filter` is invalid: {error}");
         }
         Ok(())
     }
