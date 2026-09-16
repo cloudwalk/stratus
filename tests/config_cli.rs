@@ -56,6 +56,42 @@ fn assert_config_error(args: &[&str], content: &str, expected: &str) {
     );
 }
 
+/// Runs the binary until its stdout contains the expected text, then kills it; for configurations
+/// that print what they have to assert and keep running.
+fn expect_stdout(args: &[&str], content: &str, expected: &str) {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_stratus"));
+    command.args(args);
+    let config = with_config(&mut command, content);
+    let mut child = command.stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        use std::io::Read;
+        let mut stdout = stdout;
+        let mut buffer = [0u8; 1024];
+        while let Ok(read) = stdout.read(&mut buffer) {
+            if read == 0 || tx.send(buffer[..read].to_vec()).is_err() {
+                break;
+            }
+        }
+    });
+    let mut seen = String::new();
+    let deadline = Instant::now() + EXIT_TIMEOUT;
+    while !seen.contains(expected) {
+        match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            Ok(chunk) => seen.push_str(&String::from_utf8_lossy(&chunk)),
+            Err(_) => break, // timed out, or the process exited before printing the text
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    drop(config);
+    assert!(
+        seen.contains(expected),
+        "expected text not found in stdout\n  expected: {expected}\n  output: {seen}"
+    );
+}
+
 #[test]
 fn test_config_file_not_found() {
     let dir = TempDir::new().unwrap();
@@ -80,7 +116,7 @@ fn test_malformed_toml_fails() {
 fn test_unknown_field_warns_but_does_not_fail() {
     // unknown fields are ignored with a warning instead of failing, so a file with stale or
     // unrecognized options does not prevent startup; the config below also lacks a node mode,
-    // which makes the process exit during validation instead of booting a node
+    // which makes the merged parse fail instead of booting a node
     let mut command = Command::new(env!("CARGO_BIN_EXE_stratus"));
     let config = with_config(
         &mut command,
@@ -100,7 +136,7 @@ fn test_unknown_field_warns_but_does_not_fail() {
         "expected unknown field warning in output\n  output: {stdout}"
     );
     assert!(
-        stdout.contains("no node mode configured"),
+        stdout.contains("required arguments were not provided"),
         "expected validation failure for missing node mode\n  output: {stdout}"
     );
 }
@@ -113,47 +149,61 @@ fn test_no_node_mode_fails() {
             [executor]
             chain_id = 2008
         "#,
-        "no node mode configured",
+        "required arguments were not provided",
     );
 }
 
 #[test]
 fn test_missing_chain_id_fails() {
-    assert_config_error(&[], "leader = true", "`executor.chain_id` is required");
+    // the chain id has no default: clap's own required-argument error surfaces
+    assert_config_error(&[], "leader = true", "--executor-chain-id");
 }
 
 #[test]
 fn test_leader_ignores_importer_config() {
-    // #2567: a leader ignores `[importer]` with a warning instead of failing; the missing chain id
-    // keeps the process from booting, so it still exits during configuration
-    assert_config_error(
-        &[],
+    // #2567: a leader ignores `[importer]` with a warning instead of failing; the node keeps
+    // running after the warning, so it is killed once the warning is seen
+    let storage = TempDir::new().unwrap();
+    let content = format!(
         r#"
             leader = true
+
+            [executor]
+            chain_id = 2008
+
+            [storage.permanent]
+            path_prefix = "{}"
 
             [importer]
             external_rpc = "http://127.0.0.1:3000/"
         "#,
-        "warning: ignoring [importer] config in leader mode",
+        storage.path().display()
     );
+    expect_stdout(&[], &content, "warning: ignoring [importer] config in leader mode");
 }
 
 #[test]
 fn test_leader_ignores_kafka_config() {
-    // #2567: a leader ignores `[kafka]` with a warning instead of failing; the missing chain id
-    // keeps the process from booting, so it still exits during configuration
-    assert_config_error(
-        &[],
+    // #2567: a leader ignores `[kafka]` with a warning instead of failing
+    let storage = TempDir::new().unwrap();
+    let content = format!(
         r#"
             leader = true
+
+            [executor]
+            chain_id = 2008
+
+            [storage.permanent]
+            path_prefix = "{}"
 
             [kafka]
             bootstrap_servers = "localhost:29092"
             topic = "stratus-events"
             client_id = "stratus-producer"
         "#,
-        "warning: ignoring [kafka] config in leader mode",
+        storage.path().display()
     );
+    expect_stdout(&[], &content, "warning: ignoring [kafka] config in leader mode");
 }
 
 #[test]
@@ -179,18 +229,24 @@ fn test_incomplete_kafka_fails() {
 
 #[test]
 fn test_empty_sentry_url_is_ignored() {
-    // an empty sentry url disables the exporter with a warning instead of failing; the missing
-    // chain id keeps the process from booting, so it still exits during configuration
-    assert_config_error(
-        &[],
+    // an empty sentry url disables the exporter with a warning instead of failing
+    let storage = TempDir::new().unwrap();
+    let content = format!(
         r#"
             leader = true
+
+            [executor]
+            chain_id = 2008
+
+            [storage.permanent]
+            path_prefix = "{}"
 
             [common.sentry]
             url = ""
         "#,
-        "warning: ignoring [common.sentry] config: url is empty",
+        storage.path().display()
     );
+    expect_stdout(&[], &content, "warning: ignoring [common.sentry] config: url is empty");
 }
 
 #[test]
@@ -215,18 +271,24 @@ fn test_invalid_tracing_filter_fails() {
 #[test]
 fn test_cli_leader_flag_overrides_file_follower_mode() {
     // #2567: the CLI mode is authoritative over the file's, so `--leader` wins without a conflict
-    // and the file's follower-only `[importer]` is ignored; the missing chain id keeps the process
-    // from booting, so it still exits during configuration
-    assert_config_error(
-        &["--leader"],
+    // and the file's follower-only `[importer]` is ignored
+    let storage = TempDir::new().unwrap();
+    let content = format!(
         r#"
             follower = true
+
+            [executor]
+            chain_id = 2008
+
+            [storage.permanent]
+            path_prefix = "{}"
 
             [importer]
             external_rpc = "http://127.0.0.1:3000/"
         "#,
-        "warning: ignoring [importer] config in leader mode",
+        storage.path().display()
     );
+    expect_stdout(&["--leader"], &content, "warning: ignoring [importer] config in leader mode");
 }
 
 #[test]
@@ -291,7 +353,7 @@ fn test_default_config_file_falls_back_to_defaults() {
         "expected fallback to defaults\n  output: {stdout}"
     );
     assert!(
-        stdout.contains("no node mode configured"),
+        stdout.contains("required arguments were not provided"),
         "expected default config to fail validation\n  output: {stdout}"
     );
 }

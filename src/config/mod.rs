@@ -233,7 +233,6 @@ impl StratusConfig {
 
     /// Validates configuration invariants that clap cannot enforce.
     pub fn validate(&self) -> anyhow::Result<()> {
-        self.validate_executor()?;
         self.validate_importer()?;
         self.validate_kafka()?;
         Ok(())
@@ -246,14 +245,6 @@ impl StratusConfig {
             .filter(|(active, _)| *active)
             .map(|(_, name)| name)
             .collect()
-    }
-
-    /// Validates that a chain id is configured.
-    fn validate_executor(&self) -> anyhow::Result<()> {
-        if self.executor.executor_chain_id == 0 {
-            anyhow::bail!("`executor.chain_id` is required: set it in the config file or pass `--executor-chain-id`");
-        }
-        Ok(())
     }
 
     /// Validates the importer requirements for follower and fake-leader modes.
@@ -344,6 +335,8 @@ mod tests {
         let config = StratusConfig::try_parse_from([
             "stratus",
             "--leader",
+            "--executor-chain-id",
+            "2008",
             "--executor-reject-not-contract=false",
             "--unknown-client-enabled=false",
             "--forward-access-list=false",
@@ -358,6 +351,8 @@ mod tests {
         let config = StratusConfig::try_parse_from([
             "stratus",
             "--leader",
+            "--executor-chain-id",
+            "2008",
             "--executor-reject-not-contract",
             "--unknown-client-enabled",
             "--forward-access-list",

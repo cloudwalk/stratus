@@ -12,7 +12,7 @@ use crate::eth::storage::StratusStorage;
 #[derive(Parser, DebugAsJson, Clone, Copy, serde::Serialize)]
 pub struct ExecutorConfig {
     /// Chain ID of the network.
-    #[arg(id = "executor.chain_id", long = "executor-chain-id", alias = "chain-id", default_value = "0")]
+    #[arg(id = "executor.chain_id", long = "executor-chain-id", alias = "chain-id", value_parser = parse_chain_id)]
     #[serde(rename = "chain_id")]
     pub executor_chain_id: u64,
 
@@ -64,6 +64,15 @@ mod spec_id_serde {
     pub fn serialize<S: Serializer>(spec: &SpecId, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(&spec.to_string())
     }
+}
+
+/// Parses a chain id, rejecting zero: it was the "missing" sentinel before the argument became required.
+fn parse_chain_id(input: &str) -> anyhow::Result<u64> {
+    let chain_id = input.parse().map_err(|err| anyhow::anyhow!("invalid chain id \"{input}\": {err}"))?;
+    if chain_id == 0 {
+        return Err(anyhow::anyhow!("chain id cannot be zero"));
+    }
+    Ok(chain_id)
 }
 
 fn parse_evm_spec(input: &str) -> anyhow::Result<SpecId> {
