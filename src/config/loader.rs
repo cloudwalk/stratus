@@ -4,11 +4,8 @@
 //!
 //! 1. The config file is resolved: `--config <path>` when provided, otherwise `config/{binary}.{env}.toml`.
 //! 2. The file is parsed with [`toml`] into a table, and each file value becomes a `--flag=value` command
-//!    line token for the argument whose `id` matches the value's dotted TOML path. The tokens are parsed
-//!    together with the real arguments in a single pass, so clap validates file values with the same value
-//!    parsers used for the command line and treats them as explicitly provided; `args_override_self` makes
-//!    the command line win over the file, and list arguments are replaced instead of extended. Fields
-//!    unknown to the configuration are ignored with a warning instead of failing.
+//!    line token for the argument whose `id` matches the value's dotted TOML path. Tokens and arguments
+//!    are parsed in a single pass, so the CLI wins over the file; unknown fields are ignored with a warning.
 //! 3. A node mode explicitly provided in the command line overrides the file's, and a leader ignores
 //!    follower-only sections (`[importer]`, `[kafka]`) instead of failing on them.
 //! 4. The merged configuration is validated for invariants that depend on file and CLI values together.
@@ -40,12 +37,10 @@ use crate::infra::build_info;
 /// Arguments that never take values from the config file.
 const CLI_ONLY_ARGUMENTS: &[&str] = &["config_path", "nocapture", "help", "version"];
 
-/// Node mode flags: when one is explicitly provided in the command line, file mode values are not
-/// converted into tokens, so the CLI mode is authoritative over the file's.
+/// Node mode flags: file mode values are skipped when the CLI provides a mode.
 const NODE_MODE_ARGUMENTS: &[&str] = &["leader", "follower", "fake_leader"];
 
-/// Sections parsed and ignored when the `dev` feature is not enabled, so config files stay
-/// portable across binaries built with different features.
+/// Sections ignored when the `dev` feature is not enabled.
 #[cfg(not(feature = "dev"))]
 const IGNORED_FILE_SECTIONS: &[&str] = &["storage.permanent.genesis"];
 #[cfg(feature = "dev")]
@@ -66,11 +61,7 @@ impl ConfigLoad for StratusConfig {
     }
 }
 
-/// Command-line entrypoint for configuration parsing.
-///
-/// `--config` lives in its own struct, separate from [`StratusConfig`], because it decides which
-/// file to load before any configuration value can exist; the remaining arguments are the
-/// configuration itself, flattened and parsed together in a single pass.
+/// Command-line entrypoint: `--config` resolves the file before any configuration value can exist.
 #[derive(Parser)]
 #[command(author, version, about = "Stratus: EVM executor and JSON-RPC server", long_about = None)]
 struct ConfigCli {
@@ -84,9 +75,6 @@ struct ConfigCli {
 
 impl ConfigCli {
     /// Resolves the config file path: `--config <path>` when provided, otherwise `config/{binary}.{env}.toml`.
-    ///
-    /// An explicitly provided path must exist; the default path is allowed to be absent, in which case
-    /// the caller falls back to the built-in defaults.
     fn resolve_config_path(&self) -> anyhow::Result<PathBuf> {
         match &self.config_path {
             Some(path) if !path.exists() => Err(anyhow!("config file not found | path={}", path.display())),
@@ -99,13 +87,12 @@ impl ConfigCli {
 impl StratusConfig {
     /// Loads the configuration: config file as base, explicitly provided CLI arguments as overrides.
     pub fn load() -> anyhow::Result<Self> {
-        // first pass: resolves the config file path (`--config` or `--env`) before the file can contribute values
+        // first pass: resolves the config file path before the file can contribute values
         let first_pass = command_without_mode_requirement().get_matches();
         let cli = ConfigCli::from_arg_matches(&first_pass)?;
         let config_path = cli.resolve_config_path()?;
 
-        // read the config file, falling back to defaults when the default file does not exist
-        // (an explicit path was verified to exist, so this arm is only reachable for the default path)
+        // read the config file, falling back to defaults when it does not exist
         let file_content = match std::fs::read_to_string(&config_path) {
             Ok(content) => content,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -125,8 +112,7 @@ impl StratusConfig {
             println!("warning: unknown field in config file, ignored | field={field}");
         }
 
-        // single parse over the file tokens and the command line: clap validates file values with
-        // the command line value parsers, and `args_override_self` makes the command line win
+        // single parse over the file tokens and the command line: the CLI wins over the file
         let tokens = file_config_tokens(&command, &table, &first_pass);
         let matches = command
             .args_override_self(true)
@@ -138,10 +124,7 @@ impl StratusConfig {
     }
 }
 
-/// Converts a merged-parse error into an anyhow error, with a friendlier message for the missing node
-/// mode: clap can only describe it as missing arguments, but the mode may come from the config file
-/// as well. The mode group is the only required argument, so the mapping is unambiguous; other
-/// errors already describe themselves and pass through unchanged.
+/// Maps a missing node mode to a friendlier message that mentions the config file; other errors already describe themselves.
 fn merged_parse_error(error: Error) -> anyhow::Error {
     match error.kind() {
         ErrorKind::MissingRequiredArgument => {
@@ -151,10 +134,7 @@ fn merged_parse_error(error: Error) -> anyhow::Error {
     }
 }
 
-/// Builds the command for a partial parse of the command line alone, with the node mode requirement
-/// relaxed: the mode may come from the config file, so the command line cannot satisfy it on its own.
-///
-/// Used by the first pass, which resolves the config file path before the file can contribute values.
+/// The first-pass command: the node mode requirement is relaxed because the mode may come from the config file.
 fn command_without_mode_requirement() -> Command {
     ConfigCli::command().mut_group("mode", |group| group.required(false))
 }
@@ -177,14 +157,8 @@ fn parse_config_table(file_content: &str) -> anyhow::Result<Table> {
     toml::from_str(file_content).context("failed to parse config file")
 }
 
-/// Converts config file values into command line tokens, one per value, for the argument whose id
-/// matches the value's dotted path. Arguments the CLI explicitly provides are skipped, keeping "the
-/// CLI overrides the file" uniform: node mode values are skipped entirely when the CLI provides a
-/// mode (so the CLI mode is authoritative over the file's), and list arguments are replaced instead
-/// of extended.
-///
-/// Values use the `--flag=value` form, so values that look like flags cannot shift the parse; boolean
-/// flags emit no token when `false`, since the absent flag is already `false`.
+/// Converts config file values into `--flag=value` command line tokens; arguments the CLI already provides
+/// are skipped, keeping "the CLI overrides the file" uniform.
 fn file_config_tokens(command: &Command, table: &Table, cli_matches: &ArgMatches) -> Vec<OsString> {
     let cli_provides = |id: &str| cli_matches.value_source(id) == Some(ValueSource::CommandLine);
     let cli_node_mode = NODE_MODE_ARGUMENTS.iter().any(|mode| cli_provides(mode));
@@ -207,10 +181,6 @@ fn file_config_tokens(command: &Command, table: &Table, cli_matches: &ArgMatches
 }
 
 /// Collects the paths of fields unknown to the configuration.
-///
-/// A path is known when it is the dotted path of a config argument or a prefix of one; sections
-/// under a feature that is not enabled are skipped, so config files stay portable across
-/// binaries built with different features.
 fn unknown_fields(table: &Table, command: &Command) -> Vec<String> {
     let known: HashSet<String> = command
         .get_arguments()
@@ -220,8 +190,7 @@ fn unknown_fields(table: &Table, command: &Command) -> Vec<String> {
     unknown_field_paths(table, "", &known)
 }
 
-/// Recursively collects unknown paths; a section whose path is unknown is reported once, without
-/// descending into it.
+/// Recursively collects unknown paths.
 fn unknown_field_paths(table: &Table, prefix: &str, known: &HashSet<String>) -> Vec<String> {
     let mut unknown = Vec::new();
     for (key, value) in table {
@@ -253,10 +222,7 @@ fn table_lookup<'a>(table: &'a Table, path: &str) -> Option<&'a Value> {
     current.get(*last)
 }
 
-/// Converts a TOML value to the string form clap expects for an argument default.
-///
-/// Arrays join with `,` to match the `value_delimiter` used by list arguments; an empty array is
-/// `None` because a list argument left absent already defaults to empty.
+/// Converts a TOML value to the string form clap expects for an argument value.
 fn toml_value_as_string(value: &Value) -> Option<String> {
     match value {
         Value::String(string) => Some(string.clone()),
