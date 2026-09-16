@@ -34,17 +34,11 @@ use toml::Value;
 use crate::config::StratusConfig;
 use crate::infra::build_info;
 
-/// Arguments that never take values from the config file.
+/// Arguments that make no sense as config file fields; they warn as unknown when present in a file.
 const CLI_ONLY_ARGUMENTS: &[&str] = &["config_path", "nocapture", "help", "version"];
 
 /// Node mode flags: file mode values are skipped when the CLI provides a mode.
 const NODE_MODE_ARGUMENTS: &[&str] = &["leader", "follower", "fake_leader"];
-
-/// Sections ignored when the `dev` feature is not enabled.
-#[cfg(not(feature = "dev"))]
-const IGNORED_FILE_SECTIONS: &[&str] = &["storage.permanent.genesis"];
-#[cfg(feature = "dev")]
-const IGNORED_FILE_SECTIONS: &[&str] = &[];
 
 /// Configuration that can be loaded from a config file with CLI overrides.
 pub trait ConfigLoad: Sized {
@@ -74,6 +68,14 @@ struct ConfigCli {
 }
 
 impl ConfigCli {
+    /// Parses the command line and resolves the config file path, before any file value can exist.
+    fn parse_first_pass() -> anyhow::Result<(PathBuf, ArgMatches)> {
+        let matches = command_without_mode_requirement().get_matches();
+        let cli = Self::from_arg_matches(&matches)?;
+        let path = cli.resolve_config_path()?;
+        Ok((path, matches))
+    }
+
     /// Resolves the config file path: `--config <path>` when provided, otherwise `config/{binary}.{env}.toml`.
     fn resolve_config_path(&self) -> anyhow::Result<PathBuf> {
         match &self.config_path {
@@ -87,10 +89,7 @@ impl ConfigCli {
 impl StratusConfig {
     /// Loads the configuration: config file as base, explicitly provided CLI arguments as overrides.
     pub fn load() -> anyhow::Result<Self> {
-        // first pass: resolves the config file path before the file can contribute values
-        let first_pass = command_without_mode_requirement().get_matches();
-        let cli = ConfigCli::from_arg_matches(&first_pass)?;
-        let config_path = cli.resolve_config_path()?;
+        let (config_path, first_pass) = ConfigCli::parse_first_pass()?;
 
         // read the config file, falling back to defaults when it does not exist
         let file_content = match std::fs::read_to_string(&config_path) {
@@ -164,7 +163,6 @@ fn file_config_tokens(command: &Command, table: &Table, cli_matches: &ArgMatches
     let cli_node_mode = NODE_MODE_ARGUMENTS.iter().any(|mode| cli_provides(mode));
     command
         .get_arguments()
-        .filter(|arg| !CLI_ONLY_ARGUMENTS.contains(&arg.get_id().as_str()))
         .filter(|arg| !(cli_node_mode && NODE_MODE_ARGUMENTS.contains(&arg.get_id().as_str())))
         .filter(|arg| !(matches!(arg.get_action(), ArgAction::Append) && cli_provides(arg.get_id().as_str())))
         .filter_map(|arg| {
@@ -195,9 +193,6 @@ fn unknown_field_paths(table: &Table, prefix: &str, known: &HashSet<String>) -> 
     let mut unknown = Vec::new();
     for (key, value) in table {
         let path = if prefix.is_empty() { key.clone() } else { format!("{prefix}.{key}") };
-        if IGNORED_FILE_SECTIONS.contains(&path.as_str()) {
-            continue;
-        }
         let is_leaf = known.contains(&path);
         let is_section = known.iter().any(|id| id.starts_with(&format!("{path}.")));
         if is_leaf || is_section {
@@ -337,7 +332,6 @@ mod tests {
         let command = super::ConfigCli::command();
         let missing: Vec<&str> = command
             .get_arguments()
-            .filter(|arg| !super::CLI_ONLY_ARGUMENTS.contains(&arg.get_id().as_str()))
             .filter(|arg| arg.get_long().is_none())
             .map(|arg| arg.get_id().as_str())
             .collect();

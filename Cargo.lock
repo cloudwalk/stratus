@@ -6301,7 +6301,6 @@ dependencies = [
  "metrics-exporter-prometheus",
  "serde",
  "serde_json",
- "stratus_macros",
  "stratus_metrics_macros",
  "tokio",
  "tracing",
