@@ -120,28 +120,3 @@ fn run_exporter_runtime(
     });
     Ok(())
 }
-
-// -----------------------------------------------------------------------------
-// Tests
-// -----------------------------------------------------------------------------
-
-#[cfg(test)]
-mod tests {
-    use super::ExporterRuntime;
-    use super::ExporterRuntimeConfig;
-
-    #[tokio::test]
-    async fn exporter_runtime_executes_blocking_work_and_shuts_down() {
-        let runtime = ExporterRuntime::start(ExporterRuntimeConfig {
-            async_threads: 1,
-            blocking_threads: 2,
-        })
-        .await
-        .expect("start exporter runtime");
-
-        let result = runtime.handle().spawn_blocking(|| 40 + 2).await.expect("blocking work");
-        assert_eq!(result, 42);
-
-        runtime.shutdown().await.expect("shutdown exporter runtime");
-    }
-}

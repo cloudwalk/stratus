@@ -290,7 +290,7 @@ impl Server {
         self.exporter_runtime.write().take()
     }
 
-    /// Handle of the dedicated exporter runtime, when enabled, for dispatching importer-facing requests.
+    /// Handle of the dedicated exporter runtime for dispatching importer-facing requests.
     fn exporter_handle(&self) -> Option<Handle> {
         self.exporter_runtime.read().as_ref().map(|runtime| runtime.handle().clone())
     }
@@ -427,7 +427,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 /// These methods are on the follower sync critical path: when the main blocking pool saturates with
 /// external traffic (`eth_call`, `eth_getLogs`, ...), queued importer requests stall and followers
 /// fall behind. The exporter runtime's dedicated blocking pool keeps them isolated. Falls back to
-/// the main runtime's blocking pool when the exporter is disabled.
+/// the main runtime's blocking pool when the exporter runtime is no longer available (shutdown).
 async fn dispatch_exporter_method<T, F>(handler: F, params: Params<'static>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<T, StratusError>
 where
     T: Send + 'static,

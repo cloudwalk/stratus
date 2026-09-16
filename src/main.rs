@@ -47,7 +47,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
 
     // Init exporter runtime
     let exporter_runtime = config.exporter.init().await?;
-    let exporter_runtime = Arc::new(RwLock::new(exporter_runtime));
+    let exporter_runtime = Arc::new(RwLock::new(Some(exporter_runtime)));
 
     // Init RPC server
     Server::new(
