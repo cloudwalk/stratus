@@ -38,9 +38,6 @@ pub trait WithCommonConfig {
 }
 
 /// Configuration that can be used by any binary.
-///
-/// Argument ids are the dotted TOML paths of the corresponding config file fields; the loader
-/// uses them to apply file values as clap defaults (see [`loader`]).
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct CommonConfig {
     /// Environment where the application is running.
@@ -214,9 +211,6 @@ impl WithCommonConfig for StratusConfig {
 
 impl StratusConfig {
     /// Ignores follower-only sections when running as leader.
-    ///
-    /// `[importer]` and `[kafka]` only apply to follower and fake-leader nodes; a leader receiving them
-    /// (e.g. from a config file shared with a follower) ignores them instead of failing to start.
     pub(crate) fn ignore_follower_sections(&mut self) {
         if self.active_node_modes().as_slice() != ["leader"] {
             return;
@@ -230,9 +224,6 @@ impl StratusConfig {
     }
 
     /// Ignores the sentry section when its url is empty.
-    ///
-    /// Sentry is non-essential: an empty url disables the exporter instead of failing to start,
-    /// the same way a sentry exporter that fails to start is handled at runtime.
     pub(crate) fn ignore_sentry_without_url(&mut self) {
         if self.common.sentry.as_ref().is_some_and(|sentry| sentry.sentry_url.is_empty()) {
             println!("warning: ignoring [common.sentry] config: url is empty");
@@ -241,12 +232,6 @@ impl StratusConfig {
     }
 
     /// Validates configuration invariants that clap cannot enforce.
-    ///
-    /// Clap's value parsers already validate per-value syntax and ranges for file and CLI values, and the node mode
-    /// is enforced by clap itself: a required group guarantees at least one mode, and the conflicts between the
-    /// flags guarantee at most one. What is left are relations clap cannot express: `executor.chain_id` uses `0` as
-    /// its clap default (so a value parser cannot reject it), the importer requirements for follower and
-    /// fake-leader modes, and the all-or-none kafka section.
     pub fn validate(&self) -> anyhow::Result<()> {
         self.validate_executor()?;
         self.validate_importer()?;
