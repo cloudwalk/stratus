@@ -3,11 +3,12 @@
 //! Loading rules:
 //!
 //! 1. The config file is resolved: `--config <path>` when provided, otherwise `config/{binary}.{env}.toml`.
-//! 2. The file is parsed with [`toml`] into a table, and each file value is applied as the default of the
-//!    argument whose `id` matches the value's dotted TOML path. Clap then enforces the precedence
-//!    itself (built-in defaults < config file < explicitly provided CLI arguments) and validates file
-//!    values with the same value parsers used for the command line. Fields unknown to the configuration
-//!    are ignored with a warning instead of failing.
+//! 2. The file is parsed with [`toml`] into a table, and each file value becomes a `--flag=value` command
+//!    line token for the argument whose `id` matches the value's dotted TOML path. The tokens are parsed
+//!    together with the real arguments in a single pass, so clap validates file values with the same value
+//!    parsers used for the command line and treats them as explicitly provided; `args_override_self` makes
+//!    the command line win over the file, and list arguments are replaced instead of extended. Fields
+//!    unknown to the configuration are ignored with a warning instead of failing.
 //! 3. A node mode explicitly provided in the command line overrides the file's, and a leader ignores
 //!    follower-only sections (`[importer]`, `[kafka]`) instead of failing on them.
 //! 4. The merged configuration is validated for invariants that depend on file and CLI values together.
@@ -16,15 +17,20 @@
 //! `id`: each config argument's id is the dotted path of the corresponding TOML field.
 
 use std::collections::HashSet;
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 use anyhow::Context;
 use anyhow::anyhow;
+use clap::ArgAction;
 use clap::ArgMatches;
 use clap::Command;
 use clap::CommandFactory;
+use clap::Error;
 use clap::FromArgMatches;
 use clap::Parser;
+use clap::error::ErrorKind;
+use clap::parser::ValueSource;
 use toml::Table;
 use toml::Value;
 
@@ -35,7 +41,7 @@ use crate::infra::build_info;
 const CLI_ONLY_ARGUMENTS: &[&str] = &["config_path", "nocapture", "help", "version"];
 
 /// Node mode flags: when one is explicitly provided in the command line, file mode values are not
-/// applied, so the CLI mode is authoritative over the file's.
+/// converted into tokens, so the CLI mode is authoritative over the file's.
 const NODE_MODE_ARGUMENTS: &[&str] = &["leader", "follower", "fake_leader"];
 
 /// Sections parsed and ignored when the `dev` feature is not enabled, so config files stay
@@ -88,23 +94,14 @@ impl ConfigCli {
             None => Ok(PathBuf::from(format!("config/{}.{}.toml", build_info::binary_name(), self.config.common.env))),
         }
     }
-
-    /// Returns whether a node mode flag is explicitly provided in the command line.
-    ///
-    /// The mode flags have no clap defaults and file values are not applied in the first pass, so
-    /// they are true exactly when explicitly provided.
-    fn provides_node_mode(&self) -> bool {
-        self.config.leader || self.config.follower || self.config.fake_leader
-    }
 }
 
 impl StratusConfig {
     /// Loads the configuration: config file as base, explicitly provided CLI arguments as overrides.
     pub fn load() -> anyhow::Result<Self> {
         // first pass: resolves the config file path (`--config` or `--env`) before the file can contribute values
-        let command = ConfigCli::command();
-        let matches = command.clone().get_matches();
-        let cli = ConfigCli::from_arg_matches(&matches)?;
+        let first_pass = command_without_mode_requirement().get_matches();
+        let cli = ConfigCli::from_arg_matches(&first_pass)?;
         let config_path = cli.resolve_config_path()?;
 
         // read the config file, falling back to defaults when the default file does not exist
@@ -120,34 +117,51 @@ impl StratusConfig {
             }
         };
 
-        // parse the file and apply its values as clap defaults
+        // parse the file and validate its fields
         println!("reading config file | path={}", config_path.display());
         let table = parse_config_table(&file_content)?;
+        let command = ConfigCli::command();
         for field in unknown_fields(&table, &command) {
             println!("warning: unknown field in config file, ignored | field={field}");
         }
 
-        // second pass over the same arguments: file values are the defaults now, so clap itself
-        // enforces the precedence and validates file values with the command line value parsers
-        let command = apply_file_defaults(command, &table, cli.provides_node_mode());
+        // single parse over the file tokens and the command line: clap validates file values with
+        // the command line value parsers, and `args_override_self` makes the command line win
+        let tokens = file_config_tokens(&command, &table, &first_pass);
         let matches = command
-            .try_get_matches_from(std::env::args_os())
-            .context("failed to apply config file values")?;
+            .args_override_self(true)
+            .no_binary_name(true)
+            .try_get_matches_from(tokens.into_iter().chain(std::env::args_os().skip(1)))
+            .map_err(merged_parse_error)?;
 
-        config_from_matches(&matches, &table)
+        config_from_matches(&matches)
     }
 }
 
-/// Builds the merged configuration from matches parsed over a command with file defaults applied.
-fn config_from_matches(matches: &ArgMatches, table: &Table) -> anyhow::Result<StratusConfig> {
-    let mut config = ConfigCli::from_arg_matches(matches)?.config;
+/// Converts a merged-parse error into an anyhow error, with a friendlier message for the missing node
+/// mode: clap can only describe it as missing arguments, but the mode may come from the config file
+/// as well. The mode group is the only required argument, so the mapping is unambiguous; other
+/// errors already describe themselves and pass through unchanged.
+fn merged_parse_error(error: Error) -> anyhow::Error {
+    match error.kind() {
+        ErrorKind::MissingRequiredArgument => {
+            anyhow!("no node mode configured: set exactly one of `leader`, `follower` or `fake_leader` (config file or CLI flag)")
+        }
+        _ => error.into(),
+    }
+}
 
-    // flattened `Option<T>` sections only materialize when an argument comes from the command
-    // line: clap marks a group as present just for explicitly provided arguments, so sections
-    // that exist only in the config file are extracted from their applied defaults
-    config.common.sentry = file_only_section(matches, table, "common.sentry", config.common.sentry)?;
-    config.importer = file_only_section(matches, table, "importer", config.importer)?;
-    config.kafka_config = file_only_section(matches, table, "kafka", config.kafka_config)?;
+/// Builds the command for a partial parse of the command line alone, with the node mode requirement
+/// relaxed: the mode may come from the config file, so the command line cannot satisfy it on its own.
+///
+/// Used by the first pass, which resolves the config file path before the file can contribute values.
+fn command_without_mode_requirement() -> Command {
+    ConfigCli::command().mut_group("mode", |group| group.required(false))
+}
+
+/// Builds the merged configuration from matches parsed over the file tokens plus the command line.
+fn config_from_matches(matches: &ArgMatches) -> anyhow::Result<StratusConfig> {
+    let mut config = ConfigCli::from_arg_matches(matches)?.config;
 
     // a leader ignores follower-only sections instead of failing on them
     config.ignore_follower_sections();
@@ -163,22 +177,33 @@ fn parse_config_table(file_content: &str) -> anyhow::Result<Table> {
     toml::from_str(file_content).context("failed to parse config file")
 }
 
-/// Applies every config file value as the default of the argument whose id matches the value's dotted path,
-/// except node mode values when the CLI provides a mode explicitly.
-fn apply_file_defaults(command: Command, table: &Table, cli_node_mode: bool) -> Command {
-    let defaults: Vec<(String, String)> = command
-        .get_arguments()
-        .map(|arg| arg.get_id().as_str().to_string())
-        .filter(|id| !CLI_ONLY_ARGUMENTS.contains(&id.as_str()))
-        .filter(|id| !(cli_node_mode && NODE_MODE_ARGUMENTS.contains(&id.as_str())))
-        .filter_map(|id| table_lookup(table, &id).and_then(toml_value_as_string).map(|value| (id, value)))
-        .collect();
-
-    let mut command = command;
-    for (id, value) in defaults {
-        command = command.mut_arg(id, |arg| arg.default_value(value));
-    }
+/// Converts config file values into command line tokens, one per value, for the argument whose id
+/// matches the value's dotted path. Arguments the CLI explicitly provides are skipped, keeping "the
+/// CLI overrides the file" uniform: node mode values are skipped entirely when the CLI provides a
+/// mode (so the CLI mode is authoritative over the file's), and list arguments are replaced instead
+/// of extended.
+///
+/// Values use the `--flag=value` form, so values that look like flags cannot shift the parse; boolean
+/// flags emit no token when `false`, since the absent flag is already `false`.
+fn file_config_tokens(command: &Command, table: &Table, cli_matches: &ArgMatches) -> Vec<OsString> {
+    let cli_provides = |id: &str| cli_matches.value_source(id) == Some(ValueSource::CommandLine);
+    let cli_node_mode = NODE_MODE_ARGUMENTS.iter().any(|mode| cli_provides(mode));
     command
+        .get_arguments()
+        .filter(|arg| !CLI_ONLY_ARGUMENTS.contains(&arg.get_id().as_str()))
+        .filter(|arg| !(cli_node_mode && NODE_MODE_ARGUMENTS.contains(&arg.get_id().as_str())))
+        .filter(|arg| !(matches!(arg.get_action(), ArgAction::Append) && cli_provides(arg.get_id().as_str())))
+        .filter_map(|arg| {
+            let value = table_lookup(table, arg.get_id().as_str()).and_then(toml_value_as_string)?;
+            let flag = format!("--{}", arg.get_long()?);
+            let token = match arg.get_action() {
+                ArgAction::Set | ArgAction::Append => format!("{flag}={value}"),
+                _ if value == "true" => flag,
+                _ => return None,
+            };
+            Some(OsString::from(token))
+        })
+        .collect()
 }
 
 /// Collects the paths of fields unknown to the configuration.
@@ -217,19 +242,6 @@ fn unknown_field_paths(table: &Table, prefix: &str, known: &HashSet<String>) -> 
     unknown
 }
 
-/// Materializes a flattened `Option<T>` section that exists in the config file but not in the command line.
-///
-/// Clap marks a flattened group as present only when an argument comes from the command line, so
-/// `Option<T>` fields resolve to `None` when every value of the section comes from the file; the
-/// values are available in the matches as defaults and can be extracted manually.
-fn file_only_section<T: FromArgMatches>(matches: &ArgMatches, table: &Table, section: &str, current: Option<T>) -> anyhow::Result<Option<T>> {
-    if current.is_some() || table_lookup(table, section).is_none() {
-        return Ok(current);
-    }
-    let section = T::from_arg_matches(matches).map_err(|error| anyhow!("failed to apply config file section [{section}]: {error}"))?;
-    Ok(Some(section))
-}
-
 /// Looks up a dotted path in a TOML table, e.g. `storage.permanent.path_prefix`.
 fn table_lookup<'a>(table: &'a Table, path: &str) -> Option<&'a Value> {
     let segments: Vec<&str> = path.split('.').collect();
@@ -259,6 +271,8 @@ fn toml_value_as_string(value: &Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
+
     use clap::CommandFactory;
     use clap::FromArgMatches;
 
@@ -268,13 +282,16 @@ mod tests {
 
     /// Parses CLI arguments over the given config file content and builds the merged configuration.
     fn load_with(args: &[&str], file_content: &str) -> anyhow::Result<StratusConfig> {
-        let argv = || std::iter::once("stratus").chain(args.iter().copied());
-        let command = super::ConfigCli::command();
-        let cli = super::ConfigCli::from_arg_matches(&command.clone().try_get_matches_from(argv())?)?;
+        let first_pass = super::command_without_mode_requirement().try_get_matches_from(std::iter::once("stratus").chain(args.iter().copied()))?;
         let table = super::parse_config_table(file_content)?;
-        let command = super::apply_file_defaults(command, &table, cli.provides_node_mode());
-        let matches = command.try_get_matches_from(argv())?;
-        super::config_from_matches(&matches, &table)
+        let command = super::ConfigCli::command();
+        let tokens = super::file_config_tokens(&command, &table, &first_pass);
+        let matches = command
+            .args_override_self(true)
+            .no_binary_name(true)
+            .try_get_matches_from(tokens.into_iter().chain(args.iter().map(|arg| OsString::from(*arg))))
+            .map_err(super::merged_parse_error)?;
+        super::config_from_matches(&matches)
     }
 
     #[test]
@@ -331,6 +348,37 @@ mod tests {
     }
 
     #[test]
+    fn test_cli_list_arguments_replace_file_values() {
+        // a command line list replaces the file's instead of extending it, keeping "the CLI
+        // overrides the file" uniform across argument kinds
+        let file = r#"
+            leader = true
+
+            [executor]
+            chain_id = 2008
+
+            [common]
+            blocked_clients = ["metamask"]
+        "#;
+        let config = load_with(&["--blocked-clients", "blockscout"], file).unwrap();
+        assert_eq!(config.common.blocked_clients, ["blockscout"]);
+    }
+
+    #[test]
+    fn test_every_config_argument_has_a_long_flag() {
+        // file values become `--long=value` tokens, so an argument without a long flag would never
+        // receive its value from the config file
+        let command = super::ConfigCli::command();
+        let missing: Vec<&str> = command
+            .get_arguments()
+            .filter(|arg| !super::CLI_ONLY_ARGUMENTS.contains(&arg.get_id().as_str()))
+            .filter(|arg| arg.get_long().is_none())
+            .map(|arg| arg.get_id().as_str())
+            .collect();
+        assert!(missing.is_empty(), "arguments without a long flag: {missing:?}");
+    }
+
+    #[test]
     fn test_unknown_fields_are_ignored() {
         // fields unknown to the configuration are ignored (with a warning) instead of failing,
         // so a file with stale options does not prevent startup
@@ -355,8 +403,8 @@ mod tests {
 
     #[test]
     fn test_file_values_are_validated_by_clap() {
-        // file values are applied as argument defaults and go through the same value parsers as the
-        // command line, so invalid values fail during the second parse
+        // file values go through the same value parsers as the command line, so invalid values
+        // fail during the parse
         let file = r#"
             leader = true
 
@@ -484,27 +532,17 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_node_mode_requires_explicit_flag() {
-        // provides_node_mode relies on the mode flags being false unless explicitly provided
-        let command = super::ConfigCli::command();
-        let cli = super::ConfigCli::from_arg_matches(&command.try_get_matches_from(["stratus"]).unwrap()).unwrap();
-        assert!(!cli.provides_node_mode());
-    }
-
-    #[test]
-    fn test_cli_leader_conflicts_with_cli_importer_args() {
-        // an explicit CLI contradiction errors at the clap parse
-        let command = super::ConfigCli::command();
-        let error = command
-            .try_get_matches_from(["stratus", "--leader", "-r", "http://localhost:3000/"])
-            .unwrap_err();
-        assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+    fn test_cli_leader_ignores_cli_importer_args() {
+        // #2567: even an explicit CLI importer argument is ignored in leader mode
+        let config = load_with(&["--leader", "--executor-chain-id", "2008", "-r", "http://localhost:3000/"], "").unwrap();
+        assert!(config.leader);
+        assert!(config.importer.is_none());
     }
 
     #[test]
     fn test_file_only_mode_conflicts_still_fail() {
-        // clap cannot see file-provided values, so mode exclusivity between file entries is
-        // enforced by validate()
+        // file values are parsed as tokens, so mode exclusivity between file entries is enforced
+        // by clap's conflict checks
         let file = r#"
             leader = true
             follower = true
@@ -513,7 +551,19 @@ mod tests {
             chain_id = 2008
         "#;
         let error = load_with(&[], file).unwrap_err();
-        assert!(error.to_string().contains("multiple node modes"), "unexpected error: {error:#}");
+        assert!(error.to_string().contains("cannot be used with"), "unexpected error: {error:#}");
+    }
+
+    #[test]
+    fn test_missing_node_mode_fails() {
+        // the required mode group guarantees at least one mode; here neither the file nor the CLI
+        // provides one, and the error message hints at both sources
+        let file = r#"
+            [executor]
+            chain_id = 2008
+        "#;
+        let error = load_with(&[], file).unwrap_err();
+        assert!(error.to_string().contains("no node mode configured"), "unexpected error: {error:#}");
     }
 
     #[test]
@@ -579,7 +629,7 @@ mod tests {
 
     #[test]
     fn test_env_arg_selects_file_path() {
-        let command = super::ConfigCli::command();
+        let command = super::command_without_mode_requirement();
         let matches = command.clone().try_get_matches_from(["stratus", "--env", "production"]).unwrap();
         let cli = super::ConfigCli::from_arg_matches(&matches).unwrap();
         assert_eq!(
@@ -601,16 +651,20 @@ mod tests {
 
     #[test]
     fn test_repo_config_files_parse() {
-        // the repository config files must parse and survive having their values applied as
-        // argument defaults, which exercises the same value parsers used for the command line
+        // the repository config files must parse and survive being converted into command line
+        // tokens, which exercises the same value parsers used for the command line; the node
+        // mode requirement is relaxed because the example file does not select one
         for path in ["config/stratus.example.toml", "config/stratus.local.toml", "config/stratus-follower.toml"] {
             let content = std::fs::read_to_string(path).unwrap();
             let table = super::parse_config_table(&content).unwrap_or_else(|e| panic!("failed to parse {path}: {e}"));
-            let command = super::ConfigCli::command();
+            let command = super::command_without_mode_requirement();
             assert!(super::unknown_fields(&table, &command).is_empty(), "unknown fields in {path}");
-            let command = super::apply_file_defaults(command, &table, false);
+            let first_pass = command.clone().try_get_matches_from(["stratus"]).unwrap();
+            let tokens = super::file_config_tokens(&command, &table, &first_pass);
             command
-                .try_get_matches_from(["stratus"])
+                .args_override_self(true)
+                .no_binary_name(true)
+                .try_get_matches_from(tokens)
                 .unwrap_or_else(|e| panic!("failed to apply values from {path}: {e}"));
         }
     }

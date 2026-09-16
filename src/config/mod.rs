@@ -169,9 +169,9 @@ impl CommonConfig {
 
 /// Configuration for main Stratus service.
 #[derive(DebugAsJson, Clone, Default, Parser, derive_more::Deref, serde::Serialize)]
-#[clap(group = ArgGroup::new("mode").args(&["leader", "follower", "fake_leader"]))]
+#[clap(group = ArgGroup::new("mode").args(&["leader", "follower", "fake_leader"]).required(true))]
 pub struct StratusConfig {
-    #[arg(id = "leader", long = "leader", conflicts_with_all = ["follower", "fake_leader", "ImporterConfig"])]
+    #[arg(id = "leader", long = "leader", conflicts_with_all = ["follower", "fake_leader"])]
     pub leader: bool,
 
     #[arg(id = "follower", long = "follower", conflicts_with_all = ["leader", "fake_leader"])]
@@ -242,12 +242,12 @@ impl StratusConfig {
 
     /// Validates configuration invariants that clap cannot enforce.
     ///
-    /// Clap's value parsers already validate per-value syntax and ranges for both file and CLI values, because file
-    /// values are applied as argument defaults and parsed by the same value parsers. What clap cannot see are
-    /// relations between values: its conflict and requirement checks only consider explicitly provided arguments,
-    /// so file-provided values (clap defaults) are invisible to them. The checks below are exactly those invariants.
+    /// Clap's value parsers already validate per-value syntax and ranges for file and CLI values, and the node mode
+    /// is enforced by clap itself: a required group guarantees at least one mode, and the conflicts between the
+    /// flags guarantee at most one. What is left are relations clap cannot express: `executor.chain_id` uses `0` as
+    /// its clap default (so a value parser cannot reject it), the importer requirements for follower and
+    /// fake-leader modes, and the all-or-none kafka section.
     pub fn validate(&self) -> anyhow::Result<()> {
-        self.validate_node_mode()?;
         self.validate_executor()?;
         self.validate_importer()?;
         self.validate_kafka()?;
@@ -261,18 +261,6 @@ impl StratusConfig {
             .filter(|(active, _)| *active)
             .map(|(_, name)| name)
             .collect()
-    }
-
-    /// Validates that exactly one node mode is configured.
-    fn validate_node_mode(&self) -> anyhow::Result<()> {
-        match self.active_node_modes().as_slice() {
-            [_mode] => Ok(()),
-            [] => anyhow::bail!("no node mode configured: set exactly one of `leader`, `follower` or `fake_leader` (config file or CLI flag)"),
-            many => anyhow::bail!(
-                "multiple node modes configured ({}): use exactly one of `leader`, `follower`, `fake_leader`",
-                many.join(", ")
-            ),
-        }
     }
 
     /// Validates that a chain id is configured.
@@ -370,6 +358,7 @@ mod tests {
         // these bools default to `true`; the bare flag and the `=false`/`=true` forms must all work
         let config = StratusConfig::try_parse_from([
             "stratus",
+            "--leader",
             "--executor-reject-not-contract=false",
             "--unknown-client-enabled=false",
             "--forward-access-list=false",
@@ -383,6 +372,7 @@ mod tests {
 
         let config = StratusConfig::try_parse_from([
             "stratus",
+            "--leader",
             "--executor-reject-not-contract",
             "--unknown-client-enabled",
             "--forward-access-list",
