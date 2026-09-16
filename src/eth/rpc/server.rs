@@ -282,7 +282,7 @@ impl Server {
     async fn health(&self) -> bool {
         match GlobalState::get_node_mode() {
             NodeMode::Leader | NodeMode::FakeLeader => true,
-            NodeMode::Follower =>
+            NodeMode::Follower => {
                 if GlobalState::is_importer_shutdown() {
                     tracing::warn!("stratus is unhealthy because importer is shutdown");
                     false
@@ -294,7 +294,8 @@ impl Server {
                             false
                         }
                     }
-                },
+                }
+            }
         }
     }
 }
@@ -638,7 +639,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     })?;
 
     let importer_config = ImporterConfig {
-        external_rpc,
+        external_rpc: Some(external_rpc),
         external_rpc_ws: Some(external_rpc_ws),
         external_rpc_timeout,
         sync_interval,

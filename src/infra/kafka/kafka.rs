@@ -14,21 +14,22 @@ use rdkafka::producer::FutureRecord;
 use rdkafka::producer::future_producer::OwnedDeliveryResult;
 use stratus_metrics::timed;
 
+use crate::ext::parse_non_empty;
 use crate::ledger::events::Event;
 use crate::log_and_err;
 
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize, Default)]
 #[serde(default)]
 pub struct KafkaConfig {
-    /// Kafka bootstrap servers. Empty by default; the all-or-none rule is enforced by `validate()` after the merge.
-    #[arg(id = "kafka.bootstrap_servers", long = "kafka-bootstrap-servers", default_value = "", required = false)]
-    pub bootstrap_servers: String,
+    /// Kafka bootstrap servers.
+    #[arg(id = "kafka.bootstrap_servers", long = "kafka-bootstrap-servers", value_parser = parse_non_empty, required = false)]
+    pub bootstrap_servers: Option<String>,
 
-    #[arg(id = "kafka.topic", long = "kafka-topic", group = "kafka", default_value = "", required = false)]
-    pub topic: String,
+    #[arg(id = "kafka.topic", long = "kafka-topic", group = "kafka", value_parser = parse_non_empty, required = false)]
+    pub topic: Option<String>,
 
-    #[arg(id = "kafka.client_id", long = "kafka-client-id", default_value = "", required = false)]
-    pub client_id: String,
+    #[arg(id = "kafka.client_id", long = "kafka-client-id", value_parser = parse_non_empty, required = false)]
+    pub client_id: Option<String>,
 
     #[arg(id = "kafka.group_id", long = "kafka-group-id", required = false)]
     pub group_id: Option<String>,
@@ -92,17 +93,23 @@ impl std::fmt::Display for KafkaSecurityProtocol {
 
 impl KafkaConnector {
     pub fn new(config: &KafkaConfig) -> Result<Self> {
+        let (Some(bootstrap_servers), Some(topic), Some(client_id)) = (&config.bootstrap_servers, &config.topic, &config.client_id) else {
+            return Err(anyhow!(
+                "incomplete `[kafka]` configuration: `bootstrap_servers`, `topic` and `client_id` are all required"
+            ));
+        };
+
         tracing::info!(
-            topic = %config.topic,
-            bootstrap_servers = %config.bootstrap_servers,
-            client_id = %config.client_id,
+            topic = %topic,
+            bootstrap_servers = %bootstrap_servers,
+            client_id = %client_id,
             "Creating Kafka connector"
         );
 
         let security_protocol = config.security_protocol;
         let mut client_config = ClientConfig::new()
-            .set("bootstrap.servers", &config.bootstrap_servers)
-            .set("client.id", &config.client_id)
+            .set("bootstrap.servers", bootstrap_servers)
+            .set("client.id", client_id)
             .set("linger.ms", "5")
             .set("batch.size", "1048576") // 1 MB
             .to_owned();
@@ -146,7 +153,7 @@ impl KafkaConnector {
 
         Ok(Self {
             producer,
-            topic: config.topic.clone(),
+            topic: topic.clone(),
         })
     }
 

@@ -24,13 +24,14 @@ use crate::eth::types::StratusError;
 use crate::ext::duration_serde;
 use crate::ext::not;
 use crate::ext::parse_duration;
+use crate::ext::parse_non_empty;
 use crate::infra::kafka::KafkaConnector;
 
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct ImporterConfig {
-    /// External RPC HTTP endpoint to sync blocks with Stratus. Empty by default; `validate()` rejects it after the merge.
-    #[arg(id = "importer.external_rpc", short = 'r', long = "external-rpc", default_value = "", required = false)]
-    pub external_rpc: String,
+    /// External RPC HTTP endpoint to sync blocks with Stratus.
+    #[arg(id = "importer.external_rpc", short = 'r', long = "external-rpc", value_parser = parse_non_empty, required = false)]
+    pub external_rpc: Option<String>,
 
     /// External RPC WS endpoint to sync blocks with Stratus.
     #[arg(id = "importer.external_rpc_ws", short = 'w', long = "external-rpc-ws", required = false)]
@@ -83,7 +84,7 @@ pub struct ImporterConfig {
 impl Default for ImporterConfig {
     fn default() -> Self {
         Self {
-            external_rpc: String::new(),
+            external_rpc: None,
             external_rpc_ws: None,
             external_rpc_timeout: Duration::from_millis(2_000),
             sync_interval: Duration::from_millis(100),
@@ -136,8 +137,13 @@ impl ImporterConfig {
     ) -> anyhow::Result<(Arc<ImporterConsensus>, ImporterRuntime)> {
         tracing::info!(importer_async_threads = self.importer_async_threads, "creating importer for follower node");
 
+        let external_rpc = self
+            .external_rpc
+            .as_deref()
+            .expect("importer.external_rpc is required by clap for follower and fake-leader modes");
+
         // Forwarding stays on the RPC runtime and uses an independent Hyper connection pool.
-        let forwarding_chain = Arc::new(BlockchainClient::new_http(&self.external_rpc, self.external_rpc_timeout).await?);
+        let forwarding_chain = Arc::new(BlockchainClient::new_http(external_rpc, self.external_rpc_timeout).await?);
         let consensus = Arc::new(ImporterConsensus {
             storage: Arc::clone(&storage),
             chain: forwarding_chain,
@@ -148,7 +154,7 @@ impl ImporterConfig {
         let importer_runtime = ImporterRuntime::start(ImporterRuntimeConfig {
             async_threads: self.importer_async_threads,
             importer_mode,
-            external_rpc: self.external_rpc.clone(),
+            external_rpc: external_rpc.to_string(),
             external_rpc_ws: self.external_rpc_ws.clone(),
             external_rpc_timeout: self.external_rpc_timeout,
             sync_interval: self.sync_interval,

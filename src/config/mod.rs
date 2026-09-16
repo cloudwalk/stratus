@@ -171,11 +171,11 @@ pub struct StratusConfig {
     #[arg(id = "leader", long = "leader", conflicts_with_all = ["follower", "fake_leader"])]
     pub leader: bool,
 
-    #[arg(id = "follower", long = "follower", conflicts_with_all = ["leader", "fake_leader"])]
+    #[arg(id = "follower", long = "follower", conflicts_with_all = ["leader", "fake_leader"], requires = "importer.external_rpc")]
     pub follower: bool,
 
     /// The fake leader imports blocks like a follower, but executes the blocks's txs locally like a leader.
-    #[arg(id = "fake_leader", long = "fake-leader", conflicts_with_all = ["leader", "follower"])]
+    #[arg(id = "fake_leader", long = "fake-leader", conflicts_with_all = ["leader", "follower"], requires = "importer.external_rpc")]
     pub fake_leader: bool,
 
     #[clap(flatten)]
@@ -231,13 +231,6 @@ impl StratusConfig {
         }
     }
 
-    /// Validates configuration invariants that clap cannot enforce.
-    pub fn validate(&self) -> anyhow::Result<()> {
-        self.validate_importer()?;
-        self.validate_kafka()?;
-        Ok(())
-    }
-
     /// Returns the names of the active node modes.
     fn active_node_modes(&self) -> Vec<&'static str> {
         [(self.leader, "leader"), (self.follower, "follower"), (self.fake_leader, "fake-leader")]
@@ -245,37 +238,6 @@ impl StratusConfig {
             .filter(|(active, _)| *active)
             .map(|(_, name)| name)
             .collect()
-    }
-
-    /// Validates the importer requirements for follower and fake-leader modes.
-    fn validate_importer(&self) -> anyhow::Result<()> {
-        if self.follower || self.fake_leader {
-            let Some(importer) = &self.importer else {
-                anyhow::bail!("follower and fake-leader modes require `[importer]` configuration");
-            };
-            if importer.external_rpc.is_empty() {
-                anyhow::bail!("`importer.external_rpc` is required for follower and fake-leader modes");
-            }
-        }
-        Ok(())
-    }
-
-    /// Validates the kafka section: all-or-none fields, for follower and fake-leader modes.
-    fn validate_kafka(&self) -> anyhow::Result<()> {
-        let Some(kafka) = &self.kafka_config else { return Ok(()) };
-        let missing = [
-            ("bootstrap_servers", kafka.bootstrap_servers.is_empty()),
-            ("topic", kafka.topic.is_empty()),
-            ("client_id", kafka.client_id.is_empty()),
-        ];
-        let missing: Vec<&str> = missing.iter().filter(|(_, missing)| *missing).map(|(name, _)| *name).collect();
-        if !missing.is_empty() {
-            anyhow::bail!(
-                "incomplete `[kafka]` configuration: `bootstrap_servers`, `topic` and `client_id` are all required (missing: {})",
-                missing.join(", ")
-            );
-        }
-        Ok(())
     }
 }
 

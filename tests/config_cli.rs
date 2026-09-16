@@ -208,13 +208,19 @@ fn test_leader_ignores_kafka_config() {
 
 #[test]
 fn test_incomplete_kafka_fails() {
-    assert_config_error(
-        &[],
+    // the all-or-none rule is enforced when the connector is created, after the node boots its
+    // storage, so the storage goes to a temporary directory
+    let storage = TempDir::new().unwrap();
+    let content = format!(
         r#"
             follower = true
 
             [executor]
             chain_id = 2008
+
+            [storage.permanent]
+            path_prefix = "{}"
+            file_descriptors_limit = 1024
 
             [importer]
             external_rpc = "http://127.0.0.1:3000/"
@@ -223,8 +229,9 @@ fn test_incomplete_kafka_fails() {
             bootstrap_servers = "localhost:29092"
             client_id = "stratus-producer"
         "#,
-        "incomplete `[kafka]` configuration",
+        storage.path().display()
     );
+    assert_config_error(&[], &content, "incomplete `[kafka]` configuration");
 }
 
 #[test]
@@ -301,12 +308,13 @@ fn test_follower_without_importer_fails() {
             [executor]
             chain_id = 2008
         "#,
-        "follower and fake-leader modes require `[importer]` configuration",
+        "--external-rpc",
     );
 }
 
 #[test]
 fn test_follower_with_empty_external_rpc_fails() {
+    // an empty value is rejected by the value parser instead of being the "missing" sentinel
     assert_config_error(
         &[],
         r#"
@@ -318,7 +326,7 @@ fn test_follower_with_empty_external_rpc_fails() {
             [importer]
             external_rpc = ""
         "#,
-        "`importer.external_rpc` is required for follower and fake-leader modes",
+        "value cannot be empty",
     );
 }
 
@@ -334,7 +342,7 @@ fn test_cli_follower_flag_overrides_file_leader_mode() {
             [executor]
             chain_id = 2008
         "#,
-        "follower and fake-leader modes require `[importer]` configuration",
+        "--external-rpc",
     );
 }
 

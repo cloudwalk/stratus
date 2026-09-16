@@ -159,8 +159,6 @@ fn config_from_matches(matches: &ArgMatches) -> anyhow::Result<StratusConfig> {
     config.ignore_follower_sections();
     config.ignore_sentry_without_url();
 
-    // validate the merged configuration
-    config.validate()?;
     Ok(config)
 }
 
@@ -510,7 +508,7 @@ mod tests {
             config
                 .importer
                 .as_ref()
-                .is_some_and(|importer| importer.external_rpc == "http://localhost:3000/")
+                .is_some_and(|importer| importer.external_rpc.as_deref() == Some("http://localhost:3000/"))
         );
     }
 
@@ -600,7 +598,7 @@ mod tests {
             chain_id = 2008
         "#;
         let error = load_with(&[], file).unwrap_err();
-        assert!(error.to_string().contains("require `[importer]`"), "unexpected error: {error:#}");
+        assert!(error.to_string().contains("--external-rpc"), "unexpected error: {error:#}");
     }
 
     #[test]
@@ -615,8 +613,7 @@ mod tests {
         "#;
         let config = load_with(&["--follower"], file).unwrap();
         assert!(config.follower);
-        assert_eq!(config.importer.as_ref().unwrap().external_rpc, "http://localhost:3000/");
-        config.validate().unwrap();
+        assert_eq!(config.importer.as_ref().unwrap().external_rpc.as_deref(), Some("http://localhost:3000/"));
     }
 
     #[test]
@@ -635,7 +632,7 @@ mod tests {
         // partial CLI override of an [importer] section
         let config = load_with(&["-r", "http://localhost:9999/"], file).unwrap();
         let importer = config.importer.as_ref().unwrap();
-        assert_eq!(importer.external_rpc, "http://localhost:9999/");
+        assert_eq!(importer.external_rpc.as_deref(), Some("http://localhost:9999/"));
         assert_eq!(importer.sync_interval, std::time::Duration::from_millis(250));
 
         // importer section only from CLI when file has none
@@ -647,9 +644,8 @@ mod tests {
         "#;
         let config = load_with(&["-r", "http://localhost:3000/", "--sync-interval", "1s"], file).unwrap();
         let importer = config.importer.as_ref().unwrap();
-        assert_eq!(importer.external_rpc, "http://localhost:3000/");
+        assert_eq!(importer.external_rpc.as_deref(), Some("http://localhost:3000/"));
         assert_eq!(importer.sync_interval, std::time::Duration::from_secs(1));
-        config.validate().unwrap();
     }
 
     #[test]
@@ -902,7 +898,7 @@ mod tests {
             Some("config/genesis.local.json")
         );
         let importer = config.importer.as_ref().unwrap();
-        assert_eq!(importer.external_rpc, "http://localhost:3000/");
+        assert_eq!(importer.external_rpc.as_deref(), Some("http://localhost:3000/"));
         assert_eq!(importer.external_rpc_ws.as_deref(), Some("ws://localhost:3000/"));
         assert_eq!(importer.external_rpc_timeout, std::time::Duration::from_secs(5));
         assert_eq!(importer.sync_interval, std::time::Duration::from_millis(250));
@@ -911,9 +907,9 @@ mod tests {
         assert!(!importer.forward_access_list);
         assert_eq!(importer.stop_at_block, Some(crate::eth::types::BlockNumber::from(42u64)));
         let kafka = config.kafka_config.as_ref().unwrap();
-        assert_eq!(kafka.bootstrap_servers, "localhost:29092");
-        assert_eq!(kafka.topic, "stratus-events");
-        assert_eq!(kafka.client_id, "stratus-producer");
+        assert_eq!(kafka.bootstrap_servers.as_deref(), Some("localhost:29092"));
+        assert_eq!(kafka.topic.as_deref(), Some("stratus-events"));
+        assert_eq!(kafka.client_id.as_deref(), Some("stratus-producer"));
         assert_eq!(kafka.group_id.as_deref(), Some("stratus-group"));
         assert_eq!(kafka.security_protocol.to_string(), "sasl_ssl");
         assert_eq!(kafka.sasl_mechanisms.as_deref(), Some("plain"));
@@ -922,9 +918,6 @@ mod tests {
         assert_eq!(kafka.ssl_ca_location.as_deref(), Some("/ca.pem"));
         assert_eq!(kafka.ssl_certificate_location.as_deref(), Some("/cert.pem"));
         assert_eq!(kafka.ssl_key_location.as_deref(), Some("/key.pem"));
-
-        // the full example must pass validation
-        config.validate().unwrap();
     }
 
     #[test]
@@ -949,13 +942,12 @@ mod tests {
         let config = load_with(&["--sync-interval", "7ms", "--kafka-topic", "cli-topic"], file).unwrap();
 
         let importer = config.importer.as_ref().unwrap();
-        assert_eq!(importer.external_rpc, "http://127.0.0.1:3000/"); // from the file
+        assert_eq!(importer.external_rpc.as_deref(), Some("http://127.0.0.1:3000/")); // from the file
         assert_eq!(importer.sync_interval, std::time::Duration::from_millis(7)); // from the CLI
         let kafka = config.kafka_config.as_ref().unwrap();
-        assert_eq!(kafka.topic, "cli-topic"); // from the CLI
-        assert_eq!(kafka.bootstrap_servers, "broker:29092"); // from the file
-        assert_eq!(kafka.client_id, "file-client"); // from the file
-        config.validate().unwrap();
+        assert_eq!(kafka.topic.as_deref(), Some("cli-topic")); // from the CLI
+        assert_eq!(kafka.bootstrap_servers.as_deref(), Some("broker:29092")); // from the file
+        assert_eq!(kafka.client_id.as_deref(), Some("file-client")); // from the file
     }
 
     #[test]
@@ -1000,9 +992,8 @@ mod tests {
         "#;
         let config = load_with(&[], file).unwrap();
         assert_eq!(config.common.sentry.as_ref().unwrap().sentry_url, "https://sentry.io/123");
-        assert_eq!(config.importer.as_ref().unwrap().external_rpc, "http://localhost:3000/");
-        assert_eq!(config.kafka_config.as_ref().unwrap().topic, "stratus-events");
-        config.validate().unwrap();
+        assert_eq!(config.importer.as_ref().unwrap().external_rpc.as_deref(), Some("http://localhost:3000/"));
+        assert_eq!(config.kafka_config.as_ref().unwrap().topic.as_deref(), Some("stratus-events"));
     }
 
     #[test]

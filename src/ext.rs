@@ -188,6 +188,15 @@ pub fn parse_duration(s: &str) -> anyhow::Result<Duration> {
     Err(anyhow!("invalid duration format: {s}"))
 }
 
+/// Parses a string that is optional in the configuration but cannot be empty when provided.
+pub fn parse_non_empty(input: &str) -> anyhow::Result<String> {
+    if input.is_empty() {
+        Err(anyhow!("value cannot be empty"))
+    } else {
+        Ok(input.to_string())
+    }
+}
+
 /// Serde support for durations in the same human-time notation used by CLI arguments.
 ///
 /// Serializes durations as strings (e.g. `"4m"`) and deserializes from the same
