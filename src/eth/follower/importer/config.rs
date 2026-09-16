@@ -140,7 +140,7 @@ impl ImporterConfig {
         let external_rpc = self
             .external_rpc
             .as_deref()
-            .expect("importer.external_rpc is required by clap for follower and fake-leader modes");
+            .ok_or_else(|| anyhow::anyhow!("importer.external_rpc is required by clap for follower and fake-leader modes"))?;
 
         // Forwarding stays on the RPC runtime and uses an independent Hyper connection pool.
         let forwarding_chain = Arc::new(BlockchainClient::new_http(external_rpc, self.external_rpc_timeout).await?);
