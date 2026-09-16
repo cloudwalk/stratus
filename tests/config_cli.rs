@@ -123,38 +123,36 @@ fn test_missing_chain_id_fails() {
 }
 
 #[test]
-fn test_leader_with_importer_fails() {
+fn test_leader_ignores_importer_config() {
+    // #2567: a leader ignores `[importer]` with a warning instead of failing; the missing chain id
+    // keeps the process from booting, so it still exits during configuration
     assert_config_error(
         &[],
         r#"
             leader = true
-
-            [executor]
-            chain_id = 2008
 
             [importer]
             external_rpc = "http://127.0.0.1:3000/"
         "#,
-        "leader mode cannot be used with `[importer]`",
+        "warning: ignoring [importer] config in leader mode",
     );
 }
 
 #[test]
-fn test_leader_with_kafka_fails() {
+fn test_leader_ignores_kafka_config() {
+    // #2567: a leader ignores `[kafka]` with a warning instead of failing; the missing chain id
+    // keeps the process from booting, so it still exits during configuration
     assert_config_error(
         &[],
         r#"
             leader = true
-
-            [executor]
-            chain_id = 2008
 
             [kafka]
             bootstrap_servers = "localhost:29092"
             topic = "stratus-events"
             client_id = "stratus-producer"
         "#,
-        "`[kafka]` configuration requires follower or fake-leader mode",
+        "warning: ignoring [kafka] config in leader mode",
     );
 }
 
@@ -180,24 +178,25 @@ fn test_incomplete_kafka_fails() {
 }
 
 #[test]
-fn test_empty_sentry_url_fails() {
+fn test_empty_sentry_url_is_ignored() {
+    // an empty sentry url disables the exporter with a warning instead of failing; the missing
+    // chain id keeps the process from booting, so it still exits during configuration
     assert_config_error(
         &[],
         r#"
             leader = true
 
-            [executor]
-            chain_id = 2008
-
             [common.sentry]
             url = ""
         "#,
-        "`[sentry]` configuration requires a non-empty `url`",
+        "warning: ignoring [common.sentry] config: url is empty",
     );
 }
 
 #[test]
 fn test_invalid_tracing_filter_fails() {
+    // file values go through the same clap value parsers as the command line, so an invalid
+    // filter is rejected at the argument that received it
     assert_config_error(
         &[],
         r#"
@@ -209,26 +208,24 @@ fn test_invalid_tracing_filter_fails() {
             [common.tracing]
             filter = "invalid=filter=here"
         "#,
-        "`[common.tracing] filter` is invalid",
+        "invalid tracing filter \"invalid=filter=here\"",
     );
 }
 
 #[test]
-fn test_cli_leader_flag_merges_with_file_follower_mode() {
-    // the explicit `--leader` is merged over the file's `follower` instead of replacing it,
-    // so both modes end up set and validation reports the conflict
+fn test_cli_leader_flag_overrides_file_follower_mode() {
+    // #2567: the CLI mode is authoritative over the file's, so `--leader` wins without a conflict
+    // and the file's follower-only `[importer]` is ignored; the missing chain id keeps the process
+    // from booting, so it still exits during configuration
     assert_config_error(
         &["--leader"],
         r#"
             follower = true
 
-            [executor]
-            chain_id = 2008
-
             [importer]
             external_rpc = "http://127.0.0.1:3000/"
         "#,
-        "multiple node modes configured",
+        "warning: ignoring [importer] config in leader mode",
     );
 }
 
@@ -264,8 +261,9 @@ fn test_follower_with_empty_external_rpc_fails() {
 }
 
 #[test]
-fn test_cli_follower_flag_merges_with_file_leader_mode() {
-    // the reverse direction of the leader test: the file's mode and the CLI's mode end up merged
+fn test_cli_follower_flag_overrides_file_leader_mode() {
+    // #2567: the reverse direction: `--follower` is authoritative over the file's `leader`, and
+    // follower mode then fails the importer requirement, which a leader would not
     assert_config_error(
         &["--follower"],
         r#"
@@ -274,7 +272,7 @@ fn test_cli_follower_flag_merges_with_file_leader_mode() {
             [executor]
             chain_id = 2008
         "#,
-        "multiple node modes configured",
+        "follower and fake-leader modes require `[importer]` configuration",
     );
 }
 
