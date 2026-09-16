@@ -1,12 +1,12 @@
 use proc_macro::TokenStream;
 use quote::quote;
+use syn::parse::Parse;
+use syn::parse::ParseStream;
 use syn::Expr;
 use syn::Fields;
 use syn::ItemEnum;
 use syn::Lit;
 use syn::Path;
-use syn::parse::Parse;
-use syn::parse::ParseStream;
 
 struct MacroArgs {
     func_name: Path,
@@ -53,7 +53,7 @@ pub(crate) fn derive_fake_enum_impl(input: ItemEnum) -> TokenStream {
         let variant_string = variant_name.to_string();
 
         let arm = match &variant.fields {
-            Fields::Named(fields) =>
+            Fields::Named(fields) => {
                 if fields.named.is_empty() {
                     quote! {
                         #variant_string => #enum_name::#variant_name{},
@@ -73,8 +73,9 @@ pub(crate) fn derive_fake_enum_impl(input: ItemEnum) -> TokenStream {
                             #(#field_assignments),*
                         },
                     }
-                },
-            Fields::Unnamed(fields) =>
+                }
+            }
+            Fields::Unnamed(fields) => {
                 if fields.unnamed.is_empty() {
                     quote! {
                         #variant_string => #enum_name::#variant_name(),
@@ -84,7 +85,8 @@ pub(crate) fn derive_fake_enum_impl(input: ItemEnum) -> TokenStream {
                     quote! {
                         #variant_string => #enum_name::#variant_name(#func_name::<#inner_type>()),
                     }
-                },
+                }
+            }
             Fields::Unit => quote! {
                 #variant_string => #enum_name::#variant_name,
             },
