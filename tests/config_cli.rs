@@ -184,7 +184,8 @@ fn test_leader_ignores_importer_config() {
 
 #[test]
 fn test_leader_ignores_kafka_config() {
-    // #2567: a leader ignores `[kafka]` with a warning instead of failing
+    // #2567: a leader ignores `[kafka]` with a warning instead of failing; the section is
+    // incomplete on purpose, as a leader must tolerate it even though a follower would not
     let storage = TempDir::new().unwrap();
     let content = format!(
         r#"
@@ -197,9 +198,7 @@ fn test_leader_ignores_kafka_config() {
             path_prefix = "{}"
 
             [kafka]
-            bootstrap_servers = "localhost:29092"
             topic = "stratus-events"
-            client_id = "stratus-producer"
         "#,
         storage.path().display()
     );
@@ -257,6 +256,25 @@ fn test_empty_sentry_url_is_ignored() {
 }
 
 #[test]
+fn test_cli_empty_sentry_url_is_ignored() {
+    // the CLI-provided empty url disables the exporter the same way the file's does
+    let storage = TempDir::new().unwrap();
+    let content = format!(
+        r#"
+            leader = true
+
+            [executor]
+            chain_id = 2008
+
+            [storage.permanent]
+            path_prefix = "{}"
+        "#,
+        storage.path().display()
+    );
+    expect_stdout(&["--sentry-url", ""], &content, "warning: ignoring [common.sentry] config: url is empty");
+}
+
+#[test]
 fn test_invalid_tracing_filter_fails() {
     // file values go through the same clap value parsers as the command line, so an invalid
     // filter is rejected at the argument that received it
@@ -272,6 +290,41 @@ fn test_invalid_tracing_filter_fails() {
             filter = "invalid=filter=here"
         "#,
         "invalid tracing filter \"invalid=filter=here\"",
+    );
+}
+
+#[test]
+fn test_invalid_block_mode_fails() {
+    // file values go through the same clap value parsers as the command line
+    assert_config_error(
+        &[],
+        r#"
+            leader = true
+
+            [executor]
+            chain_id = 2008
+
+            [miner]
+            block_mode = "not-a-mode"
+        "#,
+        "invalid value",
+    );
+}
+
+#[test]
+fn test_invalid_max_response_size_fails() {
+    assert_config_error(
+        &[],
+        r#"
+            leader = true
+
+            [executor]
+            chain_id = 2008
+
+            [rpc]
+            max_response_size_bytes = 300
+        "#,
+        "must be at least",
     );
 }
 
