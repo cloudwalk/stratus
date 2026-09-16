@@ -1,8 +1,6 @@
 name: Build Binary
 
-permissions:
-  contents: read
-  actions: write
+permissions: {}
 
 on:
   workflow_dispatch:
@@ -29,62 +27,81 @@ on:
 
 env:
   RETENTION_DAYS: 90
-  CACHE_SHARED_KEY: stable-release
-  CACHE_PATH: |
-    ~/.cargo/registry/index/
-    ~/.cargo/registry/cache/
-    ~/.cargo/git/db/
-    target/
-
+  BUILDS_REPO: cloudwalk/stratus-internal-builds
+  BUILDS_REF: main
+  BUILDS_WORKFLOW: build-binary.yml
 
 jobs:
-  build_binaries:
-    name: Build and upload
-    runs-on: stratus-runner
-    timeout-minutes: 45
+  proxy_build:
+    name: Dispatch internal build and mirror artifacts
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.inputs.commit_sha || github.sha }}-${{ github.event.inputs.features || 'default' }}
       cancel-in-progress: true
 
+    env:
+      GH_TOKEN: ${{ secrets.INTERNAL_BUILDS_TOKEN }}
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ github.event.inputs.commit_sha || github.sha }}
-
-      - name: Resolve build commit SHA
+      - name: Resolve commit SHA
         id: resolve-sha
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Rust
-        run: rustup show
-
-      - name: Install libsasl2-dev libssl-dev
-        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
-
-      - name: Build Release binaries
         run: |
-          cargo build --release \
-            --bin stratus \
-            --features "$FEATURES"
-        env:
-          CARGO_PROFILE_RELEASE_DEBUG: 1
-          TRACING_LOG_FORMAT: json
-          NO_COLOR: 1
-          FEATURES: "${{ github.event.inputs.features || 'default' }}"
+          ref="${{ inputs.commit_sha || github.sha }}"
+          sha=$(gh api "repos/cloudwalk/stratus/commits/$ref" --jq .sha)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Building stratus ref $ref ($sha)"
 
-      - name: Generate checksums
+      - name: Dispatch internal build workflow
         run: |
-          cd target/release
-          sha256sum stratus > ../../checksums.txt
+          jq -n \
+            --arg ref "$BUILDS_REF" \
+            --arg stratus_ref "${{ steps.resolve-sha.outputs.sha }}" \
+            --arg features "${{ inputs.features }}" \
+            '{ref: $ref, inputs: {stratus_ref: $stratus_ref, features: $features}}' > dispatch.json
+          echo "Dispatch payload:"
+          cat dispatch.json
+          gh api -X POST "repos/$BUILDS_REPO/actions/workflows/$BUILDS_WORKFLOW/dispatches" --input dispatch.json
+          date -u +%Y-%m-%dT%H:%M:%SZ > dispatch-time.txt
+
+      - name: Wait for internal build to complete
+        id: wait
+        run: |
+          set -euo pipefail
+          t0=$(cat dispatch-time.txt)
+          echo "Waiting for a new $BUILDS_WORKFLOW run in $BUILDS_REPO (dispatched at $t0)..."
+          run_id=""
+          for _ in $(seq 1 60); do
+            run_id=$(gh run list --repo "$BUILDS_REPO" --workflow "$BUILDS_WORKFLOW" --event workflow_dispatch \
+              --json databaseId,createdAt \
+              --jq 'map(select(.createdAt >= "'"$t0"'")) | max_by(.createdAt) | .databaseId' || true)
+            if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
+              break
+            fi
+            sleep 5
+          done
+          if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+            echo "No $BUILDS_WORKFLOW run appeared in $BUILDS_REPO after dispatch" >&2
+            exit 1
+          fi
+          echo "Watching internal build run $run_id"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          gh run watch "$run_id" --repo "$BUILDS_REPO" --exit-status --interval 30
+
+      - name: Download artifacts from internal build
+        run: |
+          sha="${{ steps.resolve-sha.outputs.sha }}"
+          run_id="${{ steps.wait.outputs.run_id }}"
+          gh run download "$run_id" --repo "$BUILDS_REPO" --name "stratus-$sha" --dir stratus-artifact
+          gh run download "$run_id" --repo "$BUILDS_REPO" --name "checksums-$sha" --dir checksums-artifact
 
       - name: Upload stratus
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         id: upload-str
         with:
           name: stratus-${{ steps.resolve-sha.outputs.sha }}
-          path: target/release/stratus
+          path: stratus-artifact/
           if-no-files-found: error
           retention-days: ${{ env.RETENTION_DAYS }}
 
@@ -92,7 +109,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: checksums-${{ steps.resolve-sha.outputs.sha }}
-          path: checksums.txt
+          path: checksums-artifact/
           if-no-files-found: error
           retention-days: ${{ env.RETENTION_DAYS }}
 
@@ -100,3 +117,4 @@ jobs:
         run: |
           echo "Artifact ID: ${{ steps.upload-str.outputs.artifact-id }} (stratus)"
           echo "Artifact URL: ${{ steps.upload-str.outputs.artifact-url }} (stratus)"
+          echo "Internal build run: https://github.com/$BUILDS_REPO/actions/runs/${{ steps.wait.outputs.run_id }}"
