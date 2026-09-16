@@ -28,17 +28,22 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     // Init executor
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
-    // Init importer
-    let consensus = Arc::new(RwLock::new(if let Some(importer_config) = &config.importer {
+    let (consensus, importer_runtime) = if let Some(importer_config) = &config.importer {
         tracing::info!(?importer_config, "creating importer");
         let kafka_connector = config.kafka_config.as_ref().map(|inner| inner.init()).transpose()?;
-        importer_config
+        match importer_config
             .init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage), kafka_connector)
             .await?
+        {
+            Some((consensus, importer_runtime)) => (Some(consensus), Some(importer_runtime)),
+            None => (None, None),
+        }
     } else {
         tracing::info!("no importer config, skipping importer");
-        None
-    }));
+        (None, None)
+    };
+    let consensus = Arc::new(RwLock::new(consensus));
+    let importer_runtime = Arc::new(RwLock::new(importer_runtime));
 
     // Init RPC server
     Server::new(
@@ -47,6 +52,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         executor,
         miner,
         consensus,
+        importer_runtime,
         // Config
         config.clone(),
         config.rpc_server,

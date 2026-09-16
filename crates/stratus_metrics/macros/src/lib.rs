@@ -8,7 +8,8 @@ use proc_macro::TokenStream;
 mod metrics;
 mod timed_attribute;
 
-/// Defines the metrics of a group and generates the functions to record them.
+/// Defines the metrics of one or more groups and generates the functions to
+/// record them.
 ///
 /// Each metric has a description, a kind, a name, and optional labels. The
 /// first metric kind in the list below generates `inc_<name>` and
@@ -17,20 +18,22 @@ mod timed_attribute;
 ///
 /// ```ignore
 /// metrics! {
-///     group: storage_read,
+///     group: storage_read {
+///         "Time executing storage read_block operation."
+///         histogram_duration storage_read_block{storage, success},
 ///
-///     "Time executing storage read_block operation."
-///     histogram_duration storage_read_block{storage, success},
-///
-///     "Number of storage reads."
-///     counter storage_reads{storage, hit},
+///         "Number of storage reads."
+///         counter storage_reads{storage, hit},
+///     }
 /// }
 /// ```
 ///
 /// For each group, the macro also generates a `METRIC_<NAME>` constant for
 /// every metric and a `metrics_for_<group>()` function returning the metric
-/// definitions. Label values are passed as arguments to the generated
-/// functions and must follow the order in the metric definition.
+/// definitions. The macro additionally generates `metrics_for_all()`
+/// returning the definitions of every group. Label values are passed as
+/// arguments to the generated functions and must follow the order in the
+/// metric definition.
 #[proc_macro]
 pub fn metrics(input: TokenStream) -> TokenStream {
     match metrics::expand(input.into()) {
@@ -58,7 +61,8 @@ pub fn metrics(input: TokenStream) -> TokenStream {
 /// ```
 ///
 /// Bare function parameters are converted to owned `MetricLabelValue`s before
-/// the function runs, without requiring the parameter to implement `Clone`:
+/// the function body runs, without requiring the parameter to implement
+/// `Clone`. This conversion is included in the default timing window:
 ///
 /// ```ignore
 /// #[timed(executor_inspect, labels(trace_type))]
@@ -97,8 +101,36 @@ pub fn metrics(input: TokenStream) -> TokenStream {
 /// }
 /// ```
 ///
-/// Both synchronous and asynchronous functions are supported. `const fn` and
-/// `unsafe fn` are rejected.
+/// A top-level `stratus_metrics::timed_start!()` statement delays the start of
+/// the timer until setup is complete. A top-level
+/// `stratus_metrics::timed_end!()` statement captures elapsed time before
+/// cleanup begins. Values created before either marker retain their normal
+/// lexical lifetime, and the metric is published only after the body completes:
+///
+/// ```ignore
+/// #[timed(executor_local_transaction)]
+/// fn execute(...) -> Result<ExecutionMetrics, StratusError> {
+///     let transaction_guard = transaction_lock.lock();
+///     stratus_metrics::timed_start!();
+///     let result = execute_transaction();
+///     stratus_metrics::timed_end!();
+///     drop(transaction_guard);
+///     result
+/// }
+/// ```
+///
+/// A top-level `stratus_metrics::timed_duration!(duration)` statement overrides
+/// the elapsed duration when reached. It may be combined with the start and end
+/// markers; if control flow returns before reaching it, the normal start/end
+/// duration is used.
+///
+/// Without explicit markers, the start boundary is captured before input-label
+/// preparation and the end boundary follows the completed return of the
+/// function body, including destruction of its local values. Each marker may
+/// appear at most once as a standalone statement directly in the function
+/// body, and the start marker must precede the end marker. Both synchronous and
+/// asynchronous functions are supported. `const fn` and `unsafe fn` are
+/// rejected.
 #[proc_macro_attribute]
 pub fn timed(args: TokenStream, input: TokenStream) -> TokenStream {
     match timed_attribute::expand(args.into(), input.into()) {

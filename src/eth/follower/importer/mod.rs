@@ -1,6 +1,7 @@
 pub(crate) mod config;
 mod fetchers;
 mod importers;
+mod runtime;
 #[allow(clippy::module_inception)]
 mod supervisor;
 use std::borrow::Cow;
@@ -12,6 +13,8 @@ use std::time::Duration;
 use anyhow::bail;
 pub use config::ImporterConfig;
 pub use importers::BlockchainClient;
+pub use runtime::ImporterRuntime;
+pub use runtime::ImporterRuntimeConfig;
 #[cfg(feature = "metrics")]
 use stratus_metrics as metrics;
 pub use supervisor::ImporterConsensus;
