@@ -9,7 +9,7 @@ use crate::eth::executor::Executor;
 use crate::eth::miner::Miner;
 use crate::eth::storage::StratusStorage;
 
-#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+#[derive(Parser, DebugAsJson, Clone, Copy, serde::Serialize)]
 pub struct ExecutorConfig {
     /// Chain ID of the network.
     #[arg(long = "executor-chain-id", alias = "chain-id", env = "EXECUTOR_CHAIN_ID")]
@@ -46,7 +46,7 @@ impl ExecutorConfig {
     ///
     /// Note: Should be called only after async runtime is initialized.
     pub fn init(&self, storage: Arc<StratusStorage>, miner: Arc<Miner>) -> Arc<Executor> {
-        let config = self.clone();
+        let config = *self;
         tracing::info!(?config, "creating executor");
 
         let executor = Executor::new(storage, miner, config);
