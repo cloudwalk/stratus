@@ -1,11 +1,11 @@
 use proc_macro2::TokenStream;
 use quote::format_ident;
 use quote::quote;
-use syn::parse::Parse;
-use syn::parse::ParseStream;
 use syn::Ident;
 use syn::LitStr;
 use syn::Token;
+use syn::parse::Parse;
+use syn::parse::ParseStream;
 
 syn::custom_keyword!(group);
 

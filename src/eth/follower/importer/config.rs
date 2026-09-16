@@ -60,7 +60,7 @@ pub struct ImporterConfig {
     pub enable_block_changes_replication: bool,
 
     /// Number of Tokio worker threads dedicated to the online importer.
-    #[arg(long = "importer-async-threads", default_value = "4", required = false)]
+    #[arg(id = "importer.async_threads", long = "importer-async-threads", default_value = "4", required = false)]
     pub importer_async_threads: usize,
 
     /// Compute an access list for transactions before forwarding them to the leader.

@@ -763,6 +763,7 @@ mod tests {
             external_rpc_timeout = "5s"
             sync_interval = "250ms"
             enable_block_changes_replication = true
+            async_threads = 4
             forward_access_list = false
             stop_at_block = "0x2a"
 
@@ -867,6 +868,7 @@ mod tests {
         assert_eq!(importer.external_rpc_timeout, std::time::Duration::from_secs(5));
         assert_eq!(importer.sync_interval, std::time::Duration::from_millis(250));
         assert!(importer.enable_block_changes_replication);
+        assert_eq!(importer.importer_async_threads, 4);
         assert!(!importer.forward_access_list);
         assert_eq!(importer.stop_at_block, Some(crate::eth::types::BlockNumber::from(42u64)));
         let kafka = config.kafka_config.as_ref().unwrap();

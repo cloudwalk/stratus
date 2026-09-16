@@ -126,6 +126,8 @@ chain_id = 2008
 # sync_interval = "100ms"
 # Enable replication of block changes.
 # enable_block_changes_replication = false
+# Number of Tokio worker threads dedicated to the online importer.
+# async_threads = 4
 # Compute an access list for transactions before forwarding them to the leader.
 # forward_access_list = true
 # Block number to stop importing at, e.g. `0x2a`. When absent, imports indefinitely.
