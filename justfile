@@ -619,6 +619,13 @@ coverage-env:
     fi
     COVERAGE_FLAGS=$(env -u RUSTFLAGS cargo llvm-cov show-env 2>/dev/null | grep "^RUSTFLAGS=" | cut -d"'" -f2)
     CURRENT_RUSTFLAGS="${RUSTFLAGS:-}"
-    if ! echo "$CURRENT_RUSTFLAGS" | grep -F -- "$COVERAGE_FLAGS" > /dev/null; then \
-        cargo llvm-cov show-env --export-prefix 2>/dev/null | grep '^export '; \
+    if ! echo "$CURRENT_RUSTFLAGS" | grep -F -- "$COVERAGE_FLAGS" > /dev/null; then
+        # cargo-llvm-cov exports an absolute LLVM_PROFILE_FILE. Generate it from
+        # the real checkout path rather than a symlinked worktree path so the
+        # same value remains valid inside the CI container's /work mount.
+        canonical_root=$(pwd -P)
+        (
+            cd "$canonical_root"
+            cargo llvm-cov show-env --export-prefix 2>/dev/null | grep '^export '
+        )
     fi
