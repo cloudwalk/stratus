@@ -170,12 +170,17 @@ runs:
           return "$status"
         }
         trap cleanup EXIT
+        # All proxy jobs share the same fine-grained PAT. Query the workflow-runs
+        # endpoint directly instead of `gh run list` (which first lists workflows),
+        # and poll conservatively so a full PR matrix stays below the PAT's rate limit.
         while (( $(date +%s) < deadline )); do
-          runs=$(gh run list --repo "$INTERNAL_REPOSITORY" --workflow "$INTERNAL_WORKFLOW" --event workflow_dispatch --limit 100 \
-            --json databaseId,displayTitle 2>/dev/null || true)
-          run_id=$(jq -r --arg title "$EXPECTED_TITLE" 'map(select(.displayTitle == $title)) | first | .databaseId // empty' <<<"${runs:-[]}")
+          runs=$(gh api --method GET \
+            "repos/$INTERNAL_REPOSITORY/actions/workflows/$INTERNAL_WORKFLOW/runs" \
+            -f event=workflow_dispatch -F per_page=50)
+          run_id=$(jq -r --arg title "$EXPECTED_TITLE" \
+            '.workflow_runs | map(select(.display_title == $title)) | first | .id // empty' <<<"$runs")
           if [ -n "$run_id" ]; then break; fi
-          sleep 5
+          sleep 30
         done
         [ -n "$run_id" ] || { echo "::error::Timed out discovering internal run with exact title: $EXPECTED_TITLE"; exit 1; }
 
@@ -184,14 +189,24 @@ runs:
         echo "run_url=$run_url" >> "$GITHUB_OUTPUT"
         echo "Internal run: $run_url"
 
-        remaining=$(( deadline - $(date +%s) ))
-        (( remaining > 0 )) || { echo "::error::Internal CI timeout expired before the run could be watched"; exit 1; }
-        timeout "${remaining}s" gh run watch "$run_id" --repo "$INTERNAL_REPOSITORY" --exit-status --interval 15 || {
-          status=$?
-          if [ "$status" -eq 124 ]; then echo "::error::Timed out waiting for internal run $run_url"; fi
-          exit "$status"
-        }
-        completed=true
+        # `gh run watch` fetches both run and job state on every refresh. Poll the
+        # single run endpoint instead: at one request per minute, even all E2E
+        # shards together remain comfortably within the shared PAT's API budget.
+        while (( $(date +%s) < deadline )); do
+          run=$(gh api "repos/$INTERNAL_REPOSITORY/actions/runs/$run_id")
+          status=$(jq -r '.status' <<<"$run")
+          conclusion=$(jq -r '.conclusion // empty' <<<"$run")
+          if [ "$status" = completed ]; then
+            if [ "$conclusion" = success ]; then
+              completed=true
+              break
+            fi
+            echo "::error::Internal run concluded with '$conclusion': $run_url"
+            exit 1
+          fi
+          sleep 60
+        done
+        [ "$completed" = true ] || { echo "::error::Timed out waiting for internal run $run_url"; exit 1; }
 
     - name: Initialize artifact outputs
       id: no-artifacts
