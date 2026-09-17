@@ -16,9 +16,9 @@ use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 
 use crate::eth::executor::ExecutorConfig;
-use crate::eth::exporter::ExporterConfig;
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::MinerConfig;
+use crate::eth::rpc::ExporterConfig;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::StorageConfig;
 use crate::infra::build_info;

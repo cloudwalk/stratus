@@ -1,8 +1,8 @@
 use clap::Parser;
 use display_json::DebugAsJson;
 
-use crate::eth::exporter::ExporterRuntime;
-use crate::eth::exporter::ExporterRuntimeConfig;
+use crate::eth::rpc::exporter::ExporterRuntime;
+use crate::eth::rpc::exporter::ExporterRuntimeConfig;
 
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct ExporterConfig {
