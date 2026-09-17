@@ -638,15 +638,15 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     })?;
 
     let importer_config = ImporterConfig {
-        external_rpc,
+        external_rpc: Some(external_rpc),
         external_rpc_ws: Some(external_rpc_ws),
         external_rpc_timeout,
         sync_interval,
-        enable_block_changes_replication: std::env::var("ENABLE_BLOCK_CHANGES_REPLICATION")
-            .ok()
-            .is_some_and(|val| val == "1" || val == "true"),
-        importer_async_threads: std::env::var("IMPORTER_ASYNC_THREADS").ok().and_then(|value| value.parse().ok()).unwrap_or(4),
-        forward_access_list: !matches!(std::env::var("FORWARD_ACCESS_LIST").as_deref(), Ok("0") | Ok("false")),
+        // These values were previously configurable via environment variables only;
+        // now they use the same defaults as `[importer]` in the config file.
+        enable_block_changes_replication: false,
+        importer_async_threads: 4,
+        forward_access_list: true,
         stop_at_block: None,
     };
 

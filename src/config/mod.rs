@@ -1,6 +1,10 @@
 //! Application configuration.
+//!
+//! Configuration is loaded from a TOML file and can be overridden by explicitly provided CLI arguments.
+//! See [`crate::config::loader`] for the loading rules.
 
-use std::env;
+pub mod loader;
+
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -10,6 +14,7 @@ use anyhow::anyhow;
 use clap::ArgGroup;
 use clap::Parser;
 use display_json::DebugAsJson;
+pub use loader::ConfigLoad;
 use stratus_metrics::MetricsConfig;
 use strum::VariantNames;
 use tokio::runtime::Builder;
@@ -20,59 +25,9 @@ use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::MinerConfig;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::StorageConfig;
-use crate::infra::build_info;
 use crate::infra::kafka::KafkaConfig;
 use crate::infra::sentry::SentryConfig;
 use crate::infra::tracing::TracingConfig;
-
-/// Loads .env files according to the binary and environment.
-pub fn load_dotenv_file() {
-    // parse env manually because this is executed before clap
-    let env = match std::env::var("ENV") {
-        Ok(env) => Environment::from_str(env.as_str()),
-        Err(_) => Ok(Environment::Local),
-    };
-
-    // determine the .env file to load
-    let env_filename = match env {
-        Ok(Environment::Local) => {
-            // local environment only
-            match std::env::var("LOCAL_ENV_PATH") {
-                Ok(local_path) => local_path,
-                Err(_) => format!("config/{}.env.local", build_info::binary_name()),
-            }
-        }
-        Ok(env) => format!("config/{}.env.{}", build_info::binary_name(), env),
-        Err(e) => {
-            println!("{e}");
-            return;
-        }
-    };
-
-    println!("reading env file | filename={env_filename}");
-
-    if let Err(e) = dotenvy::from_filename(env_filename) {
-        println!("env file error: {e}");
-    }
-}
-
-/// Applies env-var aliases because Clap does not support this feature.
-pub fn load_env_aliases() {
-    fn env_alias(canonical: &'static str, alias: &'static str) {
-        if let Ok(value) = env::var(alias) {
-            unsafe {
-                env::set_var(canonical, value);
-            }
-        }
-    }
-    env_alias("EXECUTOR_CHAIN_ID", "CHAIN_ID");
-    env_alias("EXECUTOR_EVMS", "EVMS");
-    env_alias("EXECUTOR_EVMS", "NUM_EVMS");
-    env_alias("EXECUTOR_REJECT_NOT_CONTRACT", "REJECT_NOT_CONTRACT");
-    env_alias("EXECUTOR_STRATEGY", "STRATEGY");
-    env_alias("TRACING_LOG_FORMAT", "LOG_FORMAT");
-    env_alias("TRACING_URL", "TRACING_COLLECTOR_URL");
-}
 
 // -----------------------------------------------------------------------------
 // Config: Common
@@ -84,18 +39,19 @@ pub trait WithCommonConfig {
 
 /// Configuration that can be used by any binary.
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
-#[command(author, version, about, long_about = None)]
 pub struct CommonConfig {
     /// Environment where the application is running.
-    #[arg(long = "env", env = "ENV", default_value = "local")]
+    #[arg(id = "common.env", long = "env", default_value = "local")]
     pub env: Environment,
 
     /// Number of threads to execute global async tasks.
-    #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "32")]
+    #[arg(id = "common.async_threads", long = "async-threads", default_value = "32")]
+    #[serde(rename = "async_threads")]
     pub num_async_threads: usize,
 
     /// Number of threads to execute global blocking tasks.
-    #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "512")]
+    #[arg(id = "common.blocking_threads", long = "blocking-threads", default_value = "512")]
+    #[serde(rename = "blocking_threads")]
     pub num_blocking_threads: usize,
 
     #[clap(flatten)]
@@ -109,16 +65,40 @@ pub struct CommonConfig {
 
     /// Prevents clap from breaking when passing `nocapture` options in tests.
     #[arg(long = "nocapture")]
+    #[serde(skip)]
     pub nocapture: bool,
 
     /// Enables or disables unknown client interactions.
-    #[arg(long = "unknown-client-enabled", env = "UNKNOWN_CLIENT_ENABLED", default_value = "true")]
+    #[arg(
+        id = "common.unknown_client_enabled",
+        long = "unknown-client-enabled",
+        default_value = "true",
+        default_missing_value = "true",
+        action = clap::ArgAction::Set,
+        num_args = 0..=1
+    )]
     pub unknown_client_enabled: bool,
 
     /// Comma-separated list of client names that are blocked from interacting with the application.
     /// Client names are matched the same way as the `app`/`client` identification headers/params.
-    #[arg(long = "blocked-clients", env = "BLOCKED_CLIENTS", value_delimiter = ',')]
+    #[arg(id = "common.blocked_clients", long = "blocked-clients", value_delimiter = ',')]
     pub blocked_clients: Vec<String>,
+}
+
+impl Default for CommonConfig {
+    fn default() -> Self {
+        Self {
+            env: Environment::Local,
+            num_async_threads: 32,
+            num_blocking_threads: 512,
+            tracing: TracingConfig::default(),
+            sentry: None,
+            metrics: MetricsConfig::default(),
+            nocapture: false,
+            unknown_client_enabled: true,
+            blocked_clients: Vec::new(),
+        }
+    }
 }
 
 impl WithCommonConfig for CommonConfig {
@@ -185,20 +165,21 @@ impl CommonConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for main Stratus service.
-#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
-#[clap(group = ArgGroup::new("mode").required(true).args(&["leader", "follower", "fake_leader"]))]
+#[derive(DebugAsJson, Clone, Default, Parser, derive_more::Deref, serde::Serialize)]
+#[clap(group = ArgGroup::new("mode").args(&["leader", "follower", "fake_leader"]).required(true))]
 pub struct StratusConfig {
-    #[arg(long = "leader", env = "LEADER", conflicts_with_all = ["follower", "fake_leader", "ImporterConfig"])]
+    #[arg(id = "leader", long = "leader", conflicts_with_all = ["follower", "fake_leader"])]
     pub leader: bool,
 
-    #[arg(long = "follower", env = "FOLLOWER", conflicts_with_all = ["leader", "fake_leader"], requires = "ImporterConfig")]
+    #[arg(id = "follower", long = "follower", conflicts_with_all = ["leader", "fake_leader"], requires = "importer.external_rpc")]
     pub follower: bool,
 
     /// The fake leader imports blocks like a follower, but executes the blocks's txs locally like a leader.
-    #[arg(long = "fake-leader", env = "FAKE_LEADER", conflicts_with_all = ["leader", "follower"], requires = "ImporterConfig")]
+    #[arg(id = "fake_leader", long = "fake-leader", conflicts_with_all = ["leader", "follower"], requires = "importer.external_rpc")]
     pub fake_leader: bool,
 
     #[clap(flatten)]
+    #[serde(rename = "rpc")]
     pub rpc_server: RpcServerConfig,
 
     #[clap(flatten)]
@@ -218,6 +199,7 @@ pub struct StratusConfig {
     pub importer: Option<ImporterConfig>,
 
     #[clap(flatten)]
+    #[serde(rename = "kafka")]
     pub kafka_config: Option<KafkaConfig>,
 }
 
@@ -227,10 +209,42 @@ impl WithCommonConfig for StratusConfig {
     }
 }
 
+impl StratusConfig {
+    /// Ignores follower-only sections when running as leader.
+    pub(crate) fn ignore_follower_sections(&mut self) {
+        if self.active_node_modes().as_slice() != ["leader"] {
+            return;
+        }
+        if self.importer.take().is_some() {
+            println!("warning: ignoring [importer] config in leader mode");
+        }
+        if self.kafka_config.take().is_some() {
+            println!("warning: ignoring [kafka] config in leader mode");
+        }
+    }
+
+    /// Ignores the sentry section when its url is empty.
+    pub(crate) fn ignore_sentry_without_url(&mut self) {
+        if self.common.sentry.as_ref().is_some_and(|sentry| sentry.sentry_url.is_empty()) {
+            println!("warning: ignoring [common.sentry] config: url is empty");
+            self.common.sentry = None;
+        }
+    }
+
+    /// Returns the names of the active node modes.
+    fn active_node_modes(&self) -> Vec<&'static str> {
+        [(self.leader, "leader"), (self.follower, "follower"), (self.fake_leader, "fake-leader")]
+            .into_iter()
+            .filter(|(active, _)| *active)
+            .map(|(_, name)| name)
+            .collect()
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Enum: Env
 // -----------------------------------------------------------------------------
-#[derive(DebugAsJson, strum::Display, strum::VariantNames, Clone, Copy, Parser, serde::Serialize)]
+#[derive(DebugAsJson, strum::Display, strum::VariantNames, Clone, Copy, PartialEq, Eq, Parser, serde::Deserialize, serde::Serialize)]
 pub enum Environment {
     #[serde(rename = "local")]
     #[strum(to_string = "local")]
@@ -265,42 +279,51 @@ impl FromStr for Environment {
 }
 
 /// Genesis configuration
-#[derive(DebugAsJson, Clone, Parser, serde::Serialize, Default)]
+#[derive(DebugAsJson, Clone, Parser, Default, serde::Serialize)]
 pub struct GenesisFileConfig {
     /// Path to the genesis.json file
-    #[arg(long = "genesis-path", env = "GENESIS_JSON_PATH")]
+    #[arg(id = "storage.permanent.genesis.path", long = "genesis-path")]
+    #[serde(rename = "path")]
     pub genesis_path: Option<String>,
 }
 
 #[cfg(test)]
 mod tests {
-    use std::env;
-
     use super::*;
 
     #[test]
-    fn test_genesis_file_config() {
-        // Test with command line argument
-        let args = vec!["program", "--genesis-path", "/path/to/genesis.json"];
-        let config = GenesisFileConfig::parse_from(args);
-        assert_eq!(config.genesis_path, Some("/path/to/genesis.json".to_string()));
+    fn test_default_true_flags_accept_explicit_false() {
+        // these bools default to `true`; the bare flag and the `=false`/`=true` forms must all work
+        let config = StratusConfig::try_parse_from([
+            "stratus",
+            "--leader",
+            "--executor-chain-id",
+            "2008",
+            "--executor-reject-not-contract=false",
+            "--unknown-client-enabled=false",
+            "--forward-access-list=false",
+            "-r",
+            "http://localhost:3000/",
+        ])
+        .unwrap();
+        assert!(!config.executor.executor_reject_not_contract);
+        assert!(!config.common.unknown_client_enabled);
+        assert!(!config.importer.as_ref().unwrap().forward_access_list);
 
-        // Test with environment variable
-        unsafe {
-            env::set_var("GENESIS_JSON_PATH", "/env/path/to/genesis.json");
-        }
-        let args = vec!["program"]; // No command line argument
-        let config = GenesisFileConfig::parse_from(args);
-        assert_eq!(config.genesis_path, Some("/env/path/to/genesis.json".to_string()));
-
-        // Command line argument should take precedence over environment variable
-        let args = vec!["program", "--genesis-path", "/cli/path/to/genesis.json"];
-        let config = GenesisFileConfig::parse_from(args);
-        assert_eq!(config.genesis_path, Some("/cli/path/to/genesis.json".to_string()));
-
-        // Clean up
-        unsafe {
-            env::remove_var("GENESIS_JSON_PATH");
-        }
+        let config = StratusConfig::try_parse_from([
+            "stratus",
+            "--leader",
+            "--executor-chain-id",
+            "2008",
+            "--executor-reject-not-contract",
+            "--unknown-client-enabled",
+            "--forward-access-list",
+            "-r",
+            "http://localhost:3000/",
+        ])
+        .unwrap();
+        assert!(config.executor.executor_reject_not_contract);
+        assert!(config.common.unknown_client_enabled);
+        assert!(config.importer.as_ref().unwrap().forward_access_list);
     }
 }

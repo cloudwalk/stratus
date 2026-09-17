@@ -13,7 +13,7 @@ use crate::eth::types::BlockNumber;
 // -----------------------------------------------------------------------------
 
 /// Temporary storage configuration.
-#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+#[derive(Parser, DebugAsJson, Clone, Default, serde::Serialize)]
 pub struct TemporaryStorageConfig {
     // No configuration needed for InMemoryTemporaryStorage
 }
