@@ -80,6 +80,13 @@ chain_id = 2008
 # Target block time: `automine`, `external`, or a duration like `1s`.
 # block_mode = "automine"
 
+[exporter]
+# Number of Tokio worker threads dedicated to the exporter runtime, which isolates
+# importer-facing requests from the main blocking pool.
+# async_threads = 4
+# Number of blocking threads on the exporter runtime, reserved for importer-facing requests.
+# blocking_threads = 64
+
 [storage.cache]
 # Capacity of the account history cache.
 # account_history_cache_capacity = 20000

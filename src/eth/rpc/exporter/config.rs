@@ -7,12 +7,21 @@ use crate::eth::rpc::exporter::ExporterRuntimeConfig;
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct ExporterConfig {
     /// Number of Tokio worker threads dedicated to the exporter runtime.
-    #[arg(long = "exporter-async-threads", env = "EXPORTER_ASYNC_THREADS", default_value = "4")]
+    #[arg(id = "exporter.async_threads", long = "exporter-async-threads", default_value = "4")]
     pub exporter_async_threads: usize,
 
     /// Number of blocking threads on the exporter runtime, reserved for importer-facing requests.
-    #[arg(long = "exporter-blocking-threads", env = "EXPORTER_BLOCKING_THREADS", default_value = "64")]
+    #[arg(id = "exporter.blocking_threads", long = "exporter-blocking-threads", default_value = "64")]
     pub exporter_blocking_threads: usize,
+}
+
+impl Default for ExporterConfig {
+    fn default() -> Self {
+        Self {
+            exporter_async_threads: 4,
+            exporter_blocking_threads: 64,
+        }
+    }
 }
 
 impl ExporterConfig {
