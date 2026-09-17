@@ -23,6 +23,7 @@ use tokio::runtime::Runtime;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::MinerConfig;
+use crate::eth::rpc::ExporterConfig;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::StorageConfig;
 use crate::infra::kafka::KafkaConfig;
@@ -190,6 +191,9 @@ pub struct StratusConfig {
 
     #[clap(flatten)]
     pub miner: MinerConfig,
+
+    #[clap(flatten)]
+    pub exporter: ExporterConfig,
 
     #[deref]
     #[clap(flatten)]
