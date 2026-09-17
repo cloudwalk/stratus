@@ -51,6 +51,12 @@ To see all available tasks you can simply run `just`.
 
 We recommend using just recipes whenever applicable.
 
+### Continuous integration
+
+Public heavy checks are lightweight proxies: they dispatch the checked-out Stratus commit to private workflows in `cloudwalk/stratus-internal-builds` and report the result under the existing public check names. Fork pull requests cannot dispatch private CI. A maintainer can push the exact fork commits to a `cloudwalk/stratus` branch and rerun the checks from there.
+
+Kafka E2E tests use `KAFKA_BOOTSTRAP_SERVERS` (default `localhost:29092`). CI environments that provide Kafka externally should set `KAFKA_MANAGED_EXTERNALLY=1`; this skips local Compose startup, topic creation, and teardown. The private CI repository provides its Kafka service at `kafka:9092`.
+
 ## Join the Party
 
 We love contributions! Check out our [Contributing Guide](CONTRIBUTING.md) and help make Stratus even more awesome.

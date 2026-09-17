@@ -10,6 +10,8 @@ nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly-2026-05-08" } el
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 profile_flag := if env("STRATUS_PROFILE", "") != "" { "--profile " + env("STRATUS_PROFILE", "") } else { "" }
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
+kafka_bootstrap_servers := env("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092")
+kafka_managed_externally := env("KAFKA_MANAGED_EXTERNALLY", "")
 
 # Project: Show available tasks
 default:
@@ -326,13 +328,16 @@ e2e-follower test="brlc" use_block_changes_replication="false":
     fi
 
     if [ "{{test}}" = "kafka" ]; then
-    # Start Kafka using Docker Compose
-        just _log "Starting Kafka"
-        docker-compose up kafka >> e2e_logs/kafka.log &
-        just _log "Waiting Kafka start"
-        wait-service --tcp 0.0.0.0:29092 -- echo
-        docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
+        if [ "{{kafka_managed_externally}}" != "1" ]; then
+            # Preserve the local Docker Compose setup unless CI manages Kafka.
+            just _log "Starting Kafka"
+            touch e2e_logs/kafka.local
+            docker-compose up kafka >> e2e_logs/kafka.log &
+            just _log "Waiting Kafka start"
+            wait-service --tcp 0.0.0.0:29092 -- echo
+            docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
+        fi
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers {{kafka_bootstrap_servers}} --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
     else
         RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
     fi
@@ -485,8 +490,12 @@ e2e-leader-follower-down:
     stratus_pid=$(pgrep -f 'stratus')
     kill $stratus_pid
 
-    # Kill Kafka
-    docker-compose down
+    # Kill Kafka only when this invocation started it. CI manages its project-scoped
+    # Kafka service outside this recipe, and non-Kafka variants start no Compose stack.
+    if [ "{{kafka_managed_externally}}" != "1" ] && [ -f e2e_logs/kafka.local ]; then
+        docker-compose down
+        rm -f e2e_logs/kafka.local
+    fi
 
     # Delete data contents
     rm -rf ./temp_*
