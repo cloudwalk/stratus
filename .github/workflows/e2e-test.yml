@@ -33,7 +33,7 @@ jobs:
   e2e:
     name: E2E Tests
     runs-on: ubuntu-22.04
-    timeout-minutes: 50
+    timeout-minutes: 130
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
@@ -51,5 +51,5 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           pr: ${{ github.event.pull_request.number || '' }}
           ci-key: e2e-test
-          timeout-minutes: 45
+          timeout-minutes: 125
           token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}

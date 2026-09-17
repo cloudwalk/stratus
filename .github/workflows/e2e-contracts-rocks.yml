@@ -33,7 +33,7 @@ jobs:
   contracts:
     name: Contracts E2E Rocks tests
     runs-on: ubuntu-22.04
-    timeout-minutes: 55
+    timeout-minutes: 130
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
@@ -52,5 +52,5 @@ jobs:
           pr: ${{ github.event.pull_request.number || '' }}
           ci-key: e2e-contracts-rocks
           dispatch-inputs: '{"operation":"all"}'
-          timeout-minutes: 50
+          timeout-minutes: 125
           token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}

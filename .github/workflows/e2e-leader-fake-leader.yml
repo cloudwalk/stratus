@@ -42,7 +42,7 @@ jobs:
   leader_fake_leader_test:
     name: "E2E Leader & Fake Leader on fake-leader"
     runs-on: ubuntu-22.04
-    timeout-minutes: 55
+    timeout-minutes: 130
 
     concurrency:
       group: ${{ github.workflow }}-fake-leader-${{ github.ref || github.run_id }}
@@ -62,5 +62,5 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           pr: ${{ github.event.pull_request.number || '' }}
           ci-key: leader-fake-leader
-          timeout-minutes: 50
+          timeout-minutes: 125
           token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}

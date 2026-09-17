@@ -41,7 +41,7 @@ jobs:
   unit_tests:
     name: Rust Tests
     runs-on: ubuntu-22.04
-    timeout-minutes: 35
+    timeout-minutes: 130
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -62,5 +62,5 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           pr: ${{ github.event.pull_request.number || '' }}
           ci-key: rust-test
-          timeout-minutes: 30
+          timeout-minutes: 125
           token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}

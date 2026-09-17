@@ -30,7 +30,7 @@ jobs:
   build_lint_cache:
     name: Build Lint cache
     runs-on: ubuntu-22.04
-    timeout-minutes: 55
+    timeout-minutes: 130
 
     concurrency:
       group: ${{ github.workflow }}
@@ -49,5 +49,5 @@ jobs:
           internal-workflow: build-lint-cache.yml
           ref: ${{ github.sha }}
           ci-key: build-lint-cache
-          timeout-minutes: 50
+          timeout-minutes: 125
           token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}

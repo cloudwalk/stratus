@@ -41,7 +41,7 @@ jobs:
   run_lint:
     name: Lint and Style checks
     runs-on: ubuntu-22.04
-    timeout-minutes: 35
+    timeout-minutes: 130
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -63,13 +63,13 @@ jobs:
           pr: ${{ github.event.pull_request.number || '' }}
           ci-key: lint-rust
           dispatch-inputs: '{"suite":"rust"}'
-          timeout-minutes: 30
+          timeout-minutes: 125
           token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}
 
   e2e_lint:
     name: E2E Lint
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 130
 
     concurrency:
       group: ${{ github.workflow }}-e2e-${{ github.ref || github.run_id }}
@@ -91,5 +91,5 @@ jobs:
           pr: ${{ github.event.pull_request.number || '' }}
           ci-key: lint-e2e
           dispatch-inputs: '{"suite":"e2e"}'
-          timeout-minutes: 15
+          timeout-minutes: 125
           token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}

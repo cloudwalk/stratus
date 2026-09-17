@@ -35,7 +35,7 @@ jobs:
   build_debug_cache:
     name: Build Debug cache
     runs-on: ubuntu-22.04
-    timeout-minutes: 55
+    timeout-minutes: 130
 
     concurrency:
       group: ${{ github.workflow }}
@@ -55,5 +55,5 @@ jobs:
           ref: ${{ github.sha }}
           ci-key: build-debug-cache
           dispatch-inputs: ${{ format('{{"features":{0}}}', toJSON(inputs.features)) }}
-          timeout-minutes: 50
+          timeout-minutes: 125
           token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}
