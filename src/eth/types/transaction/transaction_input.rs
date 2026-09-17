@@ -238,79 +238,66 @@ impl TransactionInput {
             .and_then(|t| TxType::try_from(t.as_u64()).ok())
             .unwrap_or(TxType::Legacy);
 
-        match tx_type {
-            TxType::Eip2930 => Self::encode_transaction(
-                Some(TxType::Eip2930),
-                &[
-                    &chain_id,
-                    &nonce,
-                    &gas_price,
-                    &gas_limit,
-                    &to.as_slice(),
-                    &value,
-                    &input.as_slice(),
-                    &AccessList::default(),
-                ],
-            ),
+        // Select the fields to encode per transaction type, then encode once.
+        let fields: &[&dyn RlpEncodable] = match tx_type {
+            TxType::Eip2930 => &[
+                &chain_id,
+                &nonce,
+                &gas_price,
+                &gas_limit,
+                &to.as_slice(),
+                &value,
+                &input.as_slice(),
+                &AccessList::default(),
+            ],
 
-            TxType::Eip1559 => Self::encode_transaction(
-                Some(TxType::Eip1559),
-                &[
-                    &chain_id,
-                    &nonce,
-                    &gas_price, // max_priority_fee_per_gas
-                    &gas_price, // max_fee_per_gas
-                    &gas_limit,
-                    &to.as_slice(),
-                    &value,
-                    &input.as_slice(),
-                    &AccessList::default(),
-                ],
-            ),
+            TxType::Eip1559 => &[
+                &chain_id,
+                &nonce,
+                &gas_price, // max_priority_fee_per_gas
+                &gas_price, // max_fee_per_gas
+                &gas_limit,
+                &to.as_slice(),
+                &value,
+                &input.as_slice(),
+                &AccessList::default(),
+            ],
 
-            TxType::Eip4844 => Self::encode_transaction(
-                Some(TxType::Eip4844),
-                &[
-                    &chain_id,
-                    &nonce,
-                    &gas_price, // max_priority_fee_per_gas
-                    &gas_price, // max_fee_per_gas
-                    &gas_limit,
-                    &to.as_slice(),
-                    &value,
-                    &input.as_slice(),
-                    &AccessList::default(),
-                    &0u128,              // max_fee_per_blob_gas
-                    &Vec::<B256>::new(), // blob_versioned_hashes
-                ],
-            ),
+            TxType::Eip4844 => &[
+                &chain_id,
+                &nonce,
+                &gas_price, // max_priority_fee_per_gas
+                &gas_price, // max_fee_per_gas
+                &gas_limit,
+                &to.as_slice(),
+                &value,
+                &input.as_slice(),
+                &AccessList::default(),
+                &0u128,              // max_fee_per_blob_gas
+                &Vec::<B256>::new(), // blob_versioned_hashes
+            ],
 
-            TxType::Eip7702 => Self::encode_transaction(
-                Some(TxType::Eip7702),
-                &[
-                    &chain_id,
-                    &nonce,
-                    &gas_price, // max_priority_fee_per_gas
-                    &gas_price, // max_fee_per_gas
-                    &gas_limit,
-                    &to.as_slice(),
-                    &value,
-                    &input.as_slice(),
-                    &AccessList::default(),
-                    &Vec::<SignedAuthorization>::new(), // authorization list placeholder
-                ],
-            ),
+            TxType::Eip7702 => &[
+                &chain_id,
+                &nonce,
+                &gas_price, // max_priority_fee_per_gas
+                &gas_price, // max_fee_per_gas
+                &gas_limit,
+                &to.as_slice(),
+                &value,
+                &input.as_slice(),
+                &AccessList::default(),
+                &Vec::<SignedAuthorization>::new(), // authorization list placeholder
+            ],
 
-            TxType::Legacy =>
-                if self.execution_info.chain_id.is_some() {
-                    Self::encode_transaction(
-                        None,
-                        &[&nonce, &gas_price, &gas_limit, &to.as_slice(), &value, &input.as_slice(), &chain_id, &0u8, &0u8],
-                    )
-                } else {
-                    Self::encode_transaction(None, &[&nonce, &gas_price, &gas_limit, &to.as_slice(), &value, &input.as_slice()])
-                },
-        }
+            TxType::Legacy if self.execution_info.chain_id.is_some() =>
+                &[&nonce, &gas_price, &gas_limit, &to.as_slice(), &value, &input.as_slice(), &chain_id, &0u8, &0u8],
+
+            TxType::Legacy => &[&nonce, &gas_price, &gas_limit, &to.as_slice(), &value, &input.as_slice()],
+        };
+
+        let tx_type = if matches!(tx_type, TxType::Legacy) { None } else { Some(tx_type) };
+        Self::encode_transaction(tx_type, fields)
     }
 
     /// Recovers the signer address from the transaction fields already stored in this input.
@@ -534,10 +521,7 @@ impl TransactionInput {
         let chain_id = decode_next::<ChainId>(&mut rlp, "chainId")?;
         let nonce = decode_next::<Nonce>(&mut rlp, "nonce")?;
         let gas_price: u128;
-        let gas_limit: Gas;
-        let to: Option<Address>;
-        let value: Wei;
-        let input: Bytes;
+        let TypedTxCommonFields { gas_limit, to, value, input };
         let v: U64;
         let r: U256;
         let s: U256;
@@ -545,31 +529,19 @@ impl TransactionInput {
         match tx_type {
             TxType::Eip2930 => {
                 gas_price = decode_next::<u128>(&mut rlp, "gasPrice")?;
-                let fields = Self::decode_access_list_fields(&mut rlp)?;
-                gas_limit = fields.gas_limit;
-                to = fields.to;
-                value = fields.value;
-                input = fields.input;
+                TypedTxCommonFields { gas_limit, to, value, input } = Self::decode_access_list_fields(&mut rlp)?;
                 (v, r, s) = Self::decode_signature(&mut rlp)?;
             }
 
             TxType::Eip1559 => {
                 gas_price = Self::decode_dynamic_fee_gas_price(&mut rlp)?;
-                let fields = Self::decode_access_list_fields(&mut rlp)?;
-                gas_limit = fields.gas_limit;
-                to = fields.to;
-                value = fields.value;
-                input = fields.input;
+                TypedTxCommonFields { gas_limit, to, value, input } = Self::decode_access_list_fields(&mut rlp)?;
                 (v, r, s) = Self::decode_signature(&mut rlp)?;
             }
 
             TxType::Eip4844 => {
                 gas_price = Self::decode_dynamic_fee_gas_price(&mut rlp)?;
-                let fields = Self::decode_access_list_fields(&mut rlp)?;
-                gas_limit = fields.gas_limit;
-                to = fields.to;
-                value = fields.value;
-                input = fields.input;
+                TypedTxCommonFields { gas_limit, to, value, input } = Self::decode_access_list_fields(&mut rlp)?;
                 let _: u128 = decode_next(&mut rlp, "maxFeePerBlobGas")?;
                 let _: Vec<B256> = decode_next(&mut rlp, "blobVersionedHashes")?;
                 (v, r, s) = Self::decode_signature(&mut rlp)?;
@@ -577,11 +549,7 @@ impl TransactionInput {
 
             TxType::Eip7702 => {
                 gas_price = Self::decode_dynamic_fee_gas_price(&mut rlp)?;
-                let fields = Self::decode_access_list_fields(&mut rlp)?;
-                gas_limit = fields.gas_limit;
-                to = fields.to;
-                value = fields.value;
-                input = fields.input;
+                TypedTxCommonFields { gas_limit, to, value, input } = Self::decode_access_list_fields(&mut rlp)?;
                 let _: Vec<SignedAuthorization> = decode_next(&mut rlp, "authorizationList")?;
                 (v, r, s) = Self::decode_signature(&mut rlp)?;
             }
