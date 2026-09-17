@@ -29,73 +29,14 @@ on:
       - "Cargo.toml"
       - "rust-toolchain.toml"
 
-env:
-  CACHE_SHARED_KEY: stable-release
-  STRATUS_PROFILE: ci
-  CACHE_PATH: |
-    ~/.cargo/registry/index/
-    ~/.cargo/registry/cache/
-    ~/.cargo/git/db/
-    target/
-
 jobs:
-  get_contracts_matrix:
-    name: Get Contracts Matrix
-    runs-on: ubuntu-22.04
-    timeout-minutes: 20
-
-    outputs:
-      contracts: ${{ steps.contracts.outputs.contracts }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Collect contracts matrix internally
-        id: internal
-        uses: ./.github/actions/run-internal-ci
-        with:
-          internal-workflow: e2e-contracts-rocks.yml
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          pr: ${{ github.event.pull_request.number || '' }}
-          ci-key: contracts-matrix
-          dispatch-inputs: '{"operation":"matrix"}'
-          mirror-artifacts: all
-          timeout-minutes: 10
-          token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}
-
-      - name: Validate contracts matrix
-        id: contracts
-        env:
-          ARTIFACTS_DIRECTORY: ${{ steps.internal.outputs.artifacts-directory }}
-        run: |
-          set -euo pipefail
-          artifact="$ARTIFACTS_DIRECTORY/contracts-matrix"
-          [ -d "$artifact" ] || { echo "::error::The internal matrix run did not produce the contracts-matrix artifact"; exit 1; }
-          mapfile -t files < <(find "$artifact" -type f)
-          [ "${#files[@]}" -eq 1 ] || { echo "::error::The contracts-matrix artifact must contain exactly one file"; exit 1; }
-          contracts=$(jq -ce 'type == "array" and length > 0 and all(.[]; type == "string" and length > 0) as $valid | if $valid then . else error("expected a non-empty array of non-empty contract names") end' "${files[0]}")
-          echo "contracts=$contracts" >> "$GITHUB_OUTPUT"
-
-  contract_test_rocks:
-    strategy:
-      fail-fast: false
-      matrix:
-        contract: ${{ fromJson(needs.get_contracts_matrix.outputs.contracts) }}
-    name: E2E Rocks on ${{ matrix.contract }}
-    needs:
-      - get_contracts_matrix
+  contracts:
+    name: Contracts E2E Rocks tests
     runs-on: ubuntu-22.04
     timeout-minutes: 55
-
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.contract }}-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
-
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -103,14 +44,13 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Run contract E2E internally
+      - name: Run contracts suite internally
         uses: ./.github/actions/run-internal-ci
         with:
           internal-workflow: e2e-contracts-rocks.yml
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           pr: ${{ github.event.pull_request.number || '' }}
-          ci-key: contract-${{ matrix.contract }}
-          dispatch-inputs: ${{ format('{{"operation":"contract","contract":{0}}}', toJSON(matrix.contract)) }}
+          ci-key: e2e-contracts-rocks
+          dispatch-inputs: '{"operation":"all"}'
           timeout-minutes: 50
           token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}

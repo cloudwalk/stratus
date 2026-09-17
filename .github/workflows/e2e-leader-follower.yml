@@ -29,31 +29,14 @@ on:
       - "rust-toolchain.toml"
   workflow_dispatch:
 
-env:
-  CACHE_SHARED_KEY: stable-release
-  STRATUS_PROFILE: ci
-  CACHE_PATH: |
-    ~/.cargo/registry/index/
-    ~/.cargo/registry/cache/
-    ~/.cargo/git/db/
-    target/
-
 jobs:
   leader_follower_test:
-    strategy:
-      fail-fast: false
-      matrix:
-        test:
-          [brlc, importer, miner, change, deploy, kafka, health, tx-types]
-        use_block_changes_replication: [false, true]
-    name: "E2E Leader & Follower on ${{ matrix.test }} (Replication: ${{ matrix.use_block_changes_replication }})"
+    name: E2E Leader & Follower
     runs-on: ubuntu-22.04
     timeout-minutes: 55
-
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.test }}-${{ matrix.use_block_changes_replication }}-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
-
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -61,13 +44,12 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Run internal E2E shard
+      - name: Run leader/follower suite internally
         uses: ./.github/actions/run-internal-ci
         with:
           internal-workflow: e2e-leader-follower.yml
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           pr: ${{ github.event.pull_request.number || '' }}
-          ci-key: leader-follower-${{ matrix.test }}-${{ matrix.use_block_changes_replication }}
-          dispatch-inputs: ${{ format('{{"test":{0},"replication":{1}}}', toJSON(matrix.test), toJSON(matrix.use_block_changes_replication)) }}
+          ci-key: e2e-leader-follower
           timeout-minutes: 50
           token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}

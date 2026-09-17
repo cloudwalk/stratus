@@ -30,140 +30,26 @@ on:
       - "rust-toolchain.toml"
 
 jobs:
-  e2e-automine-stratus-rocks:
-    name: E2E Automine Stratus Rocks
+  e2e:
+    name: E2E Tests
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 50
     concurrency:
-      group: ${{ github.workflow }}-automine-rocks-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: ./.github/actions/run-internal-ci
+      - name: Run E2E suite internally
+        uses: ./.github/actions/run-internal-ci
         with:
           internal-workflow: e2e-test.yml
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           pr: ${{ github.event.pull_request.number || '' }}
-          ci-key: e2e-automine-rocks
-          dispatch-inputs: '{"variant":"automine-rocks"}'
-          timeout-minutes: 40
-          token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}
-
-  e2e-external-stratus-rocks:
-    name: E2E External Stratus Rocks
-    runs-on: ubuntu-22.04
-    timeout-minutes: 45
-    concurrency:
-      group: ${{ github.workflow }}-external-rocks-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: ./.github/actions/run-internal-ci
-        with:
-          internal-workflow: e2e-test.yml
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          pr: ${{ github.event.pull_request.number || '' }}
-          ci-key: e2e-external-rocks
-          dispatch-inputs: '{"variant":"external-rocks"}'
-          timeout-minutes: 40
-          token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}
-
-  e2e-interval-stratus:
-    name: E2E Interval Stratus
-    runs-on: ubuntu-22.04
-    timeout-minutes: 45
-    concurrency:
-      group: ${{ github.workflow }}-interval-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: ./.github/actions/run-internal-ci
-        with:
-          internal-workflow: e2e-test.yml
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          pr: ${{ github.event.pull_request.number || '' }}
-          ci-key: e2e-interval
-          dispatch-inputs: '{"variant":"interval"}'
-          timeout-minutes: 40
-          token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}
-
-  e2e-clock-stratus-rocks:
-    name: E2E Clock Stratus Rocks
-    runs-on: ubuntu-22.04
-    timeout-minutes: 45
-    concurrency:
-      group: ${{ github.workflow }}-clock-rocks-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: ./.github/actions/run-internal-ci
-        with:
-          internal-workflow: e2e-test.yml
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          pr: ${{ github.event.pull_request.number || '' }}
-          ci-key: e2e-clock-rocks
-          dispatch-inputs: '{"variant":"clock-rocks"}'
-          timeout-minutes: 40
-          token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}
-
-  e2e-admin-password:
-    name: E2E Admin Password
-    runs-on: ubuntu-22.04
-    timeout-minutes: 45
-    concurrency:
-      group: ${{ github.workflow }}-admin-password-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: ./.github/actions/run-internal-ci
-        with:
-          internal-workflow: e2e-test.yml
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          pr: ${{ github.event.pull_request.number || '' }}
-          ci-key: e2e-admin-password
-          dispatch-inputs: '{"variant":"admin-password"}'
-          timeout-minutes: 40
-          token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}
-
-  e2e-genesis-rocks:
-    name: E2E Genesis Rocks
-    runs-on: ubuntu-22.04
-    timeout-minutes: 45
-    concurrency:
-      group: ${{ github.workflow }}-genesis-rocks-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: ./.github/actions/run-internal-ci
-        with:
-          internal-workflow: e2e-test.yml
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          pr: ${{ github.event.pull_request.number || '' }}
-          ci-key: e2e-genesis-rocks
-          dispatch-inputs: '{"variant":"genesis-rocks"}'
-          timeout-minutes: 40
+          ci-key: e2e-test
+          timeout-minutes: 45
           token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}
