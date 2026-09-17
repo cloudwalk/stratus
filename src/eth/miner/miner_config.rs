@@ -19,8 +19,16 @@ use crate::ext::parse_duration;
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct MinerConfig {
     /// Target block time.
-    #[arg(long = "block-mode", env = "BLOCK_MODE", default_value = "automine")]
+    #[arg(id = "miner.block_mode", long = "block-mode", default_value = "automine")]
     pub block_mode: MinerMode,
+}
+
+impl Default for MinerConfig {
+    fn default() -> Self {
+        Self {
+            block_mode: MinerMode::Automine,
+        }
+    }
 }
 
 impl MinerConfig {
@@ -62,18 +70,15 @@ impl MinerConfig {
 // -----------------------------------------------------------------------------
 
 /// Indicates when the miner will mine new blocks.
-#[derive(Debug, Clone, Copy, PartialEq, strum::EnumIs, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, strum::EnumIs)]
 pub enum MinerMode {
     /// Mines a new block for each transaction execution.
-    #[serde(rename = "automine")]
     Automine,
 
     /// Mines a new block at specified interval.
-    #[serde(rename = "interval")]
     Interval(Duration),
 
     /// Does not automatically mines a new block. A call to `mine_*` must be executed to mine a new block.
-    #[serde(rename = "external")]
     External,
 }
 
@@ -89,5 +94,22 @@ impl FromStr for MinerMode {
                 Ok(Self::Interval(block_time))
             }
         }
+    }
+}
+
+impl serde::Serialize for MinerMode {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Automine => serializer.serialize_str("automine"),
+            Self::Interval(duration) => serializer.serialize_str(&humantime::format_duration(*duration).to_string()),
+            Self::External => serializer.serialize_str("external"),
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for MinerMode {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = <String as serde::Deserialize>::deserialize(deserializer)?;
+        Self::from_str(&value).map_err(serde::de::Error::custom)
     }
 }
