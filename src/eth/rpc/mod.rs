@@ -26,6 +26,7 @@ pub use types::LogFilterInputTopic;
 pub use types::MulticallError;
 pub use types::RpcClientApp;
 pub use types::RpcError;
+pub use types::TransactionDecodeError;
 
 // -----------------------------------------------------------------------------
 // Tests
