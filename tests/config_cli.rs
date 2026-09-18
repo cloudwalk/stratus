@@ -1,8 +1,3 @@
-//! Integration tests for configuration parsing, merging, and validation.
-//!
-//! These tests exercise the public configuration API directly. They deliberately do not spawn the
-//! `stratus` binary; process-level behavior belongs outside this suite.
-
 use std::ffi::OsString;
 
 use stratus::config::StratusConfig;
