@@ -10,7 +10,7 @@ nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly-2026-05-08" } el
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 profile_flag := if env("STRATUS_PROFILE", "") != "" { "--profile " + env("STRATUS_PROFILE", "") } else { "" }
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
-kafka_bootstrap_servers := env("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092")
+kafka_bootstrap_servers := env("E2E_KAFKA_BOOTSTRAP_SERVERS", "localhost:29092")
 kafka_managed_externally := env("KAFKA_MANAGED_EXTERNALLY", "")
 
 # Project: Show available tasks

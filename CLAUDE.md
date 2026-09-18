@@ -8,7 +8,7 @@ Stratus is a high-performance EVM-compatible blockchain infrastructure written i
 
 ## Private Heavy CI
 
-Heavy public checks proxy the checked-out commit to private workflows in `cloudwalk/stratus-internal-builds`, while preserving public check names. Fork pull requests cannot access this CI; a maintainer must push the exact commits to a `cloudwalk/stratus` branch and rerun. Kafka defaults to `KAFKA_BOOTSTRAP_SERVERS=localhost:29092`; set `KAFKA_MANAGED_EXTERNALLY=1` with an externally managed broker (the CI Compose service is `kafka:9092`) to skip local Kafka startup, topic creation, and teardown.
+Heavy public checks proxy the checked-out commit to private workflows in `cloudwalk/stratus-internal-builds`, while preserving public check names. Fork pull requests cannot access this CI; a maintainer must push the exact commits to a `cloudwalk/stratus` branch and rerun. Kafka defaults to `E2E_KAFKA_BOOTSTRAP_SERVERS=localhost:29092`; set `KAFKA_MANAGED_EXTERNALLY=1` with an externally managed broker (the CI Compose service is `kafka:9092`) to skip local Kafka startup, topic creation, and teardown.
 
 ## Development Commands
 
