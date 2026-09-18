@@ -14,14 +14,6 @@ pub struct MetricsConfig {
     pub metrics_exporter_address: SocketAddr,
 }
 
-impl Default for MetricsConfig {
-    fn default() -> Self {
-        Self {
-            metrics_exporter_address: SocketAddr::from(([0, 0, 0, 0], 9000)),
-        }
-    }
-}
-
 impl MetricsConfig {
     /// Inits the application global metrics exporter.
     ///
