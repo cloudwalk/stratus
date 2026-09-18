@@ -76,6 +76,7 @@ pub struct PermanentStorageConfig {
     pub genesis_file: (),
 }
 
+#[cfg(test)]
 impl Default for PermanentStorageConfig {
     fn default() -> Self {
         Self {
@@ -94,6 +95,7 @@ impl Default for PermanentStorageConfig {
 }
 
 impl PermanentStorageConfig {
+    #[cfg(test)]
     const fn default_file_descriptors_limit() -> u64 {
         if cfg!(feature = "dev") { 65536 } else { 1048576 }
     }

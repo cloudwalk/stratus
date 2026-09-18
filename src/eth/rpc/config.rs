@@ -53,6 +53,7 @@ pub struct RpcServerConfig {
     pub rpc_debug_trace_unsuccessful_only: Option<HashSet<RpcClientApp>>,
 }
 
+#[cfg(test)]
 impl Default for RpcServerConfig {
     fn default() -> Self {
         Self {
