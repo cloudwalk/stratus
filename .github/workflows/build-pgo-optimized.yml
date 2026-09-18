@@ -36,116 +36,28 @@ jobs:
   proxy_build:
     name: Dispatch internal build and mirror artifacts
     runs-on: ubuntu-22.04
-    # Internal workflow can wait up to 300 minutes for profile data before building;
-    # 360 minutes is the maximum a GitHub-hosted runner allows.
     timeout-minutes: 360
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.inputs.commit_sha || github.sha }}-${{ github.event.inputs.features || 'default' }}
       cancel-in-progress: true
 
-    env:
-      GH_TOKEN: ${{ secrets.INTERNAL_BUILDS_TOKEN }}
-
     steps:
       - name: Checkout Stratus
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ inputs.commit_sha || github.sha }}
-          # Full history so the ref validation below can verify the commit is
-          # reachable from a branch or tag.
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Resolve and validate build ref
-        id: resolve-sha
-        run: |
-          set -euo pipefail
-          sha=$(git rev-parse HEAD)
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          # Only commits reachable
-          # from a branch or tag of cloudwalk/stratus may be built. Fork
-          # pull-request refs (refs/pull/* and their commit SHAs) are rejected
-          # here, before any internal run is dispatched.
-          if [ -z "$(git branch -r --contains HEAD)" ] && [ -z "$(git tag --contains HEAD)" ]; then
-            echo "::error::Ref ${{ inputs.commit_sha || github.sha }} ($sha) is not reachable from any branch or tag of cloudwalk/stratus. Fork pull-request refs (refs/pull/* and their commit SHAs) are not allowed: they would dispatch a build of unreviewed code."
-            exit 1
-          fi
-          echo "Building stratus ref ${{ inputs.commit_sha || github.sha }} ($sha)"
-
-      - name: Dispatch internal build workflow
-        run: |
-          # Unique per public run attempt. The internal workflow echoes this
-          # token in its run name so the polling step below can select exactly
-          # the run dispatched here, never an overlapping build of the same
-          # commit with different features.
-          correlation_id="${{ github.run_id }}-${{ github.run_attempt }}"
-          echo "correlation_id=$correlation_id" >> "$GITHUB_ENV"
-          jq -n \
-            --arg ref "$BUILDS_REF" \
-            --arg stratus_ref "${{ steps.resolve-sha.outputs.sha }}" \
-            --arg features "${{ inputs.features }}" \
-            --arg correlation_id "$correlation_id" \
-            '{ref: $ref, inputs: {stratus_ref: $stratus_ref, features: $features, correlation_id: $correlation_id}}' > dispatch.json
-          echo "Dispatch payload:"
-          cat dispatch.json
-          gh api -X POST "repos/$BUILDS_REPO/actions/workflows/$BUILDS_WORKFLOW/dispatches" --input dispatch.json
-
-      - name: Wait for internal build to complete
-        id: wait
-        run: |
-          set -euo pipefail
-          # Select the internal run whose name ends with the correlation token
-          # sent in the dispatch payload, instead of guessing by creation time:
-          # overlapping dispatches (same commit, different features) are
-          # indistinguishable by timestamp, and a run created in the same UTC
-          # second as the dispatch could even fall outside a time window.
-          echo "Waiting for the $BUILDS_WORKFLOW run in $BUILDS_REPO matching correlation token corr=$correlation_id..."
-          run_id=""
-          for _ in $(seq 1 60); do
-            run_id=$(gh run list --repo "$BUILDS_REPO" --workflow "$BUILDS_WORKFLOW" --event workflow_dispatch \
-              --limit 50 \
-              --json databaseId,displayTitle \
-              --jq 'map(select(.displayTitle | endswith("corr='"$correlation_id"'"))) | .[0].databaseId' || true)
-            if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
-              break
-            fi
-            sleep 5
-          done
-          if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
-            echo "No $BUILDS_WORKFLOW run matching correlation token corr=$correlation_id appeared in $BUILDS_REPO after dispatch" >&2
-            exit 1
-          fi
-          echo "Watching internal build run $run_id"
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-          gh run watch "$run_id" --repo "$BUILDS_REPO" --exit-status --interval 30
-
-      - name: Download artifacts from internal build
-        run: |
-          sha="${{ steps.resolve-sha.outputs.sha }}"
-          run_id="${{ steps.wait.outputs.run_id }}"
-          gh run download "$run_id" --repo "$BUILDS_REPO" --name "stratus-optimized-$sha" --dir stratus-optimized-artifact
-          gh run download "$run_id" --repo "$BUILDS_REPO" --name "checksums-optimized-$sha" --dir checksums-optimized-artifact
-
-      - name: Upload stratus optimized
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        id: upload-str
+      - name: Run internal build
+        uses: ./.github/actions/run-internal-ci
         with:
-          name: stratus-optimized-${{ steps.resolve-sha.outputs.sha }}
-          path: stratus-optimized-artifact/
-          if-no-files-found: error
-          retention-days: ${{ env.RETENTION_DAYS }}
-
-      - name: Upload checksums
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: checksums-optimized-${{ steps.resolve-sha.outputs.sha }}
-          path: checksums-optimized-artifact/
-          if-no-files-found: error
-          retention-days: ${{ env.RETENTION_DAYS }}
-
-      - name: Print outputs
-        run: |
-          echo "Artifact ID: ${{ steps.upload-str.outputs.artifact-id }} (stratus optimized)"
-          echo "Artifact URL: ${{ steps.upload-str.outputs.artifact-url }} (stratus optimized)"
-          echo "Internal build run: https://github.com/$BUILDS_REPO/actions/runs/${{ steps.wait.outputs.run_id }}"
+          internal-workflow: build-pgo-optimized.yml
+          ref: ${{ inputs.commit_sha || github.sha }}
+          ci-key: build-pgo-optimized
+          dispatch-inputs: ${{ format('{{"features":{0}}}', toJSON(inputs.features)) }}
+          mirror-artifacts: all
+          artifact-retention-days: ${{ env.RETENTION_DAYS }}
+          timeout-minutes: 350
+          token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}

@@ -40,8 +40,8 @@ env:
 jobs:
   run_lint:
     name: Lint and Style checks
-    runs-on: stratus-runner
-    timeout-minutes: 25
+    runs-on: ubuntu-22.04
+    timeout-minutes: 130
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -50,33 +50,26 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-
-      - name: Set up Rust Nightly
-        uses: dtolnay/rust-toolchain@5b842231ba77f5c045dba54ac5560fed2db780e2 # nightly
         with:
-          toolchain: nightly-2026-05-08
-          components: rustfmt, clippy
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Rust Cache - Restore lint cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - name: Run internal Rust lint
+        uses: ./.github/actions/run-internal-ci
         with:
-          path: ${{ env.CACHE_PATH }}
-          key: ${{ env.CACHE_LINT_KEY }}-${{ runner.os }}--${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ env.CACHE_LINT_KEY }}-${{ runner.os }}--
-
-      - name: Install libsasl2-dev libssl-dev
-        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
-
-      - name: Set up Just
-        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
-
-      - name: Just lint-check
-        run: just lint-check -2026-05-08
+          internal-workflow: lint-check.yml
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          pr: ${{ github.event.pull_request.number || '' }}
+          ci-key: lint-rust
+          dispatch-inputs: '{"suite":"rust"}'
+          timeout-minutes: 125
+          token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}
 
   e2e_lint:
     name: E2E Lint
-    runs-on: stratus-runner
-    timeout-minutes: 10
+    runs-on: ubuntu-22.04
+    timeout-minutes: 130
 
     concurrency:
       group: ${{ github.workflow }}-e2e-${{ github.ref || github.run_id }}
@@ -85,27 +78,18 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-
-      - name: Install Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version-file: .tool-versions
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Set up Just
-        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
-
-      - name: Set up shfmt
-        uses: mfinelli/setup-shfmt@c35fe75ed300d20f8c48f1fc730a7e86056aefc1 # v3.0.1
+      - name: Run internal E2E lint
+        uses: ./.github/actions/run-internal-ci
         with:
-          version: v3.9.0
-
-      - name: Set up shellcheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
-
-      - name: Just e2e-lint
-        run: |
-          npm --prefix ./e2e --silent install
-          just e2e-lint --check
-
-      - name: Just shell-lint
-        run: just shell-lint --diff
+          internal-workflow: lint-check.yml
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          pr: ${{ github.event.pull_request.number || '' }}
+          ci-key: lint-e2e
+          dispatch-inputs: '{"suite":"e2e"}'
+          timeout-minutes: 125
+          token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}

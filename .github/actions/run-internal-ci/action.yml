@@ -1,0 +1,263 @@
+name: Run internal CI
+
+description: Dispatch a private Stratus CI workflow, wait for it, and optionally mirror its artifacts.
+
+inputs:
+  internal-workflow:
+    description: Safe internal workflow filename (for example, rust-test.yml).
+    required: true
+  ref:
+    description: Stratus ref already checked out by the caller.
+    required: true
+  pr:
+    description: Pull request number, or an empty string.
+    required: false
+    default: ""
+  ci-key:
+    description: Caller-specific key used to correlate concurrent shards.
+    required: true
+  dispatch-inputs:
+    description: Flat JSON object containing workflow-specific scalar inputs.
+    required: false
+    default: "{}"
+  mirror-artifacts:
+    description: Whether to mirror all internal artifacts into the public run (none or all).
+    required: false
+    default: none
+  artifact-retention-days:
+    description: Retention period for mirrored artifacts.
+    required: false
+    default: "90"
+  timeout-minutes:
+    description: Maximum time for discovery and execution of the internal run.
+    required: false
+    default: "60"
+  internal-repository:
+    description: Repository containing private CI workflows.
+    required: false
+    default: cloudwalk/stratus-internal-builds
+  internal-ref:
+    description: Ref on which to dispatch the internal workflow.
+    required: false
+    default: main
+  token:
+    description: Token allowed to dispatch and read internal CI runs and artifacts.
+    required: true
+
+outputs:
+  sha:
+    description: Resolved Stratus commit SHA.
+    value: ${{ steps.prepare.outputs.sha }}
+  run-id:
+    description: Internal workflow run ID.
+    value: ${{ steps.run.outputs.run_id }}
+  run-url:
+    description: Internal workflow run URL.
+    value: ${{ steps.run.outputs.run_url }}
+  artifacts-directory:
+    description: Directory containing downloaded internal artifacts, keyed by exact artifact name.
+    value: ${{ steps.artifacts.outputs.directory || steps.no-artifacts.outputs.directory }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate request and resolve commit
+      id: prepare
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        EVENT_PATH: ${{ github.event_path }}
+        REQUESTED_REF: ${{ inputs.ref }}
+        INTERNAL_WORKFLOW: ${{ inputs.internal-workflow }}
+        PR_NUMBER: ${{ inputs.pr }}
+        CI_KEY: ${{ inputs.ci-key }}
+        DISPATCH_INPUTS: ${{ inputs.dispatch-inputs }}
+        MIRROR_ARTIFACTS: ${{ inputs.mirror-artifacts }}
+        RETENTION_DAYS: ${{ inputs.artifact-retention-days }}
+        TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+        INTERNAL_REPOSITORY: ${{ inputs.internal-repository }}
+        INTERNAL_REF: ${{ inputs.internal-ref }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+
+        fail() { echo "::error::$*"; exit 1; }
+        if [ "$EVENT_NAME" = pull_request ] && [ "$(jq -r '.pull_request.head.repo.fork // false' "$EVENT_PATH")" = true ]; then
+          fail "Private CI cannot execute code directly from a fork. Escape hatch: ask a maintainer to push the exact commits to a cloudwalk/stratus branch, then rerun the checks from that branch."
+        fi
+
+        [ -n "$GH_TOKEN" ] || fail "token must not be empty"
+        [[ "$INTERNAL_WORKFLOW" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.yml$ ]] || fail "internal-workflow must be a safe .yml filename without path separators"
+        [[ "$INTERNAL_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "internal-repository must be an owner/repository name"
+        [ -n "$INTERNAL_REF" ] || fail "internal-ref must not be empty"
+        [ -n "$REQUESTED_REF" ] || fail "ref must not be empty"
+        [ -n "$CI_KEY" ] || fail "ci-key must not be empty"
+        [[ "$PR_NUMBER" =~ ^[0-9]*$ ]] || fail "pr must be empty or a positive integer"
+        [[ "$MIRROR_ARTIFACTS" == none || "$MIRROR_ARTIFACTS" == all ]] || fail "mirror-artifacts must be one of: none, all"
+        [[ "$RETENTION_DAYS" =~ ^[0-9]+$ ]] && (( RETENTION_DAYS >= 1 && RETENTION_DAYS <= 90 )) || fail "artifact-retention-days must be an integer from 1 through 90"
+        [[ "$TIMEOUT_MINUTES" =~ ^[0-9]+$ ]] && (( TIMEOUT_MINUTES >= 1 && TIMEOUT_MINUTES <= 360 )) || fail "timeout-minutes must be an integer from 1 through 360"
+
+        jq -e '
+          type == "object" and
+          ([keys[] | select(. == "stratus_ref" or . == "pr_number" or . == "ci_key" or . == "correlation_id")] | length == 0) and
+          ([.[] | type | select(. != "string" and . != "number" and . != "boolean")] | length == 0)
+        ' <<<"$DISPATCH_INPUTS" >/dev/null || fail "dispatch-inputs must be a flat JSON object of string, number, or boolean scalar values and may not override stratus_ref, pr_number, ci_key, or correlation_id"
+
+        sha=$(git rev-parse HEAD)
+        requested_sha=$(git rev-parse "${REQUESTED_REF}^{commit}" 2>/dev/null) || fail "ref '$REQUESTED_REF' cannot be resolved in the caller checkout"
+        [ "$sha" = "$requested_sha" ] || fail "caller checkout mismatch: HEAD is $sha but ref '$REQUESTED_REF' resolves to $requested_sha"
+        origin_url=$(git remote get-url origin 2>/dev/null) || fail "caller checkout must have an origin remote"
+        [[ "$origin_url" =~ ^(https://github\.com/|git@github\.com:|ssh://git@github\.com/)(cloudwalk/stratus)(\.git)?$ ]] || fail "origin must be cloudwalk/stratus, got '$origin_url'"
+        # actions/checkout may fetch only the requested SHA even with fetch-depth 0.
+        # Fetch all public heads/tags explicitly, then enforce reachability (not
+        # merely equality with a branch tip) so the maintainer escape hatch also
+        # works when additional commits were pushed after the requested commit.
+        git fetch --force --prune --prune-tags origin \
+          '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
+        reachable=$(git for-each-ref --format='%(refname)' --contains "$sha" refs/remotes/origin refs/tags | grep -Ev '^refs/remotes/origin/HEAD$' || true)
+        if [ -z "$reachable" ]; then
+          fail "Ref '$REQUESTED_REF' ($sha) is not reachable from a fetched cloudwalk/stratus branch or tag. Fork pull-request commits are not dispatched; a maintainer must push the exact commits to a cloudwalk/stratus branch and rerun."
+        fi
+
+        safe_key=$(printf '%s' "$CI_KEY" | tr -cs 'A-Za-z0-9._-' '-' | sed 's/^-*//; s/-*$//')
+        [ -n "$safe_key" ] || fail "ci-key must contain at least one ASCII letter, digit, dot, underscore, or hyphen"
+        correlation="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${safe_key}"
+        stem=${INTERNAL_WORKFLOW%.yml}
+        expected_title="$stem $sha [ci #$correlation]"
+
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
+        echo "correlation=$correlation" >> "$GITHUB_OUTPUT"
+        echo "expected_title=$expected_title" >> "$GITHUB_OUTPUT"
+        echo "Validated internal CI request for $sha"
+
+    - name: Dispatch and wait for internal CI
+      id: run
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        INTERNAL_WORKFLOW: ${{ inputs.internal-workflow }}
+        INTERNAL_REPOSITORY: ${{ inputs.internal-repository }}
+        INTERNAL_REF: ${{ inputs.internal-ref }}
+        PR_NUMBER: ${{ inputs.pr }}
+        CI_KEY: ${{ inputs.ci-key }}
+        DISPATCH_INPUTS: ${{ inputs.dispatch-inputs }}
+        TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+        SHA: ${{ steps.prepare.outputs.sha }}
+        CORRELATION: ${{ steps.prepare.outputs.correlation }}
+        EXPECTED_TITLE: ${{ steps.prepare.outputs.expected_title }}
+      run: |
+        set -euo pipefail
+
+        payload=$(jq -cn \
+          --arg ref "$INTERNAL_REF" \
+          --arg stratus_ref "$SHA" \
+          --arg pr_number "$PR_NUMBER" \
+          --arg ci_key "$CI_KEY" \
+          --arg correlation_id "$CORRELATION" \
+          --argjson dispatch "$DISPATCH_INPUTS" \
+          '{ref: $ref, inputs: (($dispatch | with_entries(.value |= tostring)) + {stratus_ref: $stratus_ref, pr_number: $pr_number, ci_key: $ci_key, correlation_id: $correlation_id})}')
+        gh api -X POST "repos/$INTERNAL_REPOSITORY/actions/workflows/$INTERNAL_WORKFLOW/dispatches" --input - <<<"$payload"
+
+        deadline=$(( $(date +%s) + TIMEOUT_MINUTES * 60 ))
+        run_id=""
+        completed=false
+        cleanup() {
+          status=$?
+          if [ "$status" -ne 0 ] && [ "$completed" != true ] && [ -n "${run_id:-}" ]; then
+            echo "Cancelling orphaned internal run $run_id after proxy failure/cancellation"
+            gh run cancel "$run_id" --repo "$INTERNAL_REPOSITORY" >/dev/null 2>&1 || true
+          fi
+          return "$status"
+        }
+        trap cleanup EXIT
+        # All proxy jobs share the same fine-grained PAT. Query the workflow-runs
+        # endpoint directly instead of `gh run list` (which first lists workflows),
+        # and poll conservatively so a full PR matrix stays below the PAT's rate limit.
+        while (( $(date +%s) < deadline )); do
+          runs=$(gh api --method GET \
+            "repos/$INTERNAL_REPOSITORY/actions/workflows/$INTERNAL_WORKFLOW/runs" \
+            -f event=workflow_dispatch -F per_page=50)
+          run_id=$(jq -r --arg title "$EXPECTED_TITLE" \
+            '.workflow_runs | map(select(.display_title == $title)) | first | .id // empty' <<<"$runs")
+          if [ -n "$run_id" ]; then break; fi
+          sleep 30
+        done
+        [ -n "$run_id" ] || { echo "::error::Timed out discovering internal run with exact title: $EXPECTED_TITLE"; exit 1; }
+
+        run_url="https://github.com/$INTERNAL_REPOSITORY/actions/runs/$run_id"
+        echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+        echo "run_url=$run_url" >> "$GITHUB_OUTPUT"
+        echo "Internal run: $run_url"
+
+        # `gh run watch` fetches both run and job state on every refresh. Poll the
+        # single run endpoint instead: at one request per minute, even all E2E
+        # shards together remain comfortably within the shared PAT's API budget.
+        while (( $(date +%s) < deadline )); do
+          run=$(gh api "repos/$INTERNAL_REPOSITORY/actions/runs/$run_id")
+          status=$(jq -r '.status' <<<"$run")
+          conclusion=$(jq -r '.conclusion // empty' <<<"$run")
+          if [ "$status" = completed ]; then
+            if [ "$conclusion" = success ]; then
+              completed=true
+              break
+            fi
+            echo "::error::Internal run concluded with '$conclusion': $run_url"
+            exit 1
+          fi
+          sleep 60
+        done
+        [ "$completed" = true ] || { echo "::error::Timed out waiting for internal run $run_url"; exit 1; }
+
+    - name: Initialize artifact outputs
+      id: no-artifacts
+      if: inputs.mirror-artifacts == 'none'
+      shell: bash
+      run: echo "directory=" >> "$GITHUB_OUTPUT"
+
+    - name: Download internal artifacts
+      id: artifacts
+      if: inputs.mirror-artifacts == 'all'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        INTERNAL_REPOSITORY: ${{ inputs.internal-repository }}
+        RUN_ID: ${{ steps.run.outputs.run_id }}
+      run: |
+        set -euo pipefail
+        directory="$RUNNER_TEMP/internal-ci-artifacts-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RUN_ID}"
+        rm -rf "$directory"
+        mkdir -p "$directory"
+
+        mapfile -t names < <(gh api --paginate "repos/$INTERNAL_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" --jq '.artifacts[] | select(.expired == false) | .name')
+        count=${#names[@]}
+        (( count >= 1 )) || { echo "::error::Internal run produced no artifacts to mirror"; exit 1; }
+        (( count <= 2 )) || { echo "::error::Internal run produced $count artifacts; the public composite currently supports at most two"; exit 1; }
+
+        for index in "${!names[@]}"; do
+          name=${names[$index]}
+          [[ "$name" != */* && "$name" != "." && "$name" != ".." && -n "$name" ]] || { echo "::error::Artifact name '$name' cannot be mirrored safely"; exit 1; }
+          gh run download "$RUN_ID" --repo "$INTERNAL_REPOSITORY" --name "$name" --dir "$directory/$name"
+          slot=$((index + 1))
+          echo "name_$slot=$name" >> "$GITHUB_OUTPUT"
+          echo "path_$slot=$directory/$name" >> "$GITHUB_OUTPUT"
+        done
+        echo "count=$count" >> "$GITHUB_OUTPUT"
+        echo "directory=$directory" >> "$GITHUB_OUTPUT"
+
+    - name: Upload first mirrored artifact
+      if: inputs.mirror-artifacts == 'all' && (steps.artifacts.outputs.count == '1' || steps.artifacts.outputs.count == '2')
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: ${{ steps.artifacts.outputs.name_1 }}
+        path: ${{ steps.artifacts.outputs.path_1 }}/
+        if-no-files-found: error
+        retention-days: ${{ inputs.artifact-retention-days }}
+
+    - name: Upload second mirrored artifact
+      if: inputs.mirror-artifacts == 'all' && steps.artifacts.outputs.count == '2'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: ${{ steps.artifacts.outputs.name_2 }}
+        path: ${{ steps.artifacts.outputs.path_2 }}/
+        if-no-files-found: error
+        retention-days: ${{ inputs.artifact-retention-days }}

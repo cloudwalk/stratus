@@ -30,59 +30,26 @@ on:
       - "rust-toolchain.toml"
 
 jobs:
-  e2e-automine-stratus-rocks:
-    name: E2E Automine Stratus Rocks
-    uses: ./.github/workflows/_setup-e2e.yml
-    with:
-      justfile_recipe: "e2e-stratus"
-      justfile_args: "automine"
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 130
     concurrency:
-      group: ${{ github.workflow }}-automine-rocks-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
-
-  e2e-external-stratus-rocks:
-    name: E2E External Stratus Rocks
-    uses: ./.github/workflows/_setup-e2e.yml
-    with:
-      justfile_recipe: "e2e-stratus"
-      justfile_args: "external"
-    concurrency:
-      group: ${{ github.workflow }}-external-rocks-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
-
-  e2e-interval-stratus:
-    name: E2E Interval Stratus
-    uses: ./.github/workflows/_setup-e2e.yml
-    with:
-      justfile_recipe: "e2e-stratus"
-      justfile_args: "10ms"
-    concurrency:
-      group: ${{ github.workflow }}-interval-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
-
-  e2e-clock-stratus-rocks:
-    name: E2E Clock Stratus Rocks
-    uses: ./.github/workflows/_setup-e2e.yml
-    with:
-      justfile_recipe: "e2e-clock-stratus"
-    concurrency:
-      group: ${{ github.workflow }}-clock-rocks-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
-
-  e2e-admin-password:
-    name: E2E Admin Password
-    uses: ./.github/workflows/_setup-e2e.yml
-    with:
-      justfile_recipe: "e2e-admin-password"
-    concurrency:
-      group: ${{ github.workflow }}-admin-password-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
-
-  e2e-genesis-rocks:
-    name: E2E Genesis Rocks
-    uses: ./.github/workflows/_setup-e2e.yml
-    with:
-      justfile_recipe: "e2e-genesis"
-    concurrency:
-      group: ${{ github.workflow }}-genesis-rocks-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Run E2E suite internally
+        uses: ./.github/actions/run-internal-ci
+        with:
+          internal-workflow: e2e-test.yml
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          pr: ${{ github.event.pull_request.number || '' }}
+          ci-key: e2e-test
+          timeout-minutes: 125
+          token: ${{ secrets.INTERNAL_BUILDS_TOKEN }}
