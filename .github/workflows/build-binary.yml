@@ -98,20 +98,21 @@ jobs:
           # overlapping dispatches (same commit, different features) are
           # indistinguishable by timestamp, and a run created in the same UTC
           # second as the dispatch could even fall outside a time window.
-          echo "Waiting for the $BUILDS_WORKFLOW run in $BUILDS_REPO matching correlation token corr=$correlation_id..."
+          # The internal workflow's run-name is "build-binary <ref> [ci #<correlation_id>]".
+          echo "Waiting for the $BUILDS_WORKFLOW run in $BUILDS_REPO matching correlation token [ci #$correlation_id]..."
           run_id=""
           for _ in $(seq 1 60); do
             run_id=$(gh run list --repo "$BUILDS_REPO" --workflow "$BUILDS_WORKFLOW" --event workflow_dispatch \
               --limit 50 \
               --json databaseId,displayTitle \
-              --jq 'map(select(.displayTitle | endswith("corr='"$correlation_id"'"))) | .[0].databaseId' || true)
+              --jq 'map(select(.displayTitle | endswith("[ci #'"$correlation_id"']"))) | .[0].databaseId' || true)
             if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
               break
             fi
             sleep 5
           done
           if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
-            echo "No $BUILDS_WORKFLOW run matching correlation token corr=$correlation_id appeared in $BUILDS_REPO after dispatch" >&2
+            echo "No $BUILDS_WORKFLOW run matching correlation token [ci #$correlation_id] appeared in $BUILDS_REPO after dispatch" >&2
             exit 1
           fi
           echo "Watching internal build run $run_id"
