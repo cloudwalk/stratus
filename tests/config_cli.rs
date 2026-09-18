@@ -4,9 +4,11 @@
 //! behavior: exit code and error output. Value-level assertions (merge, precedence, defaults)
 //! live as unit tests in `src/config/`, which inspect the loaded configuration directly.
 
+use std::io::Read;
 use std::process::Command;
 use std::process::Output;
 use std::process::Stdio;
+use std::thread::JoinHandle;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -17,18 +19,46 @@ use tempfile::TempDir;
 /// config expected to fail actually validates and boots a full node.
 const EXIT_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Drains a child-process stream while the process runs, preventing the child from blocking when
+/// a verbose clap error or backtrace fills the OS pipe buffer.
+fn drain<R: Read + Send + 'static>(mut stream: R) -> JoinHandle<Vec<u8>> {
+    std::thread::spawn(move || {
+        let mut output = Vec::new();
+        stream.read_to_end(&mut output).unwrap();
+        output
+    })
+}
+
 /// Runs the stratus binary and returns its output once it exits within [`EXIT_TIMEOUT`].
 fn run(mut command: Command) -> Output {
     let mut child = command.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let stdout = drain(child.stdout.take().unwrap());
+    let stderr = drain(child.stderr.take().unwrap());
     let deadline = Instant::now() + EXIT_TIMEOUT;
-    while child.try_wait().unwrap().is_none() {
-        assert!(
-            Instant::now() < deadline,
-            "stratus did not exit within {EXIT_TIMEOUT:?}: a config expected to fail may have booted a node"
-        );
+
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            let stdout = stdout.join().unwrap();
+            let stderr = stderr.join().unwrap();
+            panic!(
+                "stratus did not exit within {EXIT_TIMEOUT:?}: a config expected to fail may have booted a node\nstdout:\n{}\nstderr:\n{}",
+                String::from_utf8_lossy(&stdout),
+                String::from_utf8_lossy(&stderr)
+            );
+        }
         std::thread::sleep(Duration::from_millis(50));
+    };
+
+    Output {
+        status,
+        stdout: stdout.join().unwrap(),
+        stderr: stderr.join().unwrap(),
     }
-    child.wait_with_output().unwrap()
 }
 
 /// Writes the content to a temporary config file and appends `--config <path>` to the arguments.
