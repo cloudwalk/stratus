@@ -9,7 +9,8 @@ use crate::set_node_mode_provider;
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct MetricsConfig {
     /// Metrics exporter binding address.
-    #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
+    #[arg(id = "common.metrics.exporter_address", long = "metrics-exporter-address", default_value = "0.0.0.0:9000")]
+    #[serde(rename = "exporter_address")]
     pub metrics_exporter_address: SocketAddr,
 }
 
