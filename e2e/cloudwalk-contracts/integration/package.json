@@ -59,6 +59,7 @@
         },
         "recursive-readdir": {
             "minimatch": "3.1.4"
-        }
+        },
+        "adm-zip": "0.6.1"
     }
 }
