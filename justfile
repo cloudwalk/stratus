@@ -533,32 +533,6 @@ e2e-leader-fake-leader-up test="fake-leader":
     just e2e-leader-follower-down
 
 # ------------------------------------------------------------------------------
-# Hive tests
-# ------------------------------------------------------------------------------
-
-# Hive: Build Stratus image for hive task
-hive-build-client:
-    docker build -f hive/clients/stratus/Dockerfile_base -t stratus_base .
-
-# Hive: Execute test pipeline
-hive:
-    if ! docker images | grep -q stratus_base; then \
-        just _log "Building Docker image..."; \
-        docker build -f hive/clients/stratus/Dockerfile_base -t stratus_base .; \
-    else \
-        just _log "Docker image already built."; \
-    fi
-    cd hive && go build .
-    cd hive && ./hive --client stratus --sim stratus/rpc --sim.parallelism 10
-#    cd hive && sudo ./hive --client stratus --sim stratus/rpc --sim.parallelism 10 --loglevel 5 --docker.output
-
-# Hive: View test pipeline results in Hiveview
-hiveview:
-    cd hive && go build ./cmd/hiveview
-    ./hive/hiveview --serve --addr 0.0.0.0:8080 --logdir ./hive/workspace/logs/
-
-
-# ------------------------------------------------------------------------------
 # Contracts tasks
 # ------------------------------------------------------------------------------
 
