@@ -62,6 +62,7 @@ pub struct ImporterConfig {
 
     /// Number of Tokio worker threads dedicated to the online importer.
     #[arg(id = "importer.async_threads", long = "importer-async-threads", default_value = "4", required = false)]
+    #[serde(rename = "async_threads")]
     pub importer_async_threads: usize,
 
     /// Compute an access list for transactions before forwarding them to the leader.

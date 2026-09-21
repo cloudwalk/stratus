@@ -36,7 +36,7 @@ use crate::eth::types::StratusError;
 #[cfg_attr(test, derive(Default))]
 pub struct StorageConfig {
     #[clap(flatten)]
-    #[serde(rename = "temporary")]
+    #[serde(rename = "temporary", skip_serializing)]
     pub temp_storage: TemporaryStorageConfig,
 
     #[clap(flatten)]
