@@ -39,7 +39,7 @@ _wait_for_rocksdb_lock *args="":
     lock_file="${prefix}-rocksdb/LOCK"
     for attempt in $(seq 1 30); do
         [ ! -e "$lock_file" ] && exit 0
-        flock -n "$lock_file" true 2>/dev/null && exit 0
+        python3.12 -c 'import fcntl, os, sys; fd = os.open(sys.argv[1], os.O_RDWR); fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)' "$lock_file" 2>/dev/null && exit 0
         just _log "Waiting for previous Stratus instance to release ${prefix}-rocksdb (${attempt}/30)"
         sleep 1
     done
