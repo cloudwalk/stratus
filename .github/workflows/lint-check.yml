@@ -41,6 +41,8 @@ jobs:
   run_lint:
     name: Lint and Style checks
     runs-on: ubuntu-22.04
+    # Dependabot-triggered runs have no access to Actions secrets; CI reruns after a maintainer push (e.g., the auto-vet patch).
+    if: github.actor != 'dependabot[bot]'
     timeout-minutes: 130
 
     concurrency:
@@ -69,6 +71,8 @@ jobs:
   e2e_lint:
     name: E2E Lint
     runs-on: ubuntu-22.04
+    # Dependabot-triggered runs have no access to Actions secrets; CI reruns after a maintainer push (e.g., the auto-vet patch).
+    if: github.actor != 'dependabot[bot]'
     timeout-minutes: 130
 
     concurrency:

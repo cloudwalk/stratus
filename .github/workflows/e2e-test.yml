@@ -33,6 +33,8 @@ jobs:
   e2e:
     name: E2E Tests
     runs-on: ubuntu-22.04
+    # Dependabot-triggered runs have no access to Actions secrets; CI reruns after a maintainer push (e.g., the auto-vet patch).
+    if: github.actor != 'dependabot[bot]'
     timeout-minutes: 130
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
