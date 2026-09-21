@@ -1,8 +1,9 @@
 //! `--validate-config`: parse-time validation of the configuration.
 //!
 //! Runs the same loading path as a real node and, instead of starting services, prints the
-//! divergences that can be known statically (mirroring checks the node performs when services
-//! start), the final configuration rendered as TOML in the config-file dialect, and a verdict.
+//! divergences that can be known statically (through the same checks the node performs when
+//! services start), the final configuration rendered as TOML in the config-file dialect, and a
+//! verdict.
 //! Exits with status 0 when the configuration is valid, 1 when it is not.
 
 mod palette;
@@ -11,7 +12,7 @@ use anyhow::Context;
 
 use self::palette::Palette;
 use crate::config::StratusConfig;
-use crate::infra::kafka::KafkaSecurityProtocol;
+use crate::infra::kafka::KafkaConfig;
 
 /// Severity of a step's findings: errors fail the validation, warnings do not.
 enum Severity {
@@ -21,10 +22,10 @@ enum Severity {
 
 /// One workflow step: an independent inspection of the final configuration.
 enum Step {
-    /// Mirrors the completeness check of `KafkaConnector::new`
+    /// Shares the completeness check of `KafkaConnector::new`
     KafkaCompleteness,
 
-    /// Mirrors `MinerConfig::init`
+    /// Shares the block-mode conflict check of `MinerConfig::init`
     MinerExternalBlockMode,
 
     /// A genesis file that does not exist is silently replaced by the default genesis block at runtime.
@@ -63,58 +64,12 @@ impl Step {
     /// Returns an error listing the `[kafka]` fields required by the configured security protocol
     /// that are missing from the configuration.
     fn check_kafka_completeness(config: &StratusConfig) -> Vec<String> {
-        let Some(kafka) = config.kafka_config.as_ref() else {
-            return Vec::new();
-        };
-
-        let mut missing: Vec<&str> = Vec::new();
-        for (field, value) in [
-            ("kafka.bootstrap_servers", &kafka.bootstrap_servers),
-            ("kafka.topic", &kafka.topic),
-            ("kafka.client_id", &kafka.client_id),
-        ] {
-            if value.is_none() {
-                missing.push(field);
-            }
-        }
-
-        match kafka.security_protocol {
-            KafkaSecurityProtocol::SaslSsl => {
-                for (field, value) in [
-                    ("kafka.sasl_mechanisms", &kafka.sasl_mechanisms),
-                    ("kafka.sasl_username", &kafka.sasl_username),
-                    ("kafka.sasl_password", &kafka.sasl_password),
-                ] {
-                    if value.is_none() {
-                        missing.push(field);
-                    }
-                }
-            }
-            KafkaSecurityProtocol::Ssl => {
-                for (field, value) in [
-                    ("kafka.ssl_ca_location", &kafka.ssl_ca_location),
-                    ("kafka.ssl_certificate_location", &kafka.ssl_certificate_location),
-                    ("kafka.ssl_key_location", &kafka.ssl_key_location),
-                ] {
-                    if value.is_none() {
-                        missing.push(field);
-                    }
-                }
-            }
-            KafkaSecurityProtocol::None => {}
-        }
-
-        if missing.is_empty() {
-            return Vec::new();
-        }
-        let fields = missing.iter().map(|field| format!("`{field}`")).collect::<Vec<_>>().join(", ");
-
-        vec![format!("incomplete `[kafka]` configuration: add {fields}")]
+        config.kafka_config.as_ref().and_then(KafkaConfig::missing_fields_error).into_iter().collect()
     }
 
     /// Returns a warning when a follower's miner block mode is not external.
     fn check_miner_external_block_mode(config: &StratusConfig) -> Vec<String> {
-        if (config.follower || config.fake_leader) && !config.miner.block_mode.is_external() {
+        if config.miner.has_conflicting_block_mode(config.node_mode()) {
             return vec!["conflicting `miner.block_mode`: a follower's miner can only start as external, the configured value is ignored".to_string()];
         }
         Vec::new()
@@ -123,12 +78,14 @@ impl Step {
     /// Returns a warning when the configured genesis file does not exist.
     #[cfg(feature = "dev")]
     fn check_genesis_file_exists(config: &StratusConfig) -> Vec<String> {
-        match config.storage.perm_storage.genesis_file.genesis_path.as_deref() {
-            Some(path) if !std::path::Path::new(path).exists() => {
-                vec![format!("missing genesis file, the default genesis block will be used | path={path}")]
-            }
-            _ => Vec::new(),
-        }
+        config
+            .storage
+            .perm_storage
+            .genesis_file
+            .missing_file()
+            .map(|path| format!("missing genesis file, the default genesis block will be used | path={path}"))
+            .into_iter()
+            .collect()
     }
 }
 

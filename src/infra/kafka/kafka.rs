@@ -60,6 +60,52 @@ impl KafkaConfig {
     pub fn init(&self) -> Result<KafkaConnector> {
         KafkaConnector::new(self)
     }
+
+    /// Returns an error listing the fields required by the configured security protocol that are
+    /// missing from the configuration.
+    pub fn missing_fields_error(&self) -> Option<String> {
+        let mut missing: Vec<&str> = Vec::new();
+        for (field, value) in [
+            ("kafka.bootstrap_servers", &self.bootstrap_servers),
+            ("kafka.topic", &self.topic),
+            ("kafka.client_id", &self.client_id),
+        ] {
+            if value.is_none() {
+                missing.push(field);
+            }
+        }
+        match self.security_protocol {
+            KafkaSecurityProtocol::SaslSsl => {
+                for (field, value) in [
+                    ("kafka.sasl_mechanisms", &self.sasl_mechanisms),
+                    ("kafka.sasl_username", &self.sasl_username),
+                    ("kafka.sasl_password", &self.sasl_password),
+                ] {
+                    if value.is_none() {
+                        missing.push(field);
+                    }
+                }
+            }
+            KafkaSecurityProtocol::Ssl => {
+                for (field, value) in [
+                    ("kafka.ssl_ca_location", &self.ssl_ca_location),
+                    ("kafka.ssl_certificate_location", &self.ssl_certificate_location),
+                    ("kafka.ssl_key_location", &self.ssl_key_location),
+                ] {
+                    if value.is_none() {
+                        missing.push(field);
+                    }
+                }
+            }
+            KafkaSecurityProtocol::None => {}
+        }
+
+        if missing.is_empty() {
+            return None;
+        }
+        let fields = missing.iter().map(|field| format!("`{field}`")).collect::<Vec<_>>().join(", ");
+        Some(format!("incomplete `[kafka]` configuration: add {fields}"))
+    }
 }
 
 #[derive(Clone)]
@@ -93,11 +139,13 @@ impl std::fmt::Display for KafkaSecurityProtocol {
 
 impl KafkaConnector {
     pub fn new(config: &KafkaConfig) -> Result<Self> {
-        let (Some(bootstrap_servers), Some(topic), Some(client_id)) = (&config.bootstrap_servers, &config.topic, &config.client_id) else {
-            return Err(anyhow!(
-                "incomplete `[kafka]` configuration: `bootstrap_servers`, `topic` and `client_id` are all required"
-            ));
-        };
+        if let Some(error) = config.missing_fields_error() {
+            return Err(anyhow!("{error}"));
+        }
+
+        let bootstrap_servers = config.bootstrap_servers.as_deref().unwrap();
+        let topic = config.topic.as_deref().unwrap();
+        let client_id = config.client_id.as_deref().unwrap();
 
         tracing::info!(
             topic = %topic,
@@ -118,42 +166,20 @@ impl KafkaConnector {
             KafkaSecurityProtocol::None => client_config.create()?,
             KafkaSecurityProtocol::SaslSsl => client_config
                 .set("security.protocol", "SASL_SSL")
-                .set(
-                    "sasl.mechanisms",
-                    config.sasl_mechanisms.as_ref().ok_or(anyhow!("sasl mechanisms is required"))?.as_str(),
-                )
-                .set(
-                    "sasl.username",
-                    config.sasl_username.as_ref().ok_or(anyhow!("sasl username is required"))?.as_str(),
-                )
-                .set(
-                    "sasl.password",
-                    config.sasl_password.as_ref().ok_or(anyhow!("sasl password is required"))?.as_str(),
-                )
+                .set("sasl.mechanisms", config.sasl_mechanisms.as_deref().unwrap())
+                .set("sasl.username", config.sasl_username.as_deref().unwrap())
+                .set("sasl.password", config.sasl_password.as_deref().unwrap())
                 .create()?,
             KafkaSecurityProtocol::Ssl => client_config
-                .set(
-                    "ssl.ca.location",
-                    config.ssl_ca_location.as_ref().ok_or(anyhow!("ssl ca location is required"))?.as_str(),
-                )
-                .set(
-                    "ssl.certificate.location",
-                    config
-                        .ssl_certificate_location
-                        .as_ref()
-                        .ok_or(anyhow!("ssl certificate location is required"))?
-                        .as_str(),
-                )
-                .set(
-                    "ssl.key.location",
-                    config.ssl_key_location.as_ref().ok_or(anyhow!("ssl key location is required"))?.as_str(),
-                )
+                .set("ssl.ca.location", config.ssl_ca_location.as_deref().unwrap())
+                .set("ssl.certificate.location", config.ssl_certificate_location.as_deref().unwrap())
+                .set("ssl.key.location", config.ssl_key_location.as_deref().unwrap())
                 .create()?,
         };
 
         Ok(Self {
             producer,
-            topic: topic.clone(),
+            topic: topic.to_string(),
         })
     }
 

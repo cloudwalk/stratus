@@ -22,6 +22,7 @@ use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 pub use validate::Validation;
 
+use crate::NodeMode;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::MinerConfig;
@@ -241,6 +242,17 @@ impl StratusConfig {
         }
     }
 
+    /// Node mode resolved from the mode flags; exactly one is active, enforced by the CLI argument
+    /// group.
+    pub fn node_mode(&self) -> NodeMode {
+        match (self.follower, self.leader, self.fake_leader) {
+            (true, false, false) => NodeMode::Follower,
+            (false, true, false) => NodeMode::Leader,
+            (false, false, true) => NodeMode::FakeLeader,
+            _ => unreachable!("exactly one node mode must be active, enforced by the CLI argument group"),
+        }
+    }
+
     /// Returns the names of the active node modes.
     fn active_node_modes(&self) -> Vec<&'static str> {
         [(self.leader, "leader"), (self.follower, "follower"), (self.fake_leader, "fake-leader")]
@@ -296,6 +308,13 @@ pub struct GenesisFileConfig {
     #[arg(id = "storage.permanent.genesis.path", long = "genesis-path")]
     #[serde(rename = "path")]
     pub genesis_path: Option<String>,
+}
+
+impl GenesisFileConfig {
+    /// Returns the configured genesis path when the file does not exist.
+    pub fn missing_file(&self) -> Option<&str> {
+        self.genesis_path.as_deref().filter(|path| !std::path::Path::new(path).exists())
+    }
 }
 
 #[cfg(test)]
