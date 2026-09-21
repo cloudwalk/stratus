@@ -97,6 +97,9 @@ runs:
         [[ "$RETENTION_DAYS" =~ ^[0-9]+$ ]] && (( RETENTION_DAYS >= 1 && RETENTION_DAYS <= 90 )) || fail "artifact-retention-days must be an integer from 1 through 90"
         [[ "$TIMEOUT_MINUTES" =~ ^[0-9]+$ ]] && (( TIMEOUT_MINUTES >= 1 && TIMEOUT_MINUTES <= 360 )) || fail "timeout-minutes must be an integer from 1 through 360"
 
+        # Unset caller inputs serialize as JSON null (push events, API dispatches); normalize to empty strings.
+        DISPATCH_INPUTS=$(jq -c 'with_entries(.value |= (if . == null then "" else . end))' <<<"$DISPATCH_INPUTS" 2>/dev/null) || true
+
         jq -e '
           type == "object" and
           ([keys[] | select(. == "stratus_ref" or . == "pr_number" or . == "ci_key" or . == "correlation_id")] | length == 0) and
@@ -147,6 +150,8 @@ runs:
         EXPECTED_TITLE: ${{ steps.prepare.outputs.expected_title }}
       run: |
         set -euo pipefail
+
+        DISPATCH_INPUTS=$(jq -c 'with_entries(.value |= (if . == null then "" else . end))' <<<"$DISPATCH_INPUTS" 2>/dev/null) || true
 
         payload=$(jq -cn \
           --arg ref "$INTERNAL_REF" \
