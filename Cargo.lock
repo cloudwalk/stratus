@@ -6195,6 +6195,8 @@ dependencies = [
  "alloy-rpc-types-trace",
  "alloy-sol-types",
  "alloy-trie",
+ "anstream",
+ "anstyle",
  "anyhow",
  "base64",
  "bincode",

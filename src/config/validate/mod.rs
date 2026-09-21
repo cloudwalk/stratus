@@ -5,8 +5,11 @@
 //! start), the final configuration rendered as TOML in the config-file dialect, and a verdict.
 //! Exits with status 0 when the configuration is valid, 1 when it is not.
 
+mod palette;
+
 use anyhow::Context;
 
+use self::palette::Palette;
 use crate::config::StratusConfig;
 use crate::infra::kafka::KafkaSecurityProtocol;
 
@@ -161,13 +164,13 @@ impl Validation {
     }
 
     /// Prints the findings, warnings first.
-    fn print(&self) {
+    fn print(&self, palette: &Palette) {
         for warning in &self.warnings {
-            println!("warning: {warning}");
+            println!("{} {warning}", palette.warning("warning:"));
         }
 
         for error in &self.errors {
-            println!("error: {error}");
+            println!("{} {error}", palette.error("error:"));
         }
     }
 }
@@ -187,11 +190,13 @@ impl StratusConfig {
     /// `--validate-config`: prints the validation report and the final configuration, then exits
     /// without starting the node. Never returns.
     pub(crate) fn validate_and_exit(&self) -> ! {
+        let palette = Palette::detect();
         let validation = self.validate();
-        validation.print();
+        validation.print(&palette);
 
         println!();
-        println!("final configuration:");
+        println!("{}", palette.heading("final configuration:"));
+        println!("{}", palette.rule());
         match self.render_as_toml() {
             Ok(rendered) => println!("{rendered}"),
             Err(e) => {
@@ -199,12 +204,14 @@ impl StratusConfig {
                 std::process::exit(1);
             }
         }
+        println!("{}", palette.rule());
 
         if validation.is_valid() {
-            println!("configuration is valid");
+            println!("{}", palette.valid("configuration is valid"));
             std::process::exit(0);
         }
-        println!("configuration is invalid | errors={}", validation.errors.len());
+        let verdict = format!("configuration is invalid | errors={}", validation.errors.len());
+        println!("{}", palette.error(&verdict));
         std::process::exit(1);
     }
 }

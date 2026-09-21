@@ -433,6 +433,7 @@ fn assert_config_valid(args: &[&str], content: &str, expected: &[&str]) -> Strin
     for text in expected {
         assert!(stdout.contains(text), "expected text not found\n  expected: {text}\n  output: {stdout}");
     }
+    assert!(!stdout.contains('\u{1b}'), "expected plain output when stdout is not a terminal\n  output: {stdout}");
     stdout.to_string()
 }
 
