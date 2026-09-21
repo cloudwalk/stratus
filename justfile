@@ -110,6 +110,7 @@ stratus-test *args="":
     source <(just coverage-env)
     echo "leader features: dev"
     cargo build {{profile_flag}} --features dev
+    just _wait_for_rocksdb_lock "$@" || exit 1
     cargo run {{profile_flag}} --bin stratus --features dev -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
     just _wait_for_stratus
 
@@ -130,6 +131,7 @@ stratus-follower-test *args="":
     source <(just coverage-env)
     echo "follower features: dev"
     cargo build {{profile_flag}} --features dev
+    just _wait_for_rocksdb_lock "$@" || exit 1
     cargo run {{profile_flag}} --bin stratus --features dev -- --config config/stratus-follower.toml --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
     just _wait_for_stratus 3001
 
@@ -140,6 +142,7 @@ stratus-fake-leader-test *args="":
     FEATURES="dev"
     echo "fake-leader features: " $FEATURES
     cargo build {{profile_flag}} --features $FEATURES
+    just _wait_for_rocksdb_lock "$@" || exit 1
     cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --config config/stratus-follower.toml --fake-leader --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_fake_leader.log &
     just _wait_for_stratus 3001
 

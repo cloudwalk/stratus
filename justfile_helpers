@@ -27,3 +27,21 @@ _wait_for_stratus_finish port="3000":
     while nc -z localhost {{port}}; do
         sleep 0.1 # wait for 1/10 of the second before check again
     done
+
+# Wait for a previous Stratus instance to release its RocksDB lock before starting a new one.
+_wait_for_rocksdb_lock *args="":
+    #!/bin/bash
+    prefix=""
+    for arg in "$@"; do
+        case "$arg" in --rocks-path-prefix=*) prefix="${arg#--rocks-path-prefix=}" ;; esac
+    done
+    [ -n "$prefix" ] || exit 0
+    lock_file="${prefix}-rocksdb/LOCK"
+    for attempt in $(seq 1 30); do
+        [ ! -e "$lock_file" ] && exit 0
+        flock -n "$lock_file" true 2>/dev/null && exit 0
+        just _log "Waiting for previous Stratus instance to release ${prefix}-rocksdb (${attempt}/30)"
+        sleep 1
+    done
+    just _log "Error: ${lock_file} still held by a previous Stratus instance"
+    exit 1
