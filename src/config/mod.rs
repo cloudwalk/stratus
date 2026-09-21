@@ -4,7 +4,7 @@
 //! See [`crate::config::loader`] for the loading rules.
 
 pub mod loader;
-pub mod validate;
+mod validate;
 
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;

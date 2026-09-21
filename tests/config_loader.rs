@@ -4,7 +4,6 @@ use std::ffi::OsString;
 
 use stratus::config::Environment;
 use stratus::config::StratusConfig;
-use stratus::config::validate;
 use stratus::eth::miner::MinerMode;
 
 /// Parses CLI arguments over the given config file content and builds the merged configuration.
@@ -250,14 +249,14 @@ fn test_render_omits_absent_and_ignored_sections() {
         external_rpc = "http://127.0.0.1:3000/"
     "#;
     let config = load_with(&[], file).unwrap();
-    let rendered = validate::render(&config).unwrap();
+    let rendered = config.render_as_toml().unwrap();
     assert!(rendered.contains("follower = true"), "expected mode in output\n{rendered}");
     assert!(rendered.contains("[importer]"), "expected the present importer section\n{rendered}");
     assert!(!rendered.contains("[kafka]"), "expected no kafka section\n{rendered}");
     assert!(!rendered.contains("[common.sentry]"), "expected no sentry section\n{rendered}");
 
     let config = load_with(&["--leader"], file).unwrap();
-    let rendered = validate::render(&config).unwrap();
+    let rendered = config.render_as_toml().unwrap();
     assert!(rendered.contains("leader = true"), "expected mode in output\n{rendered}");
     assert!(!rendered.contains("[importer]"), "expected no importer section in leader mode\n{rendered}");
 }

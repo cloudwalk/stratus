@@ -35,7 +35,6 @@ use toml::Table;
 use toml::Value;
 
 use crate::config::StratusConfig;
-use crate::config::validate;
 use crate::infra::build_info;
 
 /// Arguments that make no sense as config file fields; they warn as unknown when present in a file.
@@ -172,9 +171,7 @@ fn config_from_matches(matches: &ArgMatches) -> anyhow::Result<StratusConfig> {
     config.ignore_sentry_without_url();
 
     if cli.validate_config {
-        // this kills the process so it doesn't continue it's execution
-        // didn't think in a better way of doing this yet :/
-        validate::run(&config);
+        config.validate_and_exit();
     }
 
     Ok(config)
@@ -442,7 +439,7 @@ mod tests {
 
         let file = file.replace("{GENESIS_SECTION}", GENESIS_SECTION);
         let config = load_with(&[], &file).unwrap();
-        let rendered = super::validate::render(&config).unwrap();
+        let rendered = config.render_as_toml().unwrap();
         let table = super::parse_config_table(&rendered).unwrap();
         let command = super::ConfigCli::command();
         let unknown = super::unknown_fields(&table, &command);
