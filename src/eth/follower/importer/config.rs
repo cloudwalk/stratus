@@ -81,21 +81,6 @@ pub struct ImporterConfig {
     pub stop_at_block: Option<BlockNumber>,
 }
 
-impl Default for ImporterConfig {
-    fn default() -> Self {
-        Self {
-            external_rpc: None,
-            external_rpc_ws: None,
-            external_rpc_timeout: Duration::from_millis(2_000),
-            sync_interval: Duration::from_millis(100),
-            enable_block_changes_replication: false,
-            importer_async_threads: 4,
-            forward_access_list: true,
-            stop_at_block: None,
-        }
-    }
-}
-
 impl ImporterConfig {
     pub async fn init(
         &self,

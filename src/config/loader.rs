@@ -547,4 +547,19 @@ mod tests {
         assert_eq!(kafka.group_id.as_deref(), Some("stratus-group"));
         assert_eq!(kafka.security_protocol.to_string(), "sasl_ssl");
     }
+
+    #[test]
+    fn test_empty_config_uses_defaults() {
+        // an empty file plus the minimal valid arguments must yield exactly the defaults
+        let config = load_with(&["--leader", "--executor-chain-id", "1"], "").unwrap();
+        let default = StratusConfig {
+            leader: true,
+            executor: crate::eth::executor::ExecutorConfig {
+                executor_chain_id: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(serde_json::to_value(&config).unwrap(), serde_json::to_value(&default).unwrap());
+    }
 }

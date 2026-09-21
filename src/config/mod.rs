@@ -86,6 +86,7 @@ pub struct CommonConfig {
     pub blocked_clients: Vec<String>,
 }
 
+#[cfg(test)]
 impl Default for CommonConfig {
     fn default() -> Self {
         Self {
@@ -94,7 +95,9 @@ impl Default for CommonConfig {
             num_blocking_threads: 512,
             tracing: TracingConfig::default(),
             sentry: None,
-            metrics: MetricsConfig::default(),
+            metrics: MetricsConfig {
+                metrics_exporter_address: std::net::SocketAddr::from(([0, 0, 0, 0], 9000)),
+            },
             nocapture: false,
             unknown_client_enabled: true,
             blocked_clients: Vec::new(),
@@ -166,7 +169,8 @@ impl CommonConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for main Stratus service.
-#[derive(DebugAsJson, Clone, Default, Parser, derive_more::Deref, serde::Serialize)]
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
+#[cfg_attr(test, derive(Default))]
 #[clap(group = ArgGroup::new("mode").args(&["leader", "follower", "fake_leader"]).required(true))]
 pub struct StratusConfig {
     #[arg(id = "leader", long = "leader", conflicts_with_all = ["follower", "fake_leader"])]
@@ -283,7 +287,8 @@ impl FromStr for Environment {
 }
 
 /// Genesis configuration
-#[derive(DebugAsJson, Clone, Parser, Default, serde::Serialize)]
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+#[cfg_attr(test, derive(Default))]
 pub struct GenesisFileConfig {
     /// Path to the genesis.json file
     #[arg(id = "storage.permanent.genesis.path", long = "genesis-path")]

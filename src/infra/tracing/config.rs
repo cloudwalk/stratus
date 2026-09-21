@@ -67,6 +67,7 @@ pub struct TracingConfig {
     pub tracing_filter: Option<String>,
 }
 
+#[cfg(test)]
 impl Default for TracingConfig {
     fn default() -> Self {
         Self {

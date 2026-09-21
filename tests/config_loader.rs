@@ -189,21 +189,6 @@ fn test_importer_cli_overrides_file() {
 }
 
 #[test]
-fn test_empty_config_uses_defaults() {
-    // an empty file plus the minimal valid arguments must yield exactly the defaults
-    let config = load_with(&["--leader", "--executor-chain-id", "1"], "").unwrap();
-    let default = StratusConfig {
-        leader: true,
-        executor: stratus::eth::executor::ExecutorConfig {
-            executor_chain_id: 1,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    assert_eq!(serde_json::to_value(&config).unwrap(), serde_json::to_value(&default).unwrap());
-}
-
-#[test]
 fn test_partial_importer_and_kafka_overrides() {
     // a single importer/kafka flag must not demand sibling arguments the file already provides
     let file = r#"
