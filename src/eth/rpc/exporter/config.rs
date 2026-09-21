@@ -15,6 +15,7 @@ pub struct ExporterConfig {
     pub exporter_blocking_threads: usize,
 }
 
+#[cfg(test)]
 impl Default for ExporterConfig {
     fn default() -> Self {
         Self {
