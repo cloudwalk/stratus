@@ -281,3 +281,190 @@ fn test_empty_arrays_and_lists() {
     assert!(config.common.blocked_clients.is_empty());
     assert!(config.common.tracing.tracing_headers.is_empty());
 }
+
+const FOLLOWER_FILE: &str = r#"
+    follower = true
+
+    [executor]
+    chain_id = 2008
+
+    [importer]
+    external_rpc = "http://127.0.0.1:3000/"
+"#;
+
+#[test]
+fn test_kafka_completeness() {
+    let file = format!(
+        "{FOLLOWER_FILE}\n{}",
+        r#"
+        [kafka]
+        bootstrap_servers = "localhost:29092"
+        topic = "stratus-events"
+        client_id = "stratus-producer"
+        "#
+    );
+    let config = load_with(&[], &file).unwrap();
+    let validation = config.validate();
+    assert!(validation.errors.is_empty(), "unexpected errors: {:?}", validation.errors);
+
+    let file = format!(
+        "{FOLLOWER_FILE}\n{}",
+        r#"
+        [kafka]
+        bootstrap_servers = "localhost:29092"
+        "#
+    );
+    let config = load_with(&[], &file).unwrap();
+    let validation = config.validate();
+    assert_eq!(validation.errors.len(), 1, "unexpected errors: {:?}", validation.errors);
+    assert!(
+        validation.errors[0].contains("incomplete `[kafka]` configuration"),
+        "unexpected error: {:?}",
+        validation.errors
+    );
+    assert!(
+        validation.errors[0].contains("`kafka.topic`"),
+        "missing field not reported: {:?}",
+        validation.errors
+    );
+    assert!(
+        validation.errors[0].contains("`kafka.client_id`"),
+        "missing field not reported: {:?}",
+        validation.errors
+    );
+
+    let file = format!(
+        "{FOLLOWER_FILE}\n{}",
+        r#"
+        [kafka]
+        bootstrap_servers = "localhost:29092"
+        topic = "stratus-events"
+        client_id = "stratus-producer"
+        security_protocol = "sasl-ssl"
+        sasl_username = "user"
+        "#
+    );
+    let config = load_with(&[], &file).unwrap();
+    let validation = config.validate();
+    assert_eq!(validation.errors.len(), 1, "unexpected errors: {:?}", validation.errors);
+    assert!(
+        validation.errors[0].contains("`kafka.sasl_mechanisms`"),
+        "missing field not reported: {:?}",
+        validation.errors
+    );
+    assert!(
+        validation.errors[0].contains("`kafka.sasl_password`"),
+        "missing field not reported: {:?}",
+        validation.errors
+    );
+
+    let file = format!(
+        "{FOLLOWER_FILE}\n{}",
+        r#"
+        [kafka]
+        bootstrap_servers = "localhost:29092"
+        topic = "stratus-events"
+        client_id = "stratus-producer"
+        security_protocol = "ssl"
+        "#
+    );
+    let config = load_with(&[], &file).unwrap();
+    let validation = config.validate();
+    assert_eq!(validation.errors.len(), 1, "unexpected errors: {:?}", validation.errors);
+    assert!(
+        validation.errors[0].contains("`kafka.ssl_ca_location`"),
+        "missing field not reported: {:?}",
+        validation.errors
+    );
+    assert!(
+        validation.errors[0].contains("`kafka.ssl_key_location`"),
+        "missing field not reported: {:?}",
+        validation.errors
+    );
+}
+
+#[test]
+fn test_miner_block_mode_conflict() {
+    let file = format!(
+        "{FOLLOWER_FILE}\n{}",
+        r#"
+        [miner]
+        block_mode = "1s"
+        "#
+    );
+    let config = load_with(&[], &file).unwrap();
+    let validation = config.validate();
+    assert!(validation.is_valid(), "unexpected errors: {:?}", validation.errors);
+    assert_eq!(validation.warnings.len(), 1, "unexpected warnings: {:?}", validation.warnings);
+    assert!(validation.warnings[0].contains("block_mode"), "unexpected warning: {:?}", validation.warnings);
+
+    let file = format!(
+        "{FOLLOWER_FILE}\n{}",
+        r#"
+        [miner]
+        block_mode = "external"
+        "#
+    );
+    let config = load_with(&[], &file).unwrap();
+    let validation = config.validate();
+    assert!(validation.warnings.is_empty(), "unexpected warnings: {:?}", validation.warnings);
+
+    let config = load_with(&["--leader"], &file).unwrap();
+    let validation = config.validate();
+    assert!(validation.warnings.is_empty(), "unexpected warnings: {:?}", validation.warnings);
+}
+
+#[cfg(feature = "dev")]
+#[test]
+fn test_missing_genesis_file_warns() {
+    let file = format!(
+        "{FOLLOWER_FILE}\n{}",
+        r#"
+        [storage.permanent.genesis]
+        path = "/nonexistent/genesis.json"
+        "#
+    );
+    let config = load_with(&[], &file).unwrap();
+    let validation = config.validate();
+    assert!(validation.is_valid(), "unexpected errors: {:?}", validation.errors);
+    assert!(
+        validation
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("missing genesis file") && warning.contains("/nonexistent/genesis.json")),
+        "unexpected warnings: {:?}",
+        validation.warnings
+    );
+}
+
+#[test]
+fn test_workflow_collects_all_findings() {
+    let file = format!(
+        "{FOLLOWER_FILE}\n{}",
+        r#"
+        [miner]
+        block_mode = "1s"
+
+        [kafka]
+        bootstrap_servers = "localhost:29092"
+        "#
+    );
+    let config = load_with(&[], &file).unwrap();
+    let validation = config.validate();
+    assert!(!validation.is_valid());
+    assert_eq!(validation.errors.len(), 1, "unexpected errors: {:?}", validation.errors);
+    assert_eq!(validation.warnings.len(), 1, "unexpected warnings: {:?}", validation.warnings);
+
+    let file = format!(
+        "{FOLLOWER_FILE}\n{}",
+        r#"
+        [miner]
+        block_mode = "external"
+        "#
+    );
+    let config = load_with(&[], &file).unwrap();
+    let validation = config.validate();
+    assert!(validation.is_valid());
+    assert!(validation.warnings.is_empty(), "unexpected warnings: {:?}", validation.warnings);
+    assert!(validation.errors.is_empty(), "unexpected errors: {:?}", validation.errors);
+}

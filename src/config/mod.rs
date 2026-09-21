@@ -20,6 +20,7 @@ use stratus_metrics::MetricsConfig;
 use strum::VariantNames;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
+pub use validate::Validation;
 
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::follower::importer::ImporterConfig;

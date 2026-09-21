@@ -131,9 +131,12 @@ impl Step {
 
 /// The findings of one validation run.
 #[derive(Default)]
-struct Validation {
-    warnings: Vec<String>,
-    errors: Vec<String>,
+pub struct Validation {
+    /// Findings that do not fail the validation.
+    pub warnings: Vec<String>,
+
+    /// Findings that fail the validation.
+    pub errors: Vec<String>,
 }
 
 impl Validation {
@@ -153,7 +156,7 @@ impl Validation {
     }
 
     /// Returns whether the configuration is valid: no errors, warnings allowed.
-    fn is_valid(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         self.errors.is_empty()
     }
 
@@ -170,6 +173,11 @@ impl Validation {
 }
 
 impl StratusConfig {
+    /// Runs the validation workflow over the final configuration and returns its findings.
+    pub fn validate(&self) -> Validation {
+        Validation::run(self)
+    }
+
     /// Renders the configuration as TOML in the config-file dialect.
     pub fn render_as_toml(&self) -> anyhow::Result<String> {
         let value = toml::Value::try_from(self).context("failed to serialize the final configuration")?;
@@ -179,7 +187,7 @@ impl StratusConfig {
     /// `--validate-config`: prints the validation report and the final configuration, then exits
     /// without starting the node. Never returns.
     pub(crate) fn validate_and_exit(&self) -> ! {
-        let validation = Validation::run(self);
+        let validation = self.validate();
         validation.print();
 
         println!();
@@ -198,174 +206,5 @@ impl StratusConfig {
         }
         println!("configuration is invalid | errors={}", validation.errors.len());
         std::process::exit(1);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::ffi::OsString;
-
-    use crate::config::StratusConfig;
-
-    const FOLLOWER_FILE: &str = r#"
-        follower = true
-
-        [executor]
-        chain_id = 2008
-
-        [importer]
-        external_rpc = "http://127.0.0.1:3000/"
-    "#;
-
-    /// Parses CLI arguments over the given config file content and builds the merged configuration.
-    fn load_with(args: &[&str], file_content: &str) -> StratusConfig {
-        let argv: Vec<OsString> = args.iter().map(OsString::from).collect();
-        StratusConfig::load_from(&argv, file_content).expect("failed to load config")
-    }
-
-    #[test]
-    fn test_kafka_completeness() {
-        let file = format!(
-            "{FOLLOWER_FILE}\n{}",
-            r#"
-                [kafka]
-                bootstrap_servers = "localhost:29092"
-                topic = "stratus-events"
-                client_id = "stratus-producer"
-            "#
-        );
-        let config = load_with(&[], &file);
-        assert!(super::Step::KafkaCompleteness.check(&config).is_empty());
-
-        let file = format!(
-            "{FOLLOWER_FILE}\n{}",
-            r#"
-                [kafka]
-                bootstrap_servers = "localhost:29092"
-            "#
-        );
-        let config = load_with(&[], &file);
-        let errors = super::Step::KafkaCompleteness.check(&config);
-        assert_eq!(errors.len(), 1);
-        assert!(errors[0].contains("incomplete `[kafka]` configuration"), "unexpected error: {errors:?}");
-        assert!(errors[0].contains("`kafka.topic`"), "missing field not reported: {errors:?}");
-        assert!(errors[0].contains("`kafka.client_id`"), "missing field not reported: {errors:?}");
-
-        let file = format!(
-            "{FOLLOWER_FILE}\n{}",
-            r#"
-                [kafka]
-                bootstrap_servers = "localhost:29092"
-                topic = "stratus-events"
-                client_id = "stratus-producer"
-                security_protocol = "sasl-ssl"
-                sasl_username = "user"
-            "#
-        );
-        let config = load_with(&[], &file);
-        let errors = super::Step::KafkaCompleteness.check(&config);
-        assert_eq!(errors.len(), 1);
-        assert!(errors[0].contains("`kafka.sasl_mechanisms`"), "missing field not reported: {errors:?}");
-        assert!(errors[0].contains("`kafka.sasl_password`"), "missing field not reported: {errors:?}");
-
-        let file = format!(
-            "{FOLLOWER_FILE}\n{}",
-            r#"
-                [kafka]
-                bootstrap_servers = "localhost:29092"
-                topic = "stratus-events"
-                client_id = "stratus-producer"
-                security_protocol = "ssl"
-            "#
-        );
-        let config = load_with(&[], &file);
-        let errors = super::Step::KafkaCompleteness.check(&config);
-        assert_eq!(errors.len(), 1);
-        assert!(errors[0].contains("`kafka.ssl_ca_location`"), "missing field not reported: {errors:?}");
-        assert!(errors[0].contains("`kafka.ssl_key_location`"), "missing field not reported: {errors:?}");
-    }
-
-    #[test]
-    fn test_miner_block_mode_conflict() {
-        let file = format!(
-            "{FOLLOWER_FILE}\n{}",
-            r#"
-                [miner]
-                block_mode = "1s"
-            "#
-        );
-        let config = load_with(&[], &file);
-        let warnings = super::Step::MinerExternalBlockMode.check(&config);
-        assert_eq!(warnings.len(), 1);
-        assert!(warnings[0].contains("block_mode"), "unexpected warning: {warnings:?}");
-
-        let file = format!(
-            "{FOLLOWER_FILE}\n{}",
-            r#"
-                [miner]
-                block_mode = "external"
-            "#
-        );
-        let config = load_with(&[], &file);
-        assert!(super::Step::MinerExternalBlockMode.check(&config).is_empty());
-
-        let file = format!(
-            "{FOLLOWER_FILE}\n{}",
-            r#"
-                [miner]
-                block_mode = "1s"
-            "#
-        );
-        let config = load_with(&["--leader"], &file);
-        assert!(super::Step::MinerExternalBlockMode.check(&config).is_empty());
-    }
-
-    #[cfg(feature = "dev")]
-    #[test]
-    fn test_missing_genesis_file_warns() {
-        let file = format!(
-            "{FOLLOWER_FILE}\n{}",
-            r#"
-                [storage.permanent.genesis]
-                path = "/nonexistent/genesis.json"
-            "#
-        );
-        let config = load_with(&[], &file);
-        let warnings = super::Step::GenesisFileExists.check(&config);
-        assert_eq!(warnings.len(), 1);
-        assert!(warnings[0].contains("missing genesis file"), "unexpected warning: {warnings:?}");
-        assert!(warnings[0].contains("/nonexistent/genesis.json"), "unexpected warning: {warnings:?}");
-    }
-
-    #[test]
-    fn test_workflow_collects_all_findings() {
-        let file = format!(
-            "{FOLLOWER_FILE}\n{}",
-            r#"
-                [miner]
-                block_mode = "1s"
-
-                [kafka]
-                bootstrap_servers = "localhost:29092"
-            "#
-        );
-        let config = load_with(&[], &file);
-        let validation = super::Validation::run(&config);
-        assert!(!validation.is_valid());
-        assert_eq!(validation.errors.len(), 1, "unexpected errors: {:?}", validation.errors);
-        assert_eq!(validation.warnings.len(), 1, "unexpected warnings: {:?}", validation.warnings);
-
-        let file = format!(
-            "{FOLLOWER_FILE}\n{}",
-            r#"
-                [miner]
-                block_mode = "external"
-            "#
-        );
-        let config = load_with(&[], &file);
-        let validation = super::Validation::run(&config);
-        assert!(validation.is_valid());
-        assert!(validation.warnings.is_empty(), "unexpected warnings: {:?}", validation.warnings);
-        assert!(validation.errors.is_empty(), "unexpected errors: {:?}", validation.errors);
     }
 }
