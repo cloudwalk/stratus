@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Stratus is a high-performance EVM-compatible blockchain infrastructure written in Rust, designed as an EVM executor and JSON-RPC server with custom storage capabilities. It supports 10k TPS for reads and 2.5k TPS for writes, with a distributed leader-follower architecture.
 
+## Private Heavy CI
+
+Heavy public checks proxy the checked-out commit to private workflows in `cloudwalk/stratus-internal-builds`, while preserving public check names. Fork pull requests cannot access this CI; a maintainer must push the exact commits to a `cloudwalk/stratus` branch and rerun. Kafka defaults to `E2E_KAFKA_BOOTSTRAP_SERVERS=localhost:29092`; set `KAFKA_MANAGED_EXTERNALLY=1` with an externally managed broker (the CI Compose service is `kafka:9092`) to skip local Kafka startup, topic creation, and teardown.
+
 ## Development Commands
 
 ### Core Commands

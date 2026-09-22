@@ -274,6 +274,12 @@ mod tests {
     }
 
     #[test]
+    fn test_help_contains_config_option() {
+        let help = super::ConfigCli::command().render_long_help().to_string();
+        assert!(help.contains("--config"));
+    }
+
+    #[test]
     fn test_every_config_argument_has_a_long_flag() {
         // file values become `--long=value` tokens, so an argument without a long flag would never
         // receive its value from the config file
