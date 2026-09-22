@@ -267,7 +267,7 @@ impl Server {
     async fn health(&self) -> bool {
         match GlobalState::get_node_mode() {
             NodeMode::Leader | NodeMode::FakeLeader => true,
-            NodeMode::Follower =>
+            NodeMode::Follower => {
                 if GlobalState::is_importer_shutdown() {
                     tracing::warn!("stratus is unhealthy because importer is shutdown");
                     false
@@ -279,7 +279,8 @@ impl Server {
                             false
                         }
                     }
-                },
+                }
+            }
         }
     }
 }

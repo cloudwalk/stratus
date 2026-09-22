@@ -24,6 +24,7 @@ use alloy_rpc_types_eth::AccessList;
 use anyhow::Context;
 use display_json::DebugAsJson;
 
+use crate::alias::AlloyAddress;
 use crate::alias::AlloyTransaction;
 use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::rpc::TransactionDecodeError;
@@ -52,12 +53,8 @@ fn decode_next<T: RlpDecodable>(rlp: &mut alloy_rlp::Rlp<'_>, field: &'static st
 
 /// Decodes the `to` field: empty bytes mean contract creation, otherwise a 20-byte address.
 fn decode_to_field(rlp: &mut alloy_rlp::Rlp<'_>) -> Result<Option<Address>, TransactionDecodeError> {
-    let to_bytes = decode_next::<Bytes>(rlp, "to")?;
-    if to_bytes.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(Address::try_from(to_bytes.as_ref())?))
-    }
+    let to = decode_next::<TxKind>(rlp, "to")?;
+    Ok(to.into_to().map(Address::from))
 }
 
 /// Common fields shared by EIP-2930, EIP-1559, EIP-4844, and EIP-7702 transactions.
@@ -209,28 +206,18 @@ impl TransactionInput {
         B256::from(keccak256(hash_input))
     }
 
-    /// Returns the RLP encoding of the `to` field: empty bytes for contract creation,
-    /// or the 20-byte address for a call.
-    fn encode_to(&self) -> Vec<u8> {
-        self.execution_info.to.map(|addr| addr.0.to_vec()).unwrap_or_default()
-    }
-
-    /// Returns the RLP encoding of the transaction `input` data.
-    fn encode_input(&self) -> Vec<u8> {
-        self.execution_info.input.0.to_vec()
-    }
-
     /// Computes the transaction signature hash from the fields stored in this input.
     ///
-    /// Encodes the unsigned transaction directly via RLP.
+    /// Encodes the unsigned transaction directly via RLP, reusing the alloy RLP
+    /// implementations of our primitive wrapper types.
     fn signature_hash(&self) -> B256 {
-        let chain_id = self.execution_info.chain_id.map(|c| c.0.as_u64()).unwrap_or_default();
-        let nonce = self.execution_info.nonce.as_u64();
-        let gas_limit = self.execution_info.gas_limit.as_u64();
+        let chain_id = self.execution_info.chain_id.unwrap_or_default();
+        let nonce = self.execution_info.nonce;
+        let gas_limit = self.execution_info.gas_limit;
         let gas_price = self.execution_info.gas_price;
-        let value = self.execution_info.value.0;
-        let to = self.encode_to();
-        let input = self.encode_input();
+        let value = self.execution_info.value;
+        let to = TxKind::from(self.execution_info.to.map(AlloyAddress::from));
+        let input = &self.execution_info.input;
 
         let tx_type = self
             .transaction_info
@@ -240,16 +227,7 @@ impl TransactionInput {
 
         // Select the fields to encode per transaction type, then encode once.
         let fields: &[&dyn RlpEncodable] = match tx_type {
-            TxType::Eip2930 => &[
-                &chain_id,
-                &nonce,
-                &gas_price,
-                &gas_limit,
-                &to.as_slice(),
-                &value,
-                &input.as_slice(),
-                &AccessList::default(),
-            ],
+            TxType::Eip2930 => &[&chain_id, &nonce, &gas_price, &gas_limit, &to, &value, input, &AccessList::default()],
 
             TxType::Eip1559 => &[
                 &chain_id,
@@ -257,9 +235,9 @@ impl TransactionInput {
                 &gas_price, // max_priority_fee_per_gas
                 &gas_price, // max_fee_per_gas
                 &gas_limit,
-                &to.as_slice(),
+                &to,
                 &value,
-                &input.as_slice(),
+                input,
                 &AccessList::default(),
             ],
 
@@ -269,9 +247,9 @@ impl TransactionInput {
                 &gas_price, // max_priority_fee_per_gas
                 &gas_price, // max_fee_per_gas
                 &gas_limit,
-                &to.as_slice(),
+                &to,
                 &value,
-                &input.as_slice(),
+                input,
                 &AccessList::default(),
                 &0u128,              // max_fee_per_blob_gas
                 &Vec::<B256>::new(), // blob_versioned_hashes
@@ -283,17 +261,16 @@ impl TransactionInput {
                 &gas_price, // max_priority_fee_per_gas
                 &gas_price, // max_fee_per_gas
                 &gas_limit,
-                &to.as_slice(),
+                &to,
                 &value,
-                &input.as_slice(),
+                input,
                 &AccessList::default(),
                 &Vec::<SignedAuthorization>::new(), // authorization list placeholder
             ],
 
-            TxType::Legacy if self.execution_info.chain_id.is_some() =>
-                &[&nonce, &gas_price, &gas_limit, &to.as_slice(), &value, &input.as_slice(), &chain_id, &0u8, &0u8],
+            TxType::Legacy if self.execution_info.chain_id.is_some() => &[&nonce, &gas_price, &gas_limit, &to, &value, input, &chain_id, &0u8, &0u8],
 
-            TxType::Legacy => &[&nonce, &gas_price, &gas_limit, &to.as_slice(), &value, &input.as_slice()],
+            TxType::Legacy => &[&nonce, &gas_price, &gas_limit, &to, &value, input],
         };
 
         let tx_type = if matches!(tx_type, TxType::Legacy) { None } else { Some(tx_type) };
