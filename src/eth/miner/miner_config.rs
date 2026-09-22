@@ -23,6 +23,7 @@ pub struct MinerConfig {
     pub block_mode: MinerMode,
 }
 
+#[cfg(test)]
 impl Default for MinerConfig {
     fn default() -> Self {
         Self {

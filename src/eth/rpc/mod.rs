@@ -2,6 +2,7 @@
 
 mod config;
 mod context;
+mod exporter;
 pub mod middleware;
 pub(crate) mod pagination;
 mod parser;
@@ -11,6 +12,7 @@ pub mod types;
 
 pub use config::RpcServerConfig;
 pub use context::RpcContext;
+pub use exporter::ExporterConfig;
 pub use middleware::RpcHttpMiddleware;
 pub use middleware::RpcMiddleware;
 use parser::next_rpc_param;

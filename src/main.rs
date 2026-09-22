@@ -45,6 +45,10 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let consensus = Arc::new(RwLock::new(consensus));
     let importer_runtime = Arc::new(RwLock::new(importer_runtime));
 
+    // Init exporter runtime
+    let exporter_runtime = config.exporter.init().await?;
+    let exporter_runtime = Arc::new(RwLock::new(Some(exporter_runtime)));
+
     // Init RPC server
     Server::new(
         // Services
@@ -53,6 +57,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         miner,
         consensus,
         importer_runtime,
+        exporter_runtime,
         // Config
         config.clone(),
         config.rpc_server,

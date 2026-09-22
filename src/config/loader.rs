@@ -274,6 +274,12 @@ mod tests {
     }
 
     #[test]
+    fn test_help_contains_config_option() {
+        let help = super::ConfigCli::command().render_long_help().to_string();
+        assert!(help.contains("--config"));
+    }
+
+    #[test]
     fn test_every_config_argument_has_a_long_flag() {
         // file values become `--long=value` tokens, so an argument without a long flag would never
         // receive its value from the config file
@@ -434,6 +440,10 @@ mod tests {
             [miner]
             block_mode = "1s"
 
+            [exporter]
+            async_threads = 2
+            blocking_threads = 32
+
             [storage.cache]
             account_history_cache_capacity = 30000
             slot_history_cache_capacity = 400000
@@ -524,6 +534,8 @@ mod tests {
         assert_eq!(config.executor.executor_chain_id, 100);
         assert_eq!(config.executor.executor_evm_spec.to_string(), "Cancun");
         assert_eq!(config.miner.block_mode, MinerMode::Interval(std::time::Duration::from_secs(1)));
+        assert_eq!(config.exporter.exporter_async_threads, 2);
+        assert_eq!(config.exporter.exporter_blocking_threads, 32);
         assert_eq!(config.storage.perm_storage.rocks_path_prefix.as_deref(), Some("temp_3001"));
         assert_eq!(config.storage.perm_storage.rocks_file_descriptors_limit, 1024);
         assert_eq!(config.storage.perm_storage.rocks_cf_cache.accounts, 1000);
@@ -540,5 +552,20 @@ mod tests {
         assert_eq!(kafka.bootstrap_servers.as_deref(), Some("localhost:29092"));
         assert_eq!(kafka.group_id.as_deref(), Some("stratus-group"));
         assert_eq!(kafka.security_protocol.to_string(), "sasl_ssl");
+    }
+
+    #[test]
+    fn test_empty_config_uses_defaults() {
+        // an empty file plus the minimal valid arguments must yield exactly the defaults
+        let config = load_with(&["--leader", "--executor-chain-id", "1"], "").unwrap();
+        let default = StratusConfig {
+            leader: true,
+            executor: crate::eth::executor::ExecutorConfig {
+                executor_chain_id: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(serde_json::to_value(&config).unwrap(), serde_json::to_value(&default).unwrap());
     }
 }
