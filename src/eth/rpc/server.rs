@@ -37,6 +37,7 @@ use serde_json::json;
 use serde_json::value::RawValue;
 use serde_json::value::to_raw_value;
 use stratus_metrics as metrics;
+use tokio::runtime::Handle;
 use tokio::select;
 use tokio::sync::Semaphore;
 use tokio::sync::SemaphorePermit;
@@ -75,6 +76,7 @@ use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::rpc::RpcSubscriptions;
+use crate::eth::rpc::exporter::ExporterRuntime;
 use crate::eth::rpc::middleware::TransactionTracingIdentifiers;
 use crate::eth::rpc::middleware::decode_input_arguments;
 use crate::eth::rpc::next_rpc_param;
@@ -102,6 +104,7 @@ use crate::eth::types::StateError;
 use crate::eth::types::StratusError;
 use crate::eth::types::TransactionInput;
 use crate::eth::types::TransactionStage;
+use crate::eth::types::UnexpectedError;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
 use crate::ext::InfallibleExt;
@@ -127,6 +130,7 @@ pub struct Server {
     pub miner: Arc<Miner>,
     pub importer: Arc<RwLock<Option<Arc<ImporterConsensus>>>>,
     pub importer_runtime: Arc<RwLock<Option<ImporterRuntime>>>,
+    pub exporter_runtime: Arc<RwLock<Option<ExporterRuntime>>>,
 
     // config
     pub app_config: StratusConfig,
@@ -181,6 +185,9 @@ impl Server {
             importer_runtime.shutdown().await?;
         }
 
+        if let Some(exporter_runtime) = this.take_exporter_runtime() {
+            exporter_runtime.shutdown().await?;
+        }
         Ok(())
     }
 
@@ -279,6 +286,15 @@ impl Server {
         self.importer_runtime.write().take()
     }
 
+    fn take_exporter_runtime(&self) -> Option<ExporterRuntime> {
+        self.exporter_runtime.write().take()
+    }
+
+    /// Handle of the dedicated exporter runtime for dispatching importer-facing requests.
+    fn exporter_handle(&self) -> Option<Handle> {
+        self.exporter_runtime.read().as_ref().map(|runtime| runtime.handle().clone())
+    }
+
     async fn health(&self) -> bool {
         match GlobalState::get_node_mode() {
             NodeMode::Leader | NodeMode::FakeLeader => true,
@@ -358,11 +374,21 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("eth_gasPrice", eth_gas_price)?;
 
     // stratus importing helpers
-    module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
-    module.register_blocking_method("stratus_getBlockWithChanges", stratus_get_block_with_changes)?;
+    // dispatched to the dedicated exporter runtime, so importer requests cannot stall behind a
+    // saturated main blocking pool (which makes followers fall behind)
+    module.register_async_method("stratus_getBlockAndReceipts", |params, ctx, ext| {
+        dispatch_exporter_method(stratus_get_block_and_receipts, params, ctx, ext)
+    })?;
+    module.register_async_method("stratus_getBlockWithChanges", |params, ctx, ext| {
+        dispatch_exporter_method(stratus_get_block_with_changes, params, ctx, ext)
+    })?;
 
     // block
-    module.register_blocking_method("eth_blockNumber", eth_block_number)?;
+    // `eth_blockNumber` is on the follower sync critical path (polled every sync interval), so it
+    // is also dispatched to the dedicated exporter runtime
+    module.register_async_method("eth_blockNumber", |params, ctx, ext| {
+        dispatch_exporter_method(eth_block_number, params, ctx, ext)
+    })?;
     module.register_blocking_method("eth_getBlockByNumber", eth_get_block_by_number)?;
     module.register_blocking_method("eth_getBlockByHash", eth_get_block_by_hash)?;
     module.register_blocking_method("stratus_getBlockByTimestamp", stratus_get_block_by_timestamp)?;
@@ -394,6 +420,27 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_subscription("eth_subscribe", "eth_subscription", "eth_unsubscribe", eth_subscribe)?;
 
     Ok(module)
+}
+
+/// Dispatches an importer-facing blocking method onto the dedicated exporter runtime.
+///
+/// These methods are on the follower sync critical path: when the main blocking pool saturates with
+/// external traffic (`eth_call`, `eth_getLogs`, ...), queued importer requests stall and followers
+/// fall behind. The exporter runtime's dedicated blocking pool keeps them isolated. Falls back to
+/// the main runtime's blocking pool when the exporter runtime is no longer available (shutdown).
+async fn dispatch_exporter_method<T, F>(handler: F, params: Params<'static>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<T, StratusError>
+where
+    T: Send + 'static,
+    F: FnOnce(Params<'static>, Arc<RpcContext>, Extensions) -> Result<T, StratusError> + Send + 'static,
+{
+    let response = match ctx.server.exporter_handle() {
+        Some(handle) => handle.spawn_blocking(move || handler(params, ctx, ext)).await,
+        None => tokio::task::spawn_blocking(move || handler(params, ctx, ext)).await,
+    };
+    response.unwrap_or_else(|error| {
+        tracing::error!(reason = ?error, "exporter blocking method failed to join");
+        Err(StratusError::Unexpected(UnexpectedError::Unexpected(anyhow::anyhow!(error))))
+    })
 }
 
 // -----------------------------------------------------------------------------
@@ -638,15 +685,15 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     })?;
 
     let importer_config = ImporterConfig {
-        external_rpc,
+        external_rpc: Some(external_rpc),
         external_rpc_ws: Some(external_rpc_ws),
         external_rpc_timeout,
         sync_interval,
-        enable_block_changes_replication: std::env::var("ENABLE_BLOCK_CHANGES_REPLICATION")
-            .ok()
-            .is_some_and(|val| val == "1" || val == "true"),
-        importer_async_threads: std::env::var("IMPORTER_ASYNC_THREADS").ok().and_then(|value| value.parse().ok()).unwrap_or(4),
-        forward_access_list: !matches!(std::env::var("FORWARD_ACCESS_LIST").as_deref(), Ok("0") | Ok("false")),
+        // These values were previously configurable via environment variables only;
+        // now they use the same defaults as `[importer]` in the config file.
+        enable_block_changes_replication: false,
+        importer_async_threads: 4,
+        forward_access_list: true,
         stop_at_block: None,
     };
 
