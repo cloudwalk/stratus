@@ -174,13 +174,7 @@ impl StratusStorage {
                         MinedPointInTime::Latest(_, _) =>
                         // Latest: try latest cache while guard is held, then fall through to perm.
                         {
-                            let cached_value = if matches!(kind, ExecutionKind::AccessList) {
-                                //bench without try_read
-                                E::try_read_latest_cache(self, &key)
-                            } else {
-                                E::read_latest_cache(self, &key)
-                            };
-                            if let Some(value) = cached_value {
+                            if let Some(value) = E::read_latest_cache(self, &key) {
                                 break 'query (value, FoundAt::Cache);
                             }
                             // If it wasnt found in the cache and we still have the guard the value can only be read in perm latest
@@ -194,9 +188,23 @@ impl StratusStorage {
         };
 
         // Reads that held the transient state lock and were found at perm can be cached
+        // If the latest state lock is aquired between the read and this update:
+        // 1. If cache_latest_if_missing is called before save_block updated the entry save_block will overwrite it
+        // 2. If cache_latest_if_missing is called after save_block updated the entry the value won't be missing and
+        // therefore won't be cached
+        // The one troublesome scenario is if the value is evicted during save_block, meaning the cache capacity
+        // is too low and prone to hot-evictions. This is a bug, but unlikely to happen if big caches are configured.
+        // This is a non-issue for transactional flows since any reads that would hit an entry that has been hot-evicted
+        // will read first from temp's latest storage.
+        // This bug exists for any flow that updates the cache without holding the latest-state lock. We could consider
+        // adding the latest block State<Final/Complete> to the cache too. Would requiring some locking but if we're smart
+        // about it we can make it so this lock is more relaxed than the latest_state_lock.
         if matches!(
             (kind, found_at),
-            (ExecutionKind::CallLatest(_) | ExecutionKind::CallPast(_), FoundAt::PermLatest)
+            (
+                ExecutionKind::CallLatest(_) | ExecutionKind::CallPast(_) | ExecutionKind::AccessList,
+                FoundAt::PermLatest
+            )
         ) {
             E::cache_latest_if_missing(self, key, value.clone());
         }
@@ -335,6 +343,15 @@ impl StratusStorage {
                 Ok(self.read_block(filter)?.map(|block| block.header.into()))
             }
         }
+    }
+
+    /// Reads the latest block info without acquiring the latest state lock.
+    ///
+    /// Relaxed atomic reads never block on the importer's block commits, at the cost of possibly
+    /// stale or torn (number, timestamp) pairs. Meant for throughput-sensitive consumers that do
+    /// not require strict consistency, like access-list computation for forwarded transactions.
+    pub fn read_latest_block_info_relaxed(&self) -> BlockInfo {
+        self.latest_state_lock.read_latest_block_info_relaxed()
     }
 
     #[timed(storage_read_block_with_changes, labels(storage = label::PERM, success = result.is_ok()))]
@@ -610,6 +627,7 @@ impl StratusStorage {
         Ok(())
     }
 
+    #[timed(storage_load_access_list)]
     pub fn load_access_list(&self, access_list: AccessListOutput) {
         // can error
         let mut account_addresses = vec![];

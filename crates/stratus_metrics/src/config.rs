@@ -3,20 +3,14 @@ use std::net::SocketAddr;
 use clap::Parser;
 use display_json::DebugAsJson;
 
-use crate::metrics_for_consensus;
-use crate::metrics_for_executor;
-use crate::metrics_for_importer_online;
-use crate::metrics_for_json_rpc;
-use crate::metrics_for_kafka;
-use crate::metrics_for_rocks;
-use crate::metrics_for_storage_read;
-use crate::metrics_for_storage_write;
+use crate::metrics_for_all;
 use crate::set_node_mode_provider;
 
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct MetricsConfig {
     /// Metrics exporter binding address.
-    #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
+    #[arg(id = "common.metrics.exporter_address", long = "metrics-exporter-address", default_value = "0.0.0.0:9000")]
+    #[serde(rename = "exporter_address")]
     pub metrics_exporter_address: SocketAddr,
 }
 
@@ -32,15 +26,7 @@ impl MetricsConfig {
         tracing::info!(address = %self.metrics_exporter_address, "creating metrics exporter");
 
         // get metric definitions
-        let mut metrics = Vec::new();
-        metrics.extend(metrics_for_importer_online());
-        metrics.extend(metrics_for_json_rpc());
-        metrics.extend(metrics_for_executor());
-        metrics.extend(metrics_for_storage_read());
-        metrics.extend(metrics_for_storage_write());
-        metrics.extend(metrics_for_rocks());
-        metrics.extend(metrics_for_consensus());
-        metrics.extend(metrics_for_kafka());
+        let metrics = metrics_for_all();
 
         // init metric exporter
         init_metrics_exporter(self.metrics_exporter_address, service_name, version);

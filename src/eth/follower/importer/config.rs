@@ -12,47 +12,72 @@ use crate::eth::follower::ConsensusError;
 use crate::eth::follower::ImporterError;
 use crate::eth::follower::importer::BlockchainClient;
 use crate::eth::follower::importer::ImporterMode;
+use crate::eth::follower::importer::ImporterRuntime;
+use crate::eth::follower::importer::ImporterRuntimeConfig;
 use crate::eth::follower::importer::supervisor::ImporterConsensus;
-use crate::eth::follower::importer::supervisor::start_importer;
 use crate::eth::miner::Miner;
 use crate::eth::rpc::RpcContext;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::StateError;
 use crate::eth::types::StratusError;
+use crate::ext::duration_serde;
 use crate::ext::not;
 use crate::ext::parse_duration;
-use crate::ext::spawn;
+use crate::ext::parse_non_empty;
 use crate::infra::kafka::KafkaConnector;
 
-#[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize)]
-#[group(requires_all = ["external_rpc", "follower"])]
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct ImporterConfig {
     /// External RPC HTTP endpoint to sync blocks with Stratus.
-    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC", required = false)]
-    pub external_rpc: String,
+    #[arg(id = "importer.external_rpc", short = 'r', long = "external-rpc", value_parser = parse_non_empty, required = false)]
+    pub external_rpc: Option<String>,
 
     /// External RPC WS endpoint to sync blocks with Stratus.
-    #[arg(short = 'w', long = "external-rpc-ws", env = "EXTERNAL_RPC_WS", required = false)]
+    #[arg(id = "importer.external_rpc_ws", short = 'w', long = "external-rpc-ws", required = false)]
     pub external_rpc_ws: Option<String>,
 
     /// Timeout for blockchain requests (importer online)
-    #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s", required = false)]
+    #[arg(
+        id = "importer.external_rpc_timeout",
+        long = "external-rpc-timeout",
+        value_parser = parse_duration,
+        default_value = "2s",
+        required = false
+    )]
+    #[serde(with = "duration_serde")]
     pub external_rpc_timeout: Duration,
 
-    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms", required = false)]
+    #[arg(id = "importer.sync_interval", long = "sync-interval", value_parser = parse_duration, default_value = "100ms", required = false)]
+    #[serde(with = "duration_serde")]
     pub sync_interval: Duration,
 
     /// Enable replication of block changes
-    #[arg(long = "enable-block-changes-replication", env = "ENABLE_BLOCK_CHANGES_REPLICATION", default_value = "false")]
+    #[arg(
+        id = "importer.enable_block_changes_replication",
+        long = "enable-block-changes-replication",
+        default_value = "false"
+    )]
     pub enable_block_changes_replication: bool,
 
+    /// Number of Tokio worker threads dedicated to the online importer.
+    #[arg(id = "importer.async_threads", long = "importer-async-threads", default_value = "4", required = false)]
+    pub importer_async_threads: usize,
+
     /// Compute an access list for transactions before forwarding them to the leader.
-    #[arg(long = "forward-access-list", env = "FORWARD_ACCESS_LIST", default_value = "true", required = false)]
+    #[arg(
+        id = "importer.forward_access_list",
+        long = "forward-access-list",
+        default_value = "true",
+        default_missing_value = "true",
+        action = clap::ArgAction::Set,
+        num_args = 0..=1,
+        required = false
+    )]
     pub forward_access_list: bool,
 
     /// Specify the block to stop importing. (useful for validating a follower db against a fake leader)
-    #[arg(long = "stop-at-block", env = "STOP_AT_BLOCK")]
+    #[arg(id = "importer.stop_at_block", long = "stop-at-block")]
     pub stop_at_block: Option<BlockNumber>,
 }
 
@@ -63,11 +88,11 @@ impl ImporterConfig {
         miner: Arc<Miner>,
         storage: Arc<StratusStorage>,
         kafka_connector: Option<KafkaConnector>,
-    ) -> anyhow::Result<Option<Arc<ImporterConsensus>>> {
+    ) -> anyhow::Result<Option<(Arc<ImporterConsensus>, ImporterRuntime)>> {
         match GlobalState::get_node_mode() {
             NodeMode::Leader => Ok(None),
-            NodeMode::Follower =>
-                self.init_follower(
+            NodeMode::Follower => self
+                .init_follower(
                     executor,
                     miner,
                     storage,
@@ -78,8 +103,12 @@ impl ImporterConfig {
                         ImporterMode::ReexecutionFollower
                     },
                 )
-                .await,
-            NodeMode::FakeLeader => self.init_follower(executor, miner, storage, kafka_connector, ImporterMode::FakeLeader).await,
+                .await
+                .map(Some),
+            NodeMode::FakeLeader => self
+                .init_follower(executor, miner, storage, kafka_connector, ImporterMode::FakeLeader)
+                .await
+                .map(Some),
         }
     }
 
@@ -90,33 +119,39 @@ impl ImporterConfig {
         storage: Arc<StratusStorage>,
         kafka_connector: Option<KafkaConnector>,
         importer_mode: ImporterMode,
-    ) -> anyhow::Result<Option<Arc<ImporterConsensus>>> {
-        const TASK_NAME: &str = "importer::init";
-        tracing::info!("creating importer for follower node");
-        let chain = Arc::new(BlockchainClient::new_http_ws(&self.external_rpc, self.external_rpc_ws.as_deref(), self.external_rpc_timeout).await?);
+    ) -> anyhow::Result<(Arc<ImporterConsensus>, ImporterRuntime)> {
+        tracing::info!(importer_async_threads = self.importer_async_threads, "creating importer for follower node");
 
+        let external_rpc = self
+            .external_rpc
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("importer.external_rpc is required by clap for follower and fake-leader modes"))?;
+
+        // Forwarding stays on the RPC runtime and uses an independent Hyper connection pool.
+        let forwarding_chain = Arc::new(BlockchainClient::new_http(external_rpc, self.external_rpc_timeout).await?);
         let consensus = Arc::new(ImporterConsensus {
             storage: Arc::clone(&storage),
-            chain: Arc::clone(&chain),
+            chain: forwarding_chain,
             executor: Arc::clone(&executor),
             forward_access_list: self.forward_access_list,
         });
 
-        spawn(
-            TASK_NAME,
-            start_importer(
-                importer_mode,
-                storage,
-                executor,
-                miner,
-                chain,
-                kafka_connector,
-                self.sync_interval,
-                self.stop_at_block,
-            ),
-        );
+        let importer_runtime = ImporterRuntime::start(ImporterRuntimeConfig {
+            async_threads: self.importer_async_threads,
+            importer_mode,
+            external_rpc: external_rpc.to_string(),
+            external_rpc_ws: self.external_rpc_ws.clone(),
+            external_rpc_timeout: self.external_rpc_timeout,
+            sync_interval: self.sync_interval,
+            stop_at_block: self.stop_at_block,
+            storage,
+            executor,
+            miner,
+            kafka_connector,
+        })
+        .await?;
 
-        Ok(Some(consensus))
+        Ok((consensus, importer_runtime))
     }
 
     pub async fn init_follower_importer(&self, ctx: Arc<RpcContext>) -> Result<serde_json::Value, StratusError> {
@@ -150,8 +185,9 @@ impl ImporterConfig {
         };
 
         match consensus {
-            Some(consensus) => {
+            Some((consensus, importer_runtime)) => {
                 ctx.server.set_importer(Some(consensus));
+                ctx.server.set_importer_runtime(Some(importer_runtime));
             }
             None => {
                 tracing::error!("failed to update consensus: Consensus is not set.");

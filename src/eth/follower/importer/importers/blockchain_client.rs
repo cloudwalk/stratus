@@ -196,12 +196,12 @@ impl BlockchainClient {
         let Some(full) = self.fetch_serialized_response(method, block_number).await? else {
             return Ok(None); // block not available yet
         };
-        let value = serde_json::from_str(&full).with_context(|| format!("failed to deserialize importer data from {method}"))?;
+        let value = serde_json::from_str(full.get()).with_context(|| format!("failed to deserialize importer data from {method}"))?;
         Ok(Some(value))
     }
 
     /// Fetches the full serialized response for an importer method, reassembling pagination chunks.
-    async fn fetch_serialized_response(&self, method: &'static str, block_number: BlockNumber) -> anyhow::Result<Option<String>> {
+    async fn fetch_serialized_response(&self, method: &'static str, block_number: BlockNumber) -> anyhow::Result<Option<Box<RawValue>>> {
         tracing::debug!(%block_number, method, "fetching importer data");
 
         let number = to_json_value(block_number);
@@ -215,9 +215,9 @@ impl BlockchainClient {
             Err(e) => return log_and_err!(reason = e, "failed to fetch importer data"),
         };
 
-        // normal response: return the serialized value directly
+        // normal response: return the serialized value directly, keeping the already-owned buffer
         if !pagination::is_envelope(raw.get()) {
-            return Ok(Some(raw.get().to_owned()));
+            return Ok(Some(raw));
         }
 
         // paginated response: fetch and reassemble chunks
@@ -257,7 +257,9 @@ impl BlockchainClient {
             envelope = pagination::parse_envelope(raw.get())?;
         }
 
-        Ok(Some(reassembler.finish()?))
+        let full = reassembler.finish()?;
+        let raw = RawValue::from_string(full).context("reassembled pagination response is not valid json")?;
+        Ok(Some(raw))
     }
 
     /// Fetches a block by number with receipts.
@@ -345,8 +347,6 @@ impl BlockchainClient {
     /// The current machine name is sent as the `x-client` header on every request (see `client_headers`),
     /// so the leader attributes the transaction to this node automatically.
     pub async fn send_raw_transaction_to_leader(&self, tx: AlloyBytes, access_list: Option<AccessListOutput>) -> Result<Hash, StratusError> {
-        tracing::debug!("sending raw transaction to leader");
-
         let tx = to_json_value(tx);
         let access_list = to_json_value(access_list);
         let result = self.http.request::<Hash, _>("eth_sendRawTransaction", [tx, access_list]).await;
