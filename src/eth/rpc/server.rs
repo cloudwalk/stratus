@@ -172,6 +172,7 @@ impl Server {
                 // If the health state changes to unhealthy, stop the server and subscriptions and recreate them (causing all connections to be dropped)
                 _ = health.wait_for_change(|healthy| GlobalState::restart_on_unhealthy() && !healthy) => {
                     tracing::info!("health state changed to unhealthy, restarting the rpc server");
+                    metrics::inc_rpc_server_restarts();
                     let _ = server_handle.stop();
                     subscriptions.abort();
                     join!(server_handle.stopped(), subscriptions.stopped());
