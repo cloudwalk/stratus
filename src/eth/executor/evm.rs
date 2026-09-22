@@ -79,7 +79,7 @@ use crate::infra::metrics;
 #[cfg(feature = "dev")]
 const GAS_MAX_LIMIT: u64 = 1_000_000_000;
 #[cfg(not(feature = "dev"))]
-const GAS_MAX_LIMIT: u64 = 100_000_000;
+const GAS_MAX_LIMIT: u64 = 1_000_000_000;
 
 type ContextWithDB = Context<BlockEnv, TxEnv, CfgEnv, RevmSession, Journal<RevmSession>>;
 type GeneralRevm<DB> =
