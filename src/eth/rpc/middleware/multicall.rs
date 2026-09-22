@@ -6,6 +6,8 @@ use alloy_sol_types::SolCall;
 use alloy_sol_types::SolInterface;
 use alloy_sol_types::sol;
 use hex_literal::hex;
+#[cfg(feature = "metrics")]
+use stratus_metrics as metrics;
 
 use crate::eth::codegen;
 use crate::eth::codegen::ContractName;
@@ -14,8 +16,6 @@ use crate::eth::rpc::MulticallError;
 use crate::eth::rpc::RpcClientApp;
 use crate::eth::types::Address;
 use crate::eth::types::Bytes;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 
 pub const MAX_MULTICALL_LOGGED_SUBCALLS: usize = 32;
 pub const MULTICALL_CONTRACT_NAME: ContractName = "Multicall3";

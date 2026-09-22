@@ -2,11 +2,11 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::sync::LazyLock;
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering;
 
 use chrono::DateTime;
 use chrono::Utc;
-use parking_lot::Mutex;
 use parking_lot::RwLock;
 use sentry::ClientInitGuard;
 use serde::Serialize;
@@ -17,13 +17,14 @@ use tokio::sync::watch::Sender;
 use tokio_util::sync::CancellationToken;
 
 use crate::alias::JsonValue;
-use crate::config;
+use crate::config::ConfigLoad;
 use crate::config::StratusConfig;
 use crate::config::WithCommonConfig;
 use crate::eth::rpc::RpcClientApp;
 use crate::eth::rpc::RpcContext;
 use crate::ext::not;
 use crate::ext::spawn_signal_handler;
+use crate::infra::build_info;
 use crate::infra::tracing::warn_task_cancellation;
 
 // -----------------------------------------------------------------------------
@@ -32,7 +33,7 @@ use crate::infra::tracing::warn_task_cancellation;
 
 pub struct GlobalServices<T>
 where
-    T: clap::Parser + WithCommonConfig + Debug,
+    T: ConfigLoad + WithCommonConfig + Debug,
 {
     pub config: T,
     pub runtime: Runtime,
@@ -41,22 +42,18 @@ where
 
 impl<T> GlobalServices<T>
 where
-    T: clap::Parser + WithCommonConfig + Debug,
+    T: ConfigLoad + WithCommonConfig + Debug,
 {
     #[allow(clippy::expect_used)]
     /// Executes global services initialization.
     pub fn init() -> Self
     where
-        T: clap::Parser + WithCommonConfig + Debug,
+        T: ConfigLoad + WithCommonConfig + Debug,
     {
         GlobalState::setup_start_time();
 
-        // env-var support
-        config::load_dotenv_file();
-        config::load_env_aliases();
-
-        // parse configuration
-        let config = T::parse();
+        // parse configuration: config file with explicitly provided CLI arguments as overrides
+        let config = T::load_config();
         let common = config.common();
 
         // Set the unknown_client_enabled value
@@ -74,7 +71,10 @@ where
         });
 
         // init observability services
-        common.metrics.init().expect("failed to init metrics");
+        common
+            .metrics
+            .init(|| GlobalState::get_node_mode().to_string(), &build_info::service_name(), build_info::version())
+            .expect("failed to init metrics");
 
         // init sentry
         let sentry_guard = common
@@ -97,17 +97,29 @@ where
 // Node mode
 // -----------------------------------------------------------------------------
 
+#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display)]
 pub enum NodeMode {
     #[strum(to_string = "leader")]
-    Leader,
+    Leader = 0,
 
     #[strum(to_string = "follower")]
-    Follower,
+    Follower = 1,
 
     /// Fake leader feches a block, re-executes its txs and then mines it's own block.
     #[strum(to_string = "fake-leader")]
-    FakeLeader,
+    FakeLeader = 2,
+}
+
+impl NodeMode {
+    const fn from_repr(value: u8) -> Self {
+        match value {
+            value if value == Self::Leader as u8 => Self::Leader,
+            value if value == Self::Follower as u8 => Self::Follower,
+            value if value == Self::FakeLeader as u8 => Self::FakeLeader,
+            _ => unreachable!(),
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -132,7 +144,7 @@ static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
 static BLOCKED_CLIENTS: LazyLock<RwLock<HashSet<String>>> = LazyLock::new(|| RwLock::new(HashSet::new()));
 
 /// Current node mode.
-static NODE_MODE: Mutex<NodeMode> = Mutex::new(NodeMode::Follower);
+static NODE_MODE: AtomicU8 = AtomicU8::new(NodeMode::Follower as u8);
 
 static START_TIME: LazyLock<DateTime<Utc>> = LazyLock::new(Utc::now);
 
@@ -360,11 +372,11 @@ impl GlobalState {
     }
 
     pub fn set_node_mode(mode: NodeMode) {
-        *NODE_MODE.lock() = mode;
+        NODE_MODE.store(mode as u8, Ordering::Release);
     }
 
     pub fn get_node_mode() -> NodeMode {
-        *NODE_MODE.lock()
+        NodeMode::from_repr(NODE_MODE.load(Ordering::Acquire))
     }
 
     // -------------------------------------------------------------------------

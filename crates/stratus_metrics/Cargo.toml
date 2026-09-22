@@ -1,0 +1,41 @@
+[package]
+name = "stratus_metrics"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+# config
+anyhow = "=1.0.100"
+clap = { version = "=4.5.60", features = ["derive", "env"] }
+display_json = "=0.2.1"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.149"
+
+# metrics
+metrics = "=0.24.2"
+metrics-exporter-prometheus = { version = "=0.17.2", optional = true }
+stratus_metrics_macros = { path = "macros" }
+
+# observability
+tracing = { version = "=0.1.44", features = ["attributes"] }
+
+[features]
+# Enable runtime metrics collection with the prometheus exporter.
+# The root crate disables defaults and forwards its own `metrics` feature.
+default = ["metrics"]
+metrics = ["dep:metrics-exporter-prometheus"]
+
+# ------------------------------------------------------------------------------
+# Dev dependencies
+# ------------------------------------------------------------------------------
+
+[dev-dependencies]
+tokio = { version = "=1.50.0", features = ["macros", "rt"] }
+
+# ------------------------------------------------------------------------------
+# Lints
+# ------------------------------------------------------------------------------
+
+[lints]
+workspace = true

@@ -7,7 +7,7 @@ on:
 
 jobs:
   merge-gatekeeper:
-    runs-on: stratus-runner
+    runs-on: ubuntu-22.04
     name: Merge Gatekeeper
     permissions:
       checks: read

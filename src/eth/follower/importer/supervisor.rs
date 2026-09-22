@@ -4,6 +4,8 @@ use std::time::Duration;
 
 use anyhow::bail;
 use futures::try_join;
+#[cfg(feature = "metrics")]
+use stratus_metrics as metrics;
 use tokio::sync::mpsc;
 
 use crate::eth::executor::Executor;
@@ -28,8 +30,6 @@ use crate::eth::storage::StratusStorage;
 use crate::eth::types::BlockNumber;
 use crate::ext::spawn;
 use crate::infra::kafka::KafkaConnector;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 use crate::utils::DropTimer;
 
 type ReexecutionFollower = ImporterSupervisor<BlockWithReceiptsFetcher, ReexecutionWorker>;
@@ -141,19 +141,26 @@ pub async fn start_importer(
                 .run(resume_from, sync_interval, chain, stop_at_block)
                 .await?;
         }
-        ImporterMode::FakeLeader =>
+        ImporterMode::FakeLeader => {
             FakeLeader::new(executor, miner, storage, Arc::clone(&chain))
                 .run(resume_from, sync_interval, chain, stop_at_block)
-                .await?,
+                .await?;
+        }
     }
     Ok(())
 }
 pub struct ImporterConsensus {
     pub storage: Arc<StratusStorage>,
     pub chain: Arc<BlockchainClient>,
+    pub executor: Arc<Executor>,
+    pub forward_access_list: bool,
 }
 
 impl Consensus for ImporterConsensus {
+    fn forward_access_list(&self) -> bool {
+        self.forward_access_list
+    }
+
     async fn lag(&self) -> anyhow::Result<LagStatus> {
         let last_fetched_time = LATEST_FETCHED_BLOCK_TIME.load(Ordering::Relaxed);
 
@@ -183,7 +190,11 @@ impl Consensus for ImporterConsensus {
         }
     }
 
-    fn get_chain(&self) -> anyhow::Result<&Arc<BlockchainClient>> {
-        Ok(&self.chain)
+    fn get_client(&self) -> &Arc<BlockchainClient> {
+        &self.chain
+    }
+
+    fn get_executor(&self) -> &Arc<Executor> {
+        &self.executor
     }
 }

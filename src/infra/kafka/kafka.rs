@@ -12,45 +12,47 @@ use rdkafka::producer::DeliveryFuture;
 use rdkafka::producer::FutureProducer;
 use rdkafka::producer::FutureRecord;
 use rdkafka::producer::future_producer::OwnedDeliveryResult;
+use stratus_metrics::timed;
 
-use crate::infra::metrics;
+use crate::ext::parse_non_empty;
 use crate::ledger::events::Event;
 use crate::log_and_err;
 
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize, Default)]
-#[group(requires_all = ["bootstrap_servers", "topic", "client_id", "ImporterConfig"])]
+#[serde(default)]
 pub struct KafkaConfig {
-    #[arg(long = "kafka-bootstrap-servers", env = "KAFKA_BOOTSTRAP_SERVERS", required = false)]
-    pub bootstrap_servers: String,
+    /// Kafka bootstrap servers.
+    #[arg(id = "kafka.bootstrap_servers", long = "kafka-bootstrap-servers", value_parser = parse_non_empty, required = false)]
+    pub bootstrap_servers: Option<String>,
 
-    #[arg(long = "kafka-topic", env = "KAFKA_TOPIC", group = "kafka", required = false)]
-    pub topic: String,
+    #[arg(id = "kafka.topic", long = "kafka-topic", group = "kafka", value_parser = parse_non_empty, required = false)]
+    pub topic: Option<String>,
 
-    #[arg(long = "kafka-client-id", env = "KAFKA_CLIENT_ID", required = false)]
-    pub client_id: String,
+    #[arg(id = "kafka.client_id", long = "kafka-client-id", value_parser = parse_non_empty, required = false)]
+    pub client_id: Option<String>,
 
-    #[arg(long = "kafka-group-id", env = "KAFKA_GROUP_ID", required = false)]
+    #[arg(id = "kafka.group_id", long = "kafka-group-id", required = false)]
     pub group_id: Option<String>,
 
-    #[arg(long = "kafka-security-protocol", env = "KAFKA_SECURITY_PROTOCOL", required = false, default_value_t)]
+    #[arg(id = "kafka.security_protocol", long = "kafka-security-protocol", required = false, default_value_t)]
     pub security_protocol: KafkaSecurityProtocol,
 
-    #[arg(long = "kafka-sasl-mechanisms", env = "KAFKA_SASL_MECHANISMS", required = false)]
+    #[arg(id = "kafka.sasl_mechanisms", long = "kafka-sasl-mechanisms", required = false)]
     pub sasl_mechanisms: Option<String>,
 
-    #[arg(long = "kafka-sasl-username", env = "KAFKA_SASL_USERNAME", required = false)]
+    #[arg(id = "kafka.sasl_username", long = "kafka-sasl-username", required = false)]
     pub sasl_username: Option<String>,
 
-    #[arg(long = "kafka-sasl-password", env = "KAFKA_SASL_PASSWORD", required = false)]
+    #[arg(id = "kafka.sasl_password", long = "kafka-sasl-password", required = false)]
     pub sasl_password: Option<String>,
 
-    #[arg(long = "kafka-ssl-ca-location", env = "KAFKA_SSL_CA_LOCATION", required = false)]
+    #[arg(id = "kafka.ssl_ca_location", long = "kafka-ssl-ca-location", required = false)]
     pub ssl_ca_location: Option<String>,
 
-    #[arg(long = "kafka-ssl-certificate-location", env = "KAFKA_SSL_CERTIFICATE_LOCATION", required = false)]
+    #[arg(id = "kafka.ssl_certificate_location", long = "kafka-ssl-certificate-location", required = false)]
     pub ssl_certificate_location: Option<String>,
 
-    #[arg(long = "kafka-ssl-key-location", env = "KAFKA_SSL_KEY_LOCATION", required = false)]
+    #[arg(id = "kafka.ssl_key_location", long = "kafka-ssl-key-location", required = false)]
     pub ssl_key_location: Option<String>,
 }
 
@@ -69,8 +71,13 @@ pub struct KafkaConnector {
 #[derive(Clone, Copy, serde::Serialize, serde::Deserialize, ValueEnum, Default)]
 pub enum KafkaSecurityProtocol {
     #[default]
+    #[serde(rename = "none")]
     None,
+
+    #[serde(rename = "sasl-ssl")]
     SaslSsl,
+
+    #[serde(rename = "ssl")]
     Ssl,
 }
 
@@ -86,17 +93,23 @@ impl std::fmt::Display for KafkaSecurityProtocol {
 
 impl KafkaConnector {
     pub fn new(config: &KafkaConfig) -> Result<Self> {
+        let (Some(bootstrap_servers), Some(topic), Some(client_id)) = (&config.bootstrap_servers, &config.topic, &config.client_id) else {
+            return Err(anyhow!(
+                "incomplete `[kafka]` configuration: `bootstrap_servers`, `topic` and `client_id` are all required"
+            ));
+        };
+
         tracing::info!(
-            topic = %config.topic,
-            bootstrap_servers = %config.bootstrap_servers,
-            client_id = %config.client_id,
+            topic = %topic,
+            bootstrap_servers = %bootstrap_servers,
+            client_id = %client_id,
             "Creating Kafka connector"
         );
 
         let security_protocol = config.security_protocol;
         let mut client_config = ClientConfig::new()
-            .set("bootstrap.servers", &config.bootstrap_servers)
-            .set("client.id", &config.client_id)
+            .set("bootstrap.servers", bootstrap_servers)
+            .set("client.id", client_id)
             .set("linger.ms", "5")
             .set("batch.size", "1048576") // 1 MB
             .to_owned();
@@ -140,7 +153,7 @@ impl KafkaConnector {
 
         Ok(Self {
             producer,
-            topic: config.topic.clone(),
+            topic: topic.clone(),
         })
     }
 
@@ -173,37 +186,23 @@ impl KafkaConnector {
         handle_delivery_result(self.queue_event(event)?.await)
     }
 
+    #[timed(kafka_create_buffer)]
     pub fn create_buffer<T, I>(&self, events: I, buffer_size: usize) -> Result<impl Stream<Item = Result<()>>>
     where
         T: Event,
         I: IntoIterator<Item = T>,
     {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        let futures: Vec<DeliveryFuture> = events
-            .into_iter()
-            .map(|event| {
-                metrics::timed(|| self.queue_event(event)).with(|m| {
-                    metrics::inc_kafka_queue_event(m.elapsed);
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?; // This could fail because the queue is full (?)
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_kafka_create_buffer(start.elapsed());
+        let futures: Vec<DeliveryFuture> = events.into_iter().map(|event| self.queue_event(event)).collect::<Result<Vec<_>, _>>()?; // This could fail because the queue is full (?)
 
         Ok(futures::stream::iter(futures).buffered(buffer_size).map(handle_delivery_result))
     }
 
+    #[timed(kafka_send_buffered)]
     pub async fn send_buffered<T, I>(&self, events: I, buffer_size: usize) -> Result<()>
     where
         T: Event,
         I: IntoIterator<Item = T>,
     {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
         tracing::info!(?buffer_size, "sending events");
 
         let mut buffer = self.create_buffer(events, buffer_size)?;
@@ -213,8 +212,6 @@ impl KafkaConnector {
             }
         }
 
-        #[cfg(feature = "metrics")]
-        metrics::inc_kafka_send_buffered(start.elapsed());
         Ok(())
     }
 }

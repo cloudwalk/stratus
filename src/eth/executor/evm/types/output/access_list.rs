@@ -1,3 +1,4 @@
+use derive_more::IntoIterator;
 use display_json::DebugAsJson;
 use revm_state::EvmState;
 
@@ -6,8 +7,9 @@ use crate::eth::types::Address;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::StratusError;
 
-#[derive(serde::Serialize, DebugAsJson)]
+#[derive(serde::Serialize, serde::Deserialize, DebugAsJson, Clone, IntoIterator)]
 pub struct AccessListOutput {
+    #[into_iterator(owned, ref, ref_mut)]
     access_list: Vec<(Address, Vec<SlotIndex>)>,
 }
 

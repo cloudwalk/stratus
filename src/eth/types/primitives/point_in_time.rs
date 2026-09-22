@@ -1,5 +1,6 @@
+use stratus_metrics::MetricLabelValue;
+
 use crate::eth::types::BlockNumber;
-use crate::infra::metrics::MetricLabelValue;
 
 /// EVM storage point-in-time indicator.
 #[derive(Debug, strum::Display, Clone, Copy, Default, strum::EnumIs, serde::Serialize, PartialEq, Eq)]

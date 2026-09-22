@@ -1,19 +1,30 @@
-mod metrics_config;
-mod metrics_definitions;
-mod metrics_macros;
-mod metrics_types;
-
-use std::time::Instant;
-
-pub use metrics_config::MetricsConfig;
-pub use metrics_definitions::*;
-pub use metrics_types::*;
+use stratus_metrics::MetricLabelValue;
+use stratus_metrics::ToMetricLabelValue;
+use stratus_metrics::dec_executor_workers_busy;
+use stratus_metrics::inc_executor_workers_busy;
 
 use crate::eth::executor::EvmKind;
 
-/// Track metrics execution starting instant.
-pub fn now() -> Instant {
-    Instant::now()
+// -----------------------------------------------------------------------------
+// EvmKind metric labels
+// -----------------------------------------------------------------------------
+
+impl ToMetricLabelValue for EvmKind {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        (*self).into()
+    }
+}
+
+impl From<EvmKind> for MetricLabelValue {
+    fn from(value: EvmKind) -> Self {
+        let label = match value {
+            EvmKind::Transaction => "transaction",
+            EvmKind::CallPresent => "call_present",
+            EvmKind::CallPast => "call_past",
+            EvmKind::Inspect => "inspector",
+        };
+        Self::Some(label.to_owned())
+    }
 }
 
 // -----------------------------------------------------------------------------

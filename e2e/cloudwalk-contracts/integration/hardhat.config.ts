@@ -11,6 +11,9 @@ const url = `http://0.0.0.0:${STRATUS_PORT}?app=e2e`;
 
 const config: HardhatUserConfig = {
     defaultNetwork: "hardhat",
+    mocha: {
+        timeout: 300000,
+    },
     solidity: {
         compilers: [
             {

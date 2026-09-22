@@ -20,9 +20,13 @@ clone() {
     else
         log "Cloning: $repo"
         if [ -n "${BRLC_MONOREPO_TOKEN:-}" ]; then
-            # Authenticated clone using the PAT. GitHub Actions masks secrets
-            # in logs, so the token is redacted if echoed in error output.
-            if ! git clone "https://x-access-token:${BRLC_MONOREPO_TOKEN}@github.com/cloudwalk/${repo}.git" -b main "$target"; then
+            # Authenticate through an ephemeral HTTP header so the PAT is not
+            # persisted in the clone's origin URL or .git/config.
+            auth=$(printf 'x-access-token:%s' "$BRLC_MONOREPO_TOKEN" | base64 | tr -d '\n')
+            if ! GIT_CONFIG_COUNT=1 \
+                GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+                GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth" \
+                git clone "https://github.com/cloudwalk/${repo}.git" -b main "$target"; then
                 log "Clone failed. Removing folder and exiting."
                 rm -rf "$target"
                 return 1

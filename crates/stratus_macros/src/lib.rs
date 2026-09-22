@@ -1,3 +1,6 @@
+// Panics in proc macros abort compilation with an error message, so they are safe to use here.
+#![allow(clippy::panic)]
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse_macro_input;
@@ -15,7 +18,7 @@ mod fake_enum_variants;
 #[proc_macro_derive(FakeEnum, attributes(fake_enum))]
 pub fn derive_fake_enum(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as ItemEnum);
-    fake_enum_variants::derive_fake_enum_impl(input).into()
+    fake_enum_variants::derive_fake_enum_impl(input)
 }
 
 #[proc_macro_derive(ErrorCode, attributes(error_code, major_error_code))]
@@ -71,7 +74,7 @@ fn derive_error_code_impl(input: DeriveInput) -> proc_macro2::TokenStream {
                     None
                 }
             })
-            .expect(&format!("Missing error_code attribute for variant {}", variant_name))
+            .unwrap_or_else(|| panic!("Missing error_code attribute for variant {}", variant_name))
             + major_error_code;
 
         // Handle different field types
@@ -121,14 +124,13 @@ fn derive_error_code_impl(input: DeriveInput) -> proc_macro2::TokenStream {
 
 #[cfg(test)]
 mod tests {
-    use proc_macro2::TokenStream;
     use quote::quote;
 
     use crate::derive_error_code_impl;
 
     #[test]
     fn test_derive_error_code() {
-        let input = TokenStream::from(quote! {
+        let input = quote! {
             #[derive(ErrorCode)]
             #[major_error_code = 100]
             pub enum TestError {
@@ -139,7 +141,7 @@ mod tests {
                 #[error_code = 0]
                 Third(u32),
             }
-        });
+        };
         let input = syn::parse2(input).unwrap();
 
         let out = derive_error_code_impl(input);
@@ -169,12 +171,12 @@ mod tests {
     #[test]
     #[should_panic(expected = "Missing error_code attribute")]
     fn test_missing_error_code() {
-        let input = TokenStream::from(quote! {
+        let input = quote! {
             #[derive(ErrorCode)]
             pub enum TestError {
                 First,
             }
-        });
+        };
         let input = syn::parse2(input).unwrap();
 
         let _out = derive_error_code_impl(input);
@@ -183,12 +185,12 @@ mod tests {
     #[test]
     #[should_panic(expected = "ErrorCode can only be derived for enums")]
     fn test_non_enum() {
-        let input = TokenStream::from(quote! {
+        let input = quote! {
             #[derive(ErrorCode)]
             pub struct TestError {
                 field: String,
             }
-        });
+        };
         let input = syn::parse2(input).unwrap();
         let _out = derive_error_code_impl(input);
     }

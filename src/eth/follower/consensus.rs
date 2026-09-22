@@ -1,15 +1,18 @@
 use std::sync::Arc;
 
+use stratus_metrics::timed;
 use strum::AsRefStr;
 
+use crate::eth::executor::AccessListOutput;
+use crate::eth::executor::Executor;
 use crate::eth::follower::importer::BlockchainClient;
 use crate::eth::types::Bytes;
+use crate::eth::types::ExecutionKind;
 use crate::eth::types::Hash;
 use crate::eth::types::StratusError;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
+use crate::eth::types::TransactionInput;
 
-const MAX_ALLOWED_LAG_BLOCKS: u64 = 3;
+const MAX_ALLOWED_LAG_BLOCKS: u64 = 20;
 
 #[derive(Clone, Copy, Debug, AsRefStr)]
 #[strum(serialize_all = "lowercase")]
@@ -57,25 +60,35 @@ pub trait Consensus: Send + Sync {
         !(lag.is_far_behind() || lag.is_ahead())
     }
 
-    /// Forwards a transaction to leader.
+    /// Whether transactions forwarded to the leader should carry a pre-computed access list.
+    fn forward_access_list(&self) -> bool;
+
+    /// Computes the access list to send with a forwarded transaction.
+    ///
+    /// This is synchronous EVM work and must be called from a blocking thread.
+    fn prepare_forward_access_list(&self, tx: TransactionInput) -> Result<Option<AccessListOutput>, StratusError> {
+        if self.forward_access_list() {
+            self.get_executor()
+                .execute_local_call::<AccessListOutput>(tx.into(), ExecutionKind::AccessList)
+                .map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Asynchronously sends a prepared transaction to the leader.
     ///
     /// The current machine name is sent as the `x-client` header by `BlockchainClient`, so the leader
     /// attributes the transaction to this node automatically.
-    async fn forward_to_leader(&self, tx_hash: Hash, tx_data: Bytes) -> Result<Hash, StratusError> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
+    #[timed(consensus_forward)]
+    async fn forward_to_leader(&self, tx_hash: Hash, tx_data: Bytes, access_list: Option<AccessListOutput>) -> Result<Hash, StratusError> {
         tracing::info!(%tx_hash, "forwarding transaction to leader");
-
-        let hash = self.get_chain()?.send_raw_transaction_to_leader(tx_data.into()).await?;
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_consensus_forward(start.elapsed());
-
-        Ok(hash)
+        self.get_client().send_raw_transaction_to_leader(tx_data.into(), access_list).await
     }
 
-    fn get_chain(&self) -> anyhow::Result<&Arc<BlockchainClient>>;
+    fn get_client(&self) -> &Arc<BlockchainClient>;
+
+    fn get_executor(&self) -> &Arc<Executor>;
 
     /// Get the lag status between this node and the leader.
     async fn lag(&self) -> anyhow::Result<LagStatus>;

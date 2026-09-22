@@ -12,7 +12,6 @@ use alloy_rpc_types_trace::geth::GethDebugTracerType;
 use alloy_rpc_types_trace::geth::GethTrace;
 use alloy_rpc_types_trace::geth::NoopFrame;
 use anyhow::anyhow;
-use log::log_enabled;
 use revm::ExecuteCommitEvm;
 use revm::ExecuteEvm;
 use revm::InspectEvm;
@@ -30,7 +29,7 @@ pub use types::GeneralRevm;
 use util::default_trace;
 use util::enhance_trace_with_decoded_errors;
 
-use crate::eth::executor::EvmExecutionMetrics;
+use crate::eth::executor::ExecutionMetrics;
 use crate::eth::executor::ExecutionResult;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::TransactionExecution;
@@ -71,34 +70,25 @@ impl<Input: EvmInput> Evm<Input> {
     }
 
     /// Execute a transaction that deploys a contract or call a contract function.
-    pub fn execute(&mut self, input: Input) -> Result<(RevmResultAndState, EvmExecutionMetrics), StratusError> {
+    pub fn execute(&mut self, input: Input) -> Result<(RevmResultAndState, ExecutionMetrics), StratusError> {
+        let metrics_context = input.metrics_context();
+
         // configure session
         self.evm.journaled_state.database.reset(input.kind());
         input.fill_env(&mut self.evm);
-
-        if log_enabled!(log::Level::Debug) {
-            let block_env_log = self.evm.block.clone();
-            let tx_env_log = self.evm.tx.clone();
-            // execute transaction
-            tracing::debug!(block_env = ?block_env_log, tx_env = ?tx_env_log, "executing transaction in revm");
-        }
 
         let tx = std::mem::take(&mut self.evm.tx);
         let evm_result = self.evm.transact(tx);
 
         // extract results
         let session = &mut self.evm.journaled_state.database;
-        let slot_access_metrics = std::mem::take(&mut session.metrics);
+        let storage_metrics = std::mem::take(&mut session.metrics);
 
         evm_result
             .inspect_err(|err| tracing::warn!(?err, "evm error"))
             .map_err(|err| err.into())
             .map(|execution| {
-                let gas_used = (*execution.result.gas()).into();
-                let metrics = EvmExecutionMetrics {
-                    slot_access: slot_access_metrics,
-                    gas_used,
-                };
+                let metrics = ExecutionMetrics::new(storage_metrics, (*execution.result.gas()).into(), metrics_context);
                 (execution, metrics)
             })
     }
