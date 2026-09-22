@@ -38,6 +38,7 @@ pub struct CacheConfig {
     pub slot_history_cache_capacity: usize,
 }
 
+#[cfg(test)]
 impl Default for CacheConfig {
     fn default() -> Self {
         Self {

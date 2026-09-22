@@ -43,6 +43,7 @@ pub struct ExecutorConfig {
     pub executor_evm_spec: SpecId,
 }
 
+#[cfg(test)]
 impl Default for ExecutorConfig {
     fn default() -> Self {
         Self {
