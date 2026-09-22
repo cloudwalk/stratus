@@ -6,7 +6,9 @@ use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::types::state::Complete;
 use crate::eth::storage::StorageError;
+use crate::eth::storage::permanent::RocksPermanentStorage;
 use crate::eth::storage::stratus_storage::label;
+use crate::eth::storage::temporary::compute_pending_block_number;
 use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTemporaryStorage;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
@@ -36,6 +38,14 @@ impl InMemoryTemporaryStorage {
         Self {
             transaction_storage: InmemoryTransactionTemporaryStorage::new(block_number),
         }
+    }
+
+    /// Creates the temporary storage at the pending block number derived from the permanent
+    /// storage.
+    pub fn from_perm_storage(perm_storage: &RocksPermanentStorage) -> anyhow::Result<Self> {
+        tracing::info!("creating temporary storage");
+        let pending_block_number = compute_pending_block_number(perm_storage)?;
+        Ok(Self::new(pending_block_number))
     }
 
     pub fn read_pending_block_header(&self) -> BlockInfo {

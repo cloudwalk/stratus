@@ -8,7 +8,6 @@ pub use permanent::RocksPermanentStorage;
 pub use stratus_storage::MinedPointInTime;
 pub use stratus_storage::StratusStorage;
 pub use temporary::InMemoryTemporaryStorage;
-pub use temporary::TemporaryStorageConfig;
 pub use types::FoundAt;
 mod cache;
 mod error;
@@ -36,10 +35,6 @@ use crate::eth::types::StratusError;
 #[cfg_attr(test, derive(Default))]
 pub struct StorageConfig {
     #[clap(flatten)]
-    #[serde(rename = "temporary", skip_serializing)]
-    pub temp_storage: TemporaryStorageConfig,
-
-    #[clap(flatten)]
     #[serde(rename = "permanent")]
     pub perm_storage: PermanentStorageConfig,
 
@@ -51,7 +46,7 @@ impl StorageConfig {
     /// Initializes Stratus storage.
     pub fn init(&self) -> Result<Arc<StratusStorage>, StratusError> {
         let perm_storage = self.perm_storage.init()?;
-        let temp_storage = self.temp_storage.init(&perm_storage)?;
+        let temp_storage = InMemoryTemporaryStorage::from_perm_storage(&perm_storage)?;
         let cache = self.cache.init();
 
         let storage = StratusStorage::new(
