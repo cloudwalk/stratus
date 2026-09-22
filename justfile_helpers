@@ -1,6 +1,6 @@
 _lint version="" fmt-flag="" clippy-flag="":
     cargo +nightly{{version}} fmt --all {{fmt-flag}}
-    cargo +nightly{{version}} clippy --all-targets -- {{clippy-flag}}
+    cargo +nightly{{version}} clippy --workspace --all-targets -- {{clippy-flag}}
 
 _doc version="":
     cargo +nightly{{version}} doc --no-deps
@@ -27,3 +27,21 @@ _wait_for_stratus_finish port="3000":
     while nc -z localhost {{port}}; do
         sleep 0.1 # wait for 1/10 of the second before check again
     done
+
+# Wait for a previous Stratus instance to release its RocksDB lock before starting a new one.
+_wait_for_rocksdb_lock *args="":
+    #!/bin/bash
+    prefix=""
+    for arg in "$@"; do
+        case "$arg" in --rocks-path-prefix=*) prefix="${arg#--rocks-path-prefix=}" ;; esac
+    done
+    [ -n "$prefix" ] || exit 0
+    lock_file="${prefix}-rocksdb/LOCK"
+    for attempt in $(seq 1 30); do
+        [ ! -e "$lock_file" ] && exit 0
+        python3.12 -c 'import fcntl, os, sys; fd = os.open(sys.argv[1], os.O_RDWR); fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)' "$lock_file" 2>/dev/null && exit 0
+        just _log "Waiting for previous Stratus instance to release ${prefix}-rocksdb (${attempt}/30)"
+        sleep 1
+    done
+    just _log "Error: ${lock_file} still held by a previous Stratus instance"
+    exit 1

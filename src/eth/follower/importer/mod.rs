@@ -1,6 +1,7 @@
 pub(crate) mod config;
 mod fetchers;
 mod importers;
+mod runtime;
 #[allow(clippy::module_inception)]
 mod supervisor;
 use std::borrow::Cow;
@@ -12,6 +13,10 @@ use std::time::Duration;
 use anyhow::bail;
 pub use config::ImporterConfig;
 pub use importers::BlockchainClient;
+pub use runtime::ImporterRuntime;
+pub use runtime::ImporterRuntimeConfig;
+#[cfg(feature = "metrics")]
+use stratus_metrics as metrics;
 pub use supervisor::ImporterConsensus;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -25,8 +30,6 @@ use crate::ext::SleepReason;
 use crate::ext::traced_sleep;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
 use crate::infra::kafka::KafkaConnector;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::ledger::events::transaction_to_events;
 use crate::log_and_err;
@@ -93,13 +96,12 @@ pub async fn send_block_to_kafka(kafka_connector: &Option<KafkaConnector>, block
 
 /// Record metrics for imported block
 #[cfg(feature = "metrics")]
-fn record_import_metrics(block_tx_len: usize, duration: std::time::Duration) {
+fn record_import_metrics(block_tx_len: usize) {
     metrics::inc_n_importer_online_transactions_total(block_tx_len as u64);
-    metrics::inc_import_online_mined_block(duration);
 }
 
 #[cfg(not(feature = "metrics"))]
-fn record_import_metrics(_block_tx_len: usize, _duration: std::time::Duration) {}
+fn record_import_metrics(_block_tx_len: usize) {}
 
 /// Record metrics for fetched block
 #[cfg(feature = "metrics")]
@@ -157,21 +159,18 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
                     set_external_rpc_current_block(block.number());
                     continue;
                 }
-                Ok(None) => {
+                Ok(None) =>
                     if !should_shutdown(TASK_NAME) {
                         tracing::error!("{} newHeads subscription closed by the other side", TASK_NAME);
-                    }
-                }
-                Ok(Some(Err(e))) => {
+                    },
+                Ok(Some(Err(e))) =>
                     if !should_shutdown(TASK_NAME) {
                         tracing::error!(reason = ?e, "{} failed to read newHeads subscription event", TASK_NAME);
-                    }
-                }
-                Err(_) => {
+                    },
+                Err(_) =>
                     if !should_shutdown(TASK_NAME) {
                         tracing::error!("{} timed-out waiting for newHeads subscription event", TASK_NAME);
-                    }
-                }
+                    },
             }
 
             if should_shutdown(TASK_NAME) {
@@ -187,11 +186,10 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
                         tracing::info!("{} resubscribed to newHeads event", TASK_NAME);
                         sub_new_heads = Some(sub);
                     }
-                    Err(e) => {
+                    Err(e) =>
                         if !should_shutdown(TASK_NAME) {
                             tracing::error!(reason = ?e, "{} failed to resubscribe to newHeads event", TASK_NAME);
-                        }
-                    }
+                        },
                 }
             }
         }
@@ -212,11 +210,10 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
                 set_external_rpc_current_block(block_number);
                 traced_sleep(sync_interval, SleepReason::SyncData).await;
             }
-            Err(e) => {
+            Err(e) =>
                 if !should_shutdown(TASK_NAME) {
                     tracing::error!(reason = ?e, "failed to retrieve block number. retrying now.");
-                }
-            }
+                },
         }
     }
 }
@@ -276,11 +273,7 @@ mod tests {
     use hash_hasher::HashBuildHasher;
 
     use super::BlockchainClient;
-    use crate::eth::executor::ExecutionResult;
     use crate::eth::executor::State;
-    use crate::eth::executor::TransactionExecution;
-    use crate::eth::executor::TransactionExecutionInput;
-    use crate::eth::executor::TransactionExecutionResult;
     use crate::eth::executor::types::state::AccountChanges;
     use crate::eth::executor::types::state::Complete;
     use crate::eth::executor::types::state::CompleteValue;
@@ -301,9 +294,6 @@ mod tests {
     use crate::eth::types::Block;
     use crate::eth::types::BlockNumber;
     use crate::eth::types::PointInTime;
-    use crate::eth::types::Signature;
-    use crate::eth::types::TransactionInfo;
-    use crate::eth::types::TransactionInput;
     use crate::eth::types::UnixTime;
     use crate::eth::types::Wei;
 
@@ -315,23 +305,6 @@ mod tests {
                 bytecode: CompleteValue::Changed(account.bytecode),
             }
         }
-    }
-
-    /// Mines a block applying `changes` (mirrors the helper in `stratus_storage` tests).
-    fn mine_block(storage: &StratusStorage, state: State<Complete>) {
-        let header = storage.read_pending_block_header();
-        let evm_input = TransactionExecutionInput::create(&TransactionInput::default(), header);
-
-        let result = TransactionExecutionResult {
-            result: ExecutionResult::Success,
-            ..Default::default()
-        };
-
-        let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
-        storage.save_execution(tx, state).expect("save execution");
-
-        let (block, block_changes) = storage.finish_pending_block();
-        storage.save_block(block.into(), block_changes).expect("save block");
     }
 
     /// Builds `ExecutionChanges` that set `address`'s balance to `balance` (nonce/bytecode untouched).
@@ -392,7 +365,7 @@ mod tests {
         let address = Address::new([0xCC; 20]);
 
         // Block 1: B.balance = 100. permanent storage is now at block 1.
-        mine_block(&storage, balance_changes(address, Wei::from(100u64)));
+        storage.mine_block_with_mock_execution(balance_changes(address, Wei::from(100u64)));
 
         // The fetcher post-processes block 3 while the importer is still at block 1 (fetcher ahead).
         // Block 3 changed B's nonce but left its balance untouched (balance entry is `None`).
@@ -406,7 +379,7 @@ mod tests {
 
         // Intervening block 2: B.balance = 200. This is the correct pre-state for block 3.
         // permanent storage is now at block 2.
-        mine_block(&storage, balance_changes(address, Wei::from(200u64)));
+        storage.mine_block_with_mock_execution(balance_changes(address, Wei::from(200u64)));
 
         // The importer imports block 3. `ReplicationWorker::import` must complete `changes_3`
         // (Incomplete) against perm at import time, when perm is caught up to block 2 (200).
@@ -415,7 +388,7 @@ mod tests {
         // Block 3 did not change B.balance, so the committed value must equal block 3's pre-state
         // (block 2 = 200). Completing at import time (perm caught up) yields 200; completing at
         // post-process time (perm behind) would yield the stale 100.
-        let account = storage.read_account(address, ExecutionKind::RPC(PointInTime::Latest)).expect("read account");
+        let (account, _) = storage.read_account(address, ExecutionKind::RPC(PointInTime::Latest)).expect("read account");
         assert_eq!(
             account.balance,
             Wei::from(200u64),

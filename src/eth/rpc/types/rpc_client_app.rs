@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 #[cfg(feature = "metrics")]
-use crate::infra::metrics::MetricLabelValue;
+use stratus_metrics::MetricLabelValue;
 
 // Include the build-time generated client scopes matcher
 include!(concat!(env!("OUT_DIR"), "/client_scopes.rs"));
@@ -83,9 +83,10 @@ mod tests {
 
     #[test]
     fn test_scope_parsing() {
-        // Test stratus scope (stratus*/ - prefix trimmed)
-        assert_eq!(RpcClientApp::parse("stratus-node").to_string(), "stratus::-node");
+        // Test stratus scope (stratus*/ - prefix trimmed, leading dashes removed)
+        assert_eq!(RpcClientApp::parse("stratus-node").to_string(), "stratus::node");
         assert_eq!(RpcClientApp::parse("stratus").to_string(), "stratus::");
+        assert_eq!(RpcClientApp::parse("stratus--node").to_string(), "stratus::node");
 
         // Test acquiring scope (exact match: authorizer)
         assert_eq!(RpcClientApp::parse("authorizer").to_string(), "acquiring::authorizer");

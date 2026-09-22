@@ -1,12 +1,9 @@
 use std::borrow::Cow;
-use std::time::Duration;
 
 use metrics::Label;
 use metrics::describe_counter;
 use metrics::describe_gauge;
 use metrics::describe_histogram;
-
-use crate::eth::executor::EvmKind;
 
 pub type HistogramInt = u32;
 pub type Sum = u64;
@@ -33,7 +30,7 @@ pub const LABEL_ERROR: &str = "error";
 // -----------------------------------------------------------------------------
 
 /// Metric definition.
-pub(super) struct Metric {
+pub struct Metric {
     pub(super) kind: &'static str,
     pub(super) name: &'static str,
     pub(super) description: &'static str,
@@ -41,7 +38,7 @@ pub(super) struct Metric {
 
 impl Metric {
     /// Register description with the provider.
-    pub(super) fn register_description(&self) {
+    pub fn register_description(&self) {
         match self.kind {
             "counter" => describe_counter!(self.name, self.description),
             "histogram_duration" | "histogram_counter" => describe_histogram!(self.name, self.description),
@@ -65,6 +62,71 @@ pub enum MetricLabelValue {
     Some(String),
     /// Label does not have a value and should be ignored.
     None,
+}
+
+/// Converts a borrowed function parameter into an owned metric label value.
+///
+/// This allows instrumentation to prepare labels before the function body
+/// consumes its parameters, without cloning the parameters themselves.
+pub trait ToMetricLabelValue {
+    fn to_metric_label_value(&self) -> MetricLabelValue;
+}
+
+impl<T> ToMetricLabelValue for &T
+where
+    T: ToMetricLabelValue + ?Sized,
+{
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        (*self).to_metric_label_value()
+    }
+}
+
+impl ToMetricLabelValue for Option<Cow<'static, str>> {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        match self {
+            Some(value) => MetricLabelValue::Some(value.to_string()),
+            None => MetricLabelValue::None,
+        }
+    }
+}
+
+impl ToMetricLabelValue for String {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        MetricLabelValue::Some(self.to_owned())
+    }
+}
+
+impl ToMetricLabelValue for str {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        MetricLabelValue::Some(self.to_owned())
+    }
+}
+
+impl ToMetricLabelValue for Option<&str> {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        match self {
+            Some(value) => MetricLabelValue::Some((*value).to_owned()),
+            None => MetricLabelValue::None,
+        }
+    }
+}
+
+impl ToMetricLabelValue for bool {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        MetricLabelValue::Some(self.to_string())
+    }
+}
+
+impl ToMetricLabelValue for i32 {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        MetricLabelValue::Some(self.to_string())
+    }
+}
+
+impl ToMetricLabelValue for u64 {
+    fn to_metric_label_value(&self) -> MetricLabelValue {
+        MetricLabelValue::Some(self.to_string())
+    }
 }
 
 impl From<Option<Cow<'static, str>>> for MetricLabelValue {
@@ -121,18 +183,6 @@ impl From<u64> for MetricLabelValue {
     }
 }
 
-impl From<EvmKind> for MetricLabelValue {
-    fn from(value: EvmKind) -> Self {
-        let label = match value {
-            EvmKind::Transaction => "transaction",
-            EvmKind::CallPresent => "call_present",
-            EvmKind::CallPast => "call_past",
-            EvmKind::Inspect => "inspector",
-        };
-        Self::Some(label.to_owned())
-    }
-}
-
 /// Converts a list of label keys-value pairs to `metrics::Label`. Labels with missing values are filtered out.
 pub(super) fn into_labels(labels: Vec<(&'static str, MetricLabelValue)>) -> Vec<Label> {
     labels
@@ -143,64 +193,4 @@ pub(super) fn into_labels(labels: Vec<(&'static str, MetricLabelValue)>) -> Vec<
         })
         .map(|(key, value)| Label::new(key, value))
         .collect()
-}
-
-// -----------------------------------------------------------------------------
-// Timed
-// -----------------------------------------------------------------------------
-#[cfg(feature = "metrics")]
-/// Measures how long the provided function takes to execute.
-///
-/// Returns a wrapper that allows to using it to record metrics if the `metrics` feature is enabled.
-pub fn timed<F, T>(f: F) -> Timed<T>
-where
-    F: FnOnce() -> T,
-{
-    let start = crate::infra::metrics::now();
-    let result = f();
-    Timed {
-        elapsed: start.elapsed(),
-        result,
-    }
-}
-
-#[cfg(not(feature = "metrics"))]
-/// Executes the provided function
-pub fn timed<F, T>(f: F) -> Timed<T>
-where
-    F: FnOnce() -> T,
-{
-    let result = f();
-    Timed {
-        elapsed: Duration::default(),
-        result,
-    }
-}
-
-pub struct Timed<T> {
-    pub elapsed: Duration,
-    pub result: T,
-}
-
-impl<T> Timed<T> {
-    #[cfg(feature = "metrics")]
-    #[inline(always)]
-    /// Applies the provided function to the current metrified execution.
-    pub fn with<F>(self, f: F) -> T
-    where
-        F: FnOnce(&Timed<T>),
-    {
-        f(&self);
-        self.result
-    }
-
-    #[cfg(not(feature = "metrics"))]
-    #[inline(always)]
-    /// Do nothing because the `metrics` function is disabled.
-    pub fn with<F>(self, _: F) -> T
-    where
-        F: FnOnce(&Timed<T>),
-    {
-        self.result
-    }
 }

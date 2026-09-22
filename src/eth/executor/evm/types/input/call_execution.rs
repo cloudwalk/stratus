@@ -4,6 +4,7 @@ use revm::Database;
 use revm::context::TransactTo;
 
 use crate::eth::executor::evm::types::EvmInput;
+use crate::eth::executor::evm::types::ExecutionMetricsContext;
 use crate::eth::executor::evm::types::GAS_MAX_LIMIT;
 use crate::eth::executor::evm::types::GeneralRevm;
 use crate::eth::storage::ExecutionKind;
@@ -96,5 +97,9 @@ impl EvmInput for CallExecutionInput {
 
     fn kind(&self) -> ExecutionKind {
         self.kind
+    }
+
+    fn metrics_context(&self) -> ExecutionMetricsContext {
+        ExecutionMetricsContext::new(self.kind, &self.to, &self.data)
     }
 }

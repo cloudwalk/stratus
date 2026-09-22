@@ -18,6 +18,7 @@ use jsonrpsee::types::Id;
 use jsonrpsee::types::Params;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use pin_project::pin_project;
+use stratus_metrics as metrics;
 use strum::Display;
 use tracing::Level;
 use tracing::Span;
@@ -49,7 +50,6 @@ use crate::ext::from_json_str;
 use crate::ext::to_json_string;
 #[cfg(feature = "metrics")]
 use crate::if_else;
-use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::infra::tracing::TracingExt;
 use crate::infra::tracing::new_cid;

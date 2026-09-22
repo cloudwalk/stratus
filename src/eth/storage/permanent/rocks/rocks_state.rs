@@ -17,6 +17,8 @@ use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
 use rocksdb::WriteOptions;
 use serde::Serialize;
+#[cfg(feature = "metrics")]
+use stratus_metrics as metrics;
 use sugars::btmap;
 
 use super::cf_versions::CfAccountSlotsHistoryValue;
@@ -64,8 +66,6 @@ use crate::eth::types::SlotValue;
 use crate::eth::types::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 use crate::log_and_err;
 
 cfg_if::cfg_if! {
@@ -77,7 +77,7 @@ cfg_if::cfg_if! {
         use std::collections::HashMap;
 
 
-        use crate::infra::metrics::{Count, HistogramInt, Sum};
+        use stratus_metrics::{Count, HistogramInt, Sum};
     }
 }
 
@@ -413,13 +413,12 @@ impl RocksStorageState {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&block_number.into()),
-            BlockFilter::Hash(block_hash) => {
+            BlockFilter::Hash(block_hash) =>
                 if let Some(block_number) = self.blocks_by_hash.get(&block_hash.into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
-                }
-            }
+                },
             BlockFilter::Timestamp(timestamp) => self
                 .blocks_by_timestamp
                 .iter_from(timestamp.timestamp.into(), timestamp.mode.into())?
@@ -454,49 +453,6 @@ impl RocksStorageState {
         )?;
 
         self.write_in_batch_for_multiple_cfs(write_batch)
-    }
-
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: State<Final>) -> Result<()> {
-        let mut batch = WriteBatch::default();
-
-        let mut txs_batch = vec![];
-        for transaction in block.transactions.iter().cloned() {
-            txs_batch.push((transaction.info.hash.into(), transaction.input.block_number.into()));
-        }
-        self.transactions.prepare_batch_insertion(txs_batch, &mut batch)?;
-
-        let number = block.number();
-        let block_hash = block.hash();
-        let timestamp = block.header.timestamp;
-
-        let block_by_number = (number.into(), block.into());
-        self.blocks_by_number.prepare_batch_insertion([block_by_number], &mut batch)?;
-
-        let block_by_hash = (block_hash.into(), number.into());
-        self.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch)?;
-
-        let block_by_timestamp = (timestamp.into(), number.into());
-        self.blocks_by_timestamp.prepare_batch_insertion([block_by_timestamp], &mut batch)?;
-
-        self.prepare_batch_with_execution_changes(account_changes, number, &mut batch)?;
-
-        self.accounts.prepare_batch_insertion(
-            accounts.iter().cloned().map(|acc| {
-                let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
-                (tup.0, tup.1.into())
-            }),
-            &mut batch,
-        )?;
-
-        self.accounts_history.prepare_batch_insertion(
-            accounts.iter().cloned().map(|acc| {
-                let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
-                ((tup.0, 0u32.into()), tup.1.into())
-            }),
-            &mut batch,
-        )?;
-
-        self.write_in_batch_for_multiple_cfs(batch)
     }
 
     pub fn save_block(&self, block: Block, account_changes: State<Final>) -> Result<()> {

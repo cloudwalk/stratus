@@ -10,6 +10,8 @@ use jsonrpsee::ConnectionId;
 use jsonrpsee::SubscriptionMessage;
 use jsonrpsee::SubscriptionSink;
 use serde::ser::SerializeMap;
+#[cfg(feature = "metrics")]
+use stratus_metrics as metrics;
 use tokio::sync::RwLock;
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
@@ -32,8 +34,6 @@ use crate::ext::not;
 use crate::ext::spawn;
 use crate::ext::traced_sleep;
 use crate::if_else;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 use crate::infra::tracing::warn_task_rx_closed;
 
 /// Frequency of cleaning up closed subscriptions.

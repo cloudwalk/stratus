@@ -3,7 +3,6 @@ use std::sync::Arc;
 use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
 use anyhow::bail;
-use async_trait::async_trait;
 
 use crate::eth::follower::importer::BlockchainClient;
 use crate::eth::follower::importer::fetch_with_retry;
@@ -16,7 +15,6 @@ pub struct BlockWithReceiptsFetcher {
     pub chain: Arc<BlockchainClient>,
 }
 
-#[async_trait]
 impl DataFetcher for BlockWithReceiptsFetcher {
     type FetchedType = (ExternalBlock, Vec<ExternalReceipt>);
     type PostProcessType = (ExternalBlock, Vec<ExternalReceipt>);

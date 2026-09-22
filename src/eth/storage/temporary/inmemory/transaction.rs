@@ -142,12 +142,9 @@ impl InmemoryTransactionTemporaryStorage {
         (finished_block, state)
     }
 
-    pub fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
+    pub fn read_pending_execution(&self, hash: Hash) -> Option<TransactionExecution> {
         let pending_block = self.pending_block.read();
-        match pending_block.block.transactions.get(&hash) {
-            Some(tx) => Ok(Some(tx.clone())),
-            None => Ok(None),
-        }
+        pending_block.block.transactions.get(&hash).cloned()
     }
 
     // -------------------------------------------------------------------------
@@ -263,9 +260,8 @@ impl InmemoryTransactionTemporaryStorage {
     // -------------------------------------------------------------------------
     // Global state
     // -------------------------------------------------------------------------
-    pub fn reset(&self) -> anyhow::Result<(), StorageError> {
+    pub fn reset(&self) {
         self.pending_block.write().reset();
         *self.latest_block.write() = None;
-        Ok(())
     }
 }

@@ -41,20 +41,43 @@ use crate::infra::tracing::TracingMinimalTimer;
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct TracingConfig {
     /// OpenTelemetry server URL.
-    #[arg(long = "tracing-url", alias = "tracing-collector-url", env = "TRACING_URL")]
+    #[arg(id = "common.tracing.url", long = "tracing-url", alias = "tracing-collector-url")]
+    #[serde(rename = "url")]
     pub tracing_url: Option<String>,
 
     /// OpenTelemetry server communication protocol.
-    #[arg(long = "tracing-protocol", env = "TRACING_PROTOCOL", default_value = "grpc")]
+    #[arg(id = "common.tracing.protocol", long = "tracing-protocol", default_value = "grpc")]
+    #[serde(rename = "protocol")]
     pub tracing_protocol: TracingProtocol,
 
     /// OpenTelemetry additional HTTP headers or GRPC metadata.
-    #[arg(long = "tracing-headers", env = "TRACING_HEADERS", value_delimiter = ',')]
+    #[arg(id = "common.tracing.headers", long = "tracing-headers", value_delimiter = ',')]
+    #[serde(rename = "headers")]
     pub tracing_headers: Vec<String>,
 
     /// How tracing events will be formatted when displayed in stdout.
-    #[arg(long = "tracing-log-format", env = "TRACING_LOG_FORMAT", default_value = "normal")]
+    #[arg(id = "common.tracing.log_format", long = "tracing-log-format", default_value = "normal")]
+    #[serde(rename = "log_format")]
     pub tracing_log_format: TracingLogFormat,
+
+    /// Directives filter for tracing events, in the same syntax as the `RUST_LOG` environment variable.
+    /// When absent, the `RUST_LOG` environment variable is used instead.
+    #[arg(id = "common.tracing.filter", long = "tracing-filter", value_parser = Self::parse_tracing_filter)]
+    #[serde(rename = "filter")]
+    pub tracing_filter: Option<String>,
+}
+
+#[cfg(test)]
+impl Default for TracingConfig {
+    fn default() -> Self {
+        Self {
+            tracing_url: None,
+            tracing_protocol: TracingProtocol::Grpc,
+            tracing_headers: Vec::new(),
+            tracing_filter: None,
+            tracing_log_format: TracingLogFormat::Normal,
+        }
+    }
 }
 
 impl TracingConfig {
@@ -70,12 +93,29 @@ impl TracingConfig {
             }
         }
     }
+    /// Returns the event filter directives, from the configured filter or the `RUST_LOG` environment variable.
+    fn env_filter(&self) -> EnvFilter {
+        match &self.tracing_filter {
+            Some(filter) => EnvFilter::new(filter),
+            None => EnvFilter::from_default_env(),
+        }
+    }
+
+    /// Parses a tracing directives filter.
+    ///
+    /// [`EnvFilter::new`] silently drops invalid directives, which would hide typos in the config file or the command
+    /// line; parsing here makes them fail loudly instead.
+    fn parse_tracing_filter(input: &str) -> Result<String, String> {
+        EnvFilter::try_new(input).map_err(|error| format!("invalid tracing filter {input:?}: {error}"))?;
+        Ok(input.to_string())
+    }
+
     pub fn create_subscriber(&self, sentry_config: &Option<SentryConfig>) -> impl SubscriberInitExt {
         println!("creating tracing registry");
 
         // configure tracing context layer
         println!("tracing registry: enabling tracing context recorder");
-        let tracing_context_layer = TracingContextLayer.with_filter(EnvFilter::from_default_env());
+        let tracing_context_layer = TracingContextLayer.with_filter(self.env_filter());
 
         // configure stdout log layer
         let enable_ansi = stdout().is_terminal();
@@ -84,10 +124,7 @@ impl TracingConfig {
             self.tracing_log_format, enable_ansi
         );
         let stdout_layer = match self.tracing_log_format {
-            TracingLogFormat::Json => fmt::Layer::default()
-                .event_format(TracingJsonFormatter)
-                .with_filter(EnvFilter::from_default_env())
-                .boxed(),
+            TracingLogFormat::Json => fmt::Layer::default().event_format(TracingJsonFormatter).with_filter(self.env_filter()).boxed(),
             TracingLogFormat::Minimal => fmt::Layer::default()
                 .with_thread_ids(false)
                 .with_thread_names(false)
@@ -96,13 +133,13 @@ impl TracingConfig {
                 .with_line_number(true)
                 .with_ansi(enable_ansi)
                 .with_timer(TracingMinimalTimer)
-                .with_filter(EnvFilter::from_default_env())
+                .with_filter(self.env_filter())
                 .boxed(),
             TracingLogFormat::Normal => fmt::Layer::default()
                 .with_ansi(enable_ansi)
                 .with_file(true)
                 .with_line_number(true)
-                .with_filter(EnvFilter::from_default_env())
+                .with_filter(self.env_filter())
                 .boxed(),
             TracingLogFormat::Verbose => fmt::Layer::default()
                 .with_ansi(enable_ansi)
@@ -111,7 +148,7 @@ impl TracingConfig {
                 .with_line_number(true)
                 .with_thread_ids(true)
                 .with_thread_names(true)
-                .with_filter(EnvFilter::from_default_env())
+                .with_filter(self.env_filter())
                 .boxed(),
         };
 
@@ -122,7 +159,7 @@ impl TracingConfig {
                 let layer = tracing_opentelemetry::layer()
                     .with_tracked_inactivity(false)
                     .with_tracer(tracer)
-                    .with_filter(EnvFilter::from_default_env());
+                    .with_filter(self.env_filter());
                 Some(layer)
             }
             None => {
@@ -138,7 +175,7 @@ impl TracingConfig {
                     .event_filter(crate::infra::sentry::sentry_event_filter)
                     .span_filter(crate::infra::sentry::sentry_span_filter)
                     .with_filter(LevelFilter::ERROR)
-                    .with_filter(EnvFilter::from_default_env());
+                    .with_filter(self.env_filter());
                 Some(layer)
             }
             None => {
@@ -240,7 +277,7 @@ fn opentelemetry_tracer(url: &str, protocol: TracingProtocol, headers: &[String]
 // Protocol
 // -----------------------------------------------------------------------------
 
-#[derive(DebugAsJson, strum::Display, Clone, Copy, Eq, PartialEq, serde::Serialize)]
+#[derive(DebugAsJson, strum::Display, Clone, Copy, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum TracingProtocol {
     #[serde(rename = "grpc")]
     #[strum(to_string = "grpc")]
@@ -283,7 +320,7 @@ impl From<TracingProtocol> for Protocol {
 // -----------------------------------------------------------------------------
 
 /// Tracing event log format.
-#[derive(DebugAsJson, strum::Display, Clone, Copy, Eq, PartialEq, serde::Serialize)]
+#[derive(DebugAsJson, strum::Display, Clone, Copy, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum TracingLogFormat {
     /// Minimal format: Time (no date), level, and message.
     #[serde(rename = "minimal")]
@@ -330,6 +367,7 @@ mod tests {
             tracing_url: None,
             tracing_protocol: TracingProtocol::Grpc,
             tracing_headers: vec![],
+            tracing_filter: None,
             tracing_log_format: TracingLogFormat::Json,
         };
         config.create_subscriber(&None);
@@ -341,6 +379,7 @@ mod tests {
             tracing_url: None,
             tracing_protocol: TracingProtocol::Grpc,
             tracing_headers: vec![],
+            tracing_filter: None,
             tracing_log_format: TracingLogFormat::Minimal,
         };
         config.create_subscriber(&None);
@@ -352,6 +391,7 @@ mod tests {
             tracing_url: None,
             tracing_protocol: TracingProtocol::Grpc,
             tracing_headers: vec![],
+            tracing_filter: None,
             tracing_log_format: TracingLogFormat::Normal,
         };
         config.create_subscriber(&None);
@@ -363,6 +403,7 @@ mod tests {
             tracing_url: None,
             tracing_protocol: TracingProtocol::Grpc,
             tracing_headers: vec![],
+            tracing_filter: None,
             tracing_log_format: TracingLogFormat::Verbose,
         };
         config.create_subscriber(&None);
@@ -374,6 +415,7 @@ mod tests {
             tracing_url: Some("http://localhost:4317".to_string()),
             tracing_protocol: TracingProtocol::Grpc,
             tracing_headers: vec![],
+            tracing_filter: None,
             tracing_log_format: TracingLogFormat::Normal,
         };
         config.create_subscriber(&None);
@@ -388,6 +430,7 @@ mod tests {
             tracing_url: None,
             tracing_protocol: TracingProtocol::Grpc,
             tracing_headers: vec![],
+            tracing_filter: None,
             tracing_log_format: TracingLogFormat::Normal,
         };
         config.create_subscriber(&Some(sentry_config));
@@ -399,6 +442,7 @@ mod tests {
             tracing_url: None,
             tracing_protocol: TracingProtocol::Grpc,
             tracing_headers: vec![],
+            tracing_filter: None,
             tracing_log_format: TracingLogFormat::Normal,
         };
         config.create_subscriber(&None);

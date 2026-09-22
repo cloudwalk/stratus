@@ -4,7 +4,8 @@ use crate::eth::rpc::BlockFilter;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::PointInTime;
 
-#[derive(Clone, Copy, serde::Serialize, PartialEq, Default, Eq, Debug)]
+#[derive(Clone, Copy, serde::Serialize, PartialEq, Default, Eq, Debug, strum::AsRefStr)]
+#[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub enum ExecutionKind {
     CallLatest(BlockNumber),

@@ -1,6 +1,7 @@
 use revm::Database;
 
 use crate::eth::executor::evm::GeneralRevm;
+use crate::eth::executor::evm::types::ExecutionMetricsContext;
 use crate::eth::types::ExecutionKind;
 
 pub mod call_execution;
@@ -9,6 +10,8 @@ pub mod transaction_execution;
 
 pub trait EvmInput: Default + Clone {
     fn kind(&self) -> ExecutionKind;
+
+    fn metrics_context(&self) -> ExecutionMetricsContext;
 
     fn fill_tx_env<DB: Database, I>(self, evm: &mut GeneralRevm<DB, I>);
 
