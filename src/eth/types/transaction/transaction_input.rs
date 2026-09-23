@@ -52,11 +52,6 @@ fn decode_next<T: RlpDecodable>(rlp: &mut alloy_rlp::Rlp<'_>, field: &'static st
         .ok_or(TransactionDecodeError::MissingField(field))
 }
 
-/// Decodes the `to` field: empty bytes mean contract creation, otherwise a 20-byte address.
-fn decode_to_field(rlp: &mut alloy_rlp::Rlp<'_>) -> Result<Option<Address>, TransactionDecodeError> {
-    Ok(decode_next::<TxTo>(rlp, "to")?.0)
-}
-
 /// RLP adapter for the transaction `to` field.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 struct TxTo(Option<Address>);
@@ -496,7 +491,7 @@ impl TransactionInput {
         let nonce = decode_next::<Nonce>(&mut rlp, "nonce")?;
         let gas_price = decode_next::<u128>(&mut rlp, "gasPrice")?;
         let gas_limit = decode_next::<Gas>(&mut rlp, "gasLimit")?;
-        let to = decode_to_field(&mut rlp)?;
+        let to = decode_next::<TxTo>(&mut rlp, "to")?.0;
         let value = decode_next::<Wei>(&mut rlp, "value")?;
         let input = decode_next::<Bytes>(&mut rlp, "input")?;
         let v = decode_next::<U64>(&mut rlp, "v")?;
@@ -515,7 +510,7 @@ impl TransactionInput {
     /// Decodes the common fields shared by access-list transaction types (EIP-2930, EIP-1559, EIP-4844, and EIP-7702).
     fn decode_access_list_fields(rlp: &mut alloy_rlp::Rlp<'_>) -> Result<TypedTxCommonFields, TransactionDecodeError> {
         let gas_limit = decode_next::<Gas>(rlp, "gasLimit")?;
-        let to = decode_to_field(rlp)?;
+        let to = decode_next::<TxTo>(rlp, "to")?.0;
         let value = decode_next::<Wei>(rlp, "value")?;
         let input = decode_next::<Bytes>(rlp, "input")?;
         let _: AccessList = decode_next(rlp, "accessList")?;
@@ -642,25 +637,12 @@ impl RlpDecodable for TransactionInput {
 // -----------------------------------------------------------------------------
 // Conversion: Other -> Self
 // -----------------------------------------------------------------------------
-impl TryFrom<AlloyTransaction> for TransactionInput {
-    type Error = anyhow::Error;
-
-    fn try_from(value: AlloyTransaction) -> anyhow::Result<Self> {
-        Self::try_from_envelope(value.inner.inner())
-    }
-}
-
 impl TryFrom<ExternalTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
-        Self::try_from_envelope(value.0.inner.inner())
-    }
-}
+        let envelope = value.0.inner.inner();
 
-impl TransactionInput {
-    /// Builds a `TransactionInput` from a transaction envelope.
-    fn try_from_envelope(envelope: &TxEnvelope) -> anyhow::Result<Self> {
         // Get signature components from the envelope
         let signature = envelope.signature();
         let signature = Signature {
