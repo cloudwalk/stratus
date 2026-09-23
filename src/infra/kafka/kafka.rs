@@ -169,14 +169,26 @@ impl KafkaConnector {
             KafkaSecurityProtocol::None => client_config.create()?,
             KafkaSecurityProtocol::SaslSsl => client_config
                 .set("security.protocol", "SASL_SSL")
-                .set("sasl.mechanisms", config.sasl_mechanisms.as_deref().expect("guaranteed by KafkaConfig::validate"))
+                .set(
+                    "sasl.mechanisms",
+                    config.sasl_mechanisms.as_deref().expect("guaranteed by KafkaConfig::validate"),
+                )
                 .set("sasl.username", config.sasl_username.as_deref().expect("guaranteed by KafkaConfig::validate"))
                 .set("sasl.password", config.sasl_password.as_deref().expect("guaranteed by KafkaConfig::validate"))
                 .create()?,
             KafkaSecurityProtocol::Ssl => client_config
-                .set("ssl.ca.location", config.ssl_ca_location.as_deref().expect("guaranteed by KafkaConfig::validate"))
-                .set("ssl.certificate.location", config.ssl_certificate_location.as_deref().expect("guaranteed by KafkaConfig::validate"))
-                .set("ssl.key.location", config.ssl_key_location.as_deref().expect("guaranteed by KafkaConfig::validate"))
+                .set(
+                    "ssl.ca.location",
+                    config.ssl_ca_location.as_deref().expect("guaranteed by KafkaConfig::validate"),
+                )
+                .set(
+                    "ssl.certificate.location",
+                    config.ssl_certificate_location.as_deref().expect("guaranteed by KafkaConfig::validate"),
+                )
+                .set(
+                    "ssl.key.location",
+                    config.ssl_key_location.as_deref().expect("guaranteed by KafkaConfig::validate"),
+                )
                 .create()?,
         };
 
