@@ -16,6 +16,8 @@ use alloy_primitives::TxKind;
 use alloy_primitives::U64;
 use alloy_primitives::U256;
 use alloy_primitives::keccak256;
+use alloy_rlp::Buf;
+use alloy_rlp::BufMut;
 use alloy_rlp::Decodable as RlpDecodable;
 use alloy_rlp::Encodable as RlpEncodable;
 use alloy_rlp::Header as RlpHeader;
@@ -24,7 +26,6 @@ use alloy_rpc_types_eth::AccessList;
 use anyhow::Context;
 use display_json::DebugAsJson;
 
-use crate::alias::AlloyAddress;
 use crate::alias::AlloyTransaction;
 use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::rpc::TransactionDecodeError;
@@ -53,8 +54,39 @@ fn decode_next<T: RlpDecodable>(rlp: &mut alloy_rlp::Rlp<'_>, field: &'static st
 
 /// Decodes the `to` field: empty bytes mean contract creation, otherwise a 20-byte address.
 fn decode_to_field(rlp: &mut alloy_rlp::Rlp<'_>) -> Result<Option<Address>, TransactionDecodeError> {
-    let to = decode_next::<TxKind>(rlp, "to")?;
-    Ok(to.into_to().map(Address::from))
+    Ok(decode_next::<TxTo>(rlp, "to")?.0)
+}
+
+/// RLP adapter for the transaction `to` field.
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+struct TxTo(Option<Address>);
+
+impl RlpEncodable for TxTo {
+    fn encode(&self, out: &mut dyn BufMut) {
+        match self.0 {
+            Some(to) => to.encode(out),
+            None => out.put_u8(alloy_rlp::EMPTY_STRING_CODE),
+        }
+    }
+
+    fn length(&self) -> usize {
+        match self.0 {
+            Some(to) => to.length(),
+            None => 1,
+        }
+    }
+}
+
+impl RlpDecodable for TxTo {
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        if let Some(&first) = buf.first()
+            && first == alloy_rlp::EMPTY_STRING_CODE
+        {
+            buf.advance(1);
+            return Ok(Self(None));
+        }
+        <Address as RlpDecodable>::decode(buf).map(|addr| Self(Some(addr)))
+    }
 }
 
 /// Common fields shared by EIP-2930, EIP-1559, EIP-4844, and EIP-7702 transactions.
@@ -211,14 +243,6 @@ impl TransactionInput {
     /// Encodes the unsigned transaction directly via RLP, reusing the alloy RLP
     /// implementations of our primitive wrapper types.
     fn signature_hash(&self) -> B256 {
-        let chain_id = self.execution_info.chain_id.unwrap_or_default();
-        let nonce = self.execution_info.nonce;
-        let gas_limit = self.execution_info.gas_limit;
-        let gas_price = self.execution_info.gas_price;
-        let value = self.execution_info.value;
-        let to = TxKind::from(self.execution_info.to.map(AlloyAddress::from));
-        let input = &self.execution_info.input;
-
         let tx_type = self
             .transaction_info
             .tx_type
@@ -227,50 +251,76 @@ impl TransactionInput {
 
         // Select the fields to encode per transaction type, then encode once.
         let fields: &[&dyn RlpEncodable] = match tx_type {
-            TxType::Eip2930 => &[&chain_id, &nonce, &gas_price, &gas_limit, &to, &value, input, &AccessList::default()],
+            TxType::Eip2930 => &[
+                &self.execution_info.chain_id.unwrap_or_default(),
+                &self.execution_info.nonce,
+                &self.execution_info.gas_price,
+                &self.execution_info.gas_limit,
+                &TxTo(self.execution_info.to),
+                &self.execution_info.value,
+                &self.execution_info.input,
+                &AccessList::default(),
+            ],
 
             TxType::Eip1559 => &[
-                &chain_id,
-                &nonce,
-                &gas_price, // max_priority_fee_per_gas
-                &gas_price, // max_fee_per_gas
-                &gas_limit,
-                &to,
-                &value,
-                input,
+                &self.execution_info.chain_id.unwrap_or_default(),
+                &self.execution_info.nonce,
+                &self.execution_info.gas_price, // max_priority_fee_per_gas
+                &self.execution_info.gas_price, // max_fee_per_gas
+                &self.execution_info.gas_limit,
+                &TxTo(self.execution_info.to),
+                &self.execution_info.value,
+                &self.execution_info.input,
                 &AccessList::default(),
             ],
 
             TxType::Eip4844 => &[
-                &chain_id,
-                &nonce,
-                &gas_price, // max_priority_fee_per_gas
-                &gas_price, // max_fee_per_gas
-                &gas_limit,
-                &to,
-                &value,
-                input,
+                &self.execution_info.chain_id.unwrap_or_default(),
+                &self.execution_info.nonce,
+                &self.execution_info.gas_price, // max_priority_fee_per_gas
+                &self.execution_info.gas_price, // max_fee_per_gas
+                &self.execution_info.gas_limit,
+                &TxTo(self.execution_info.to),
+                &self.execution_info.value,
+                &self.execution_info.input,
                 &AccessList::default(),
                 &0u128,              // max_fee_per_blob_gas
                 &Vec::<B256>::new(), // blob_versioned_hashes
             ],
 
             TxType::Eip7702 => &[
-                &chain_id,
-                &nonce,
-                &gas_price, // max_priority_fee_per_gas
-                &gas_price, // max_fee_per_gas
-                &gas_limit,
-                &to,
-                &value,
-                input,
+                &self.execution_info.chain_id.unwrap_or_default(),
+                &self.execution_info.nonce,
+                &self.execution_info.gas_price, // max_priority_fee_per_gas
+                &self.execution_info.gas_price, // max_fee_per_gas
+                &self.execution_info.gas_limit,
+                &TxTo(self.execution_info.to),
+                &self.execution_info.value,
+                &self.execution_info.input,
                 &AccessList::default(),
                 &Vec::<SignedAuthorization>::new(), // authorization list placeholder
             ],
 
-            TxType::Legacy if self.execution_info.chain_id.is_some() => &[&nonce, &gas_price, &gas_limit, &to, &value, input, &chain_id, &0u8, &0u8],
+            TxType::Legacy if self.execution_info.chain_id.is_some() => &[
+                &self.execution_info.nonce,
+                &self.execution_info.gas_price,
+                &self.execution_info.gas_limit,
+                &TxTo(self.execution_info.to),
+                &self.execution_info.value,
+                &self.execution_info.input,
+                &self.execution_info.chain_id.unwrap_or_default(),
+                &0u8,
+                &0u8,
+            ],
 
-            TxType::Legacy => &[&nonce, &gas_price, &gas_limit, &to, &value, input],
+            TxType::Legacy => &[
+                &self.execution_info.nonce,
+                &self.execution_info.gas_price,
+                &self.execution_info.gas_limit,
+                &TxTo(self.execution_info.to),
+                &self.execution_info.value,
+                &self.execution_info.input,
+            ],
         };
 
         let tx_type = if matches!(tx_type, TxType::Legacy) { None } else { Some(tx_type) };
@@ -592,57 +642,64 @@ impl RlpDecodable for TransactionInput {
 // -----------------------------------------------------------------------------
 // Conversion: Other -> Self
 // -----------------------------------------------------------------------------
+impl TryFrom<AlloyTransaction> for TransactionInput {
+    type Error = anyhow::Error;
+
+    fn try_from(value: AlloyTransaction) -> anyhow::Result<Self> {
+        Self::try_from_envelope(value.inner.inner())
+    }
+}
+
 impl TryFrom<ExternalTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
-        try_from_alloy_transaction(value.0)
+        Self::try_from_envelope(value.0.inner.inner())
     }
 }
 
-fn build_transaction_input_from_envelope(envelope: &TxEnvelope) -> anyhow::Result<TransactionInput> {
-    // Get signature components from the envelope
-    let signature = envelope.signature();
-    let signature = Signature {
-        r: signature.r(),
-        s: signature.s(),
-        v: if signature.v() { U64::ONE } else { U64::ZERO },
-    };
+impl TransactionInput {
+    /// Builds a `TransactionInput` from a transaction envelope.
+    fn try_from_envelope(envelope: &TxEnvelope) -> anyhow::Result<Self> {
+        // Get signature components from the envelope
+        let signature = envelope.signature();
+        let signature = Signature {
+            r: signature.r(),
+            s: signature.s(),
+            v: if signature.v() { U64::ONE } else { U64::ZERO },
+        };
 
-    // Build the TransactionInput from the fields we currently support, leaving the
-    // signer unrecovered. We intentionally ignore any signer that may
-    // already be present in the source transaction so that the leader and the follower always derive the same address
-    // from the same set of saved fields.
-    let mut tx_input = TransactionInput {
-        transaction_info: TransactionInfo {
-            tx_type: Some(U64::from(envelope.tx_type() as u8)),
-            hash: Hash::from(*envelope.tx_hash()),
-        },
-        execution_info: ExecutionInfo {
-            chain_id: envelope.chain_id().map(Into::into),
-            nonce: Nonce::from(envelope.nonce()),
-            signer: Signer::Unrecovered,
-            to: match envelope.kind() {
-                TxKind::Call(addr) => Some(Address::from(addr)),
-                TxKind::Create => None,
+        // Build the TransactionInput from the fields we currently support, leaving the
+        // signer unrecovered. We intentionally ignore any signer that may
+        // already be present in the source transaction so that the leader and the follower always derive the same address
+        // from the same set of saved fields.
+        let mut tx_input = TransactionInput {
+            transaction_info: TransactionInfo {
+                tx_type: Some(U64::from(envelope.tx_type() as u8)),
+                hash: Hash::from(*envelope.tx_hash()),
             },
-            value: Wei::from(envelope.value()),
-            input: Bytes::from(envelope.input().clone()),
-            gas_limit: Gas::from(envelope.gas_limit()),
-            gas_price: envelope.max_fee_per_gas(),
-        },
-        signature,
-    };
+            execution_info: ExecutionInfo {
+                chain_id: envelope.chain_id().map(Into::into),
+                nonce: Nonce::from(envelope.nonce()),
+                signer: Signer::Unrecovered,
+                to: match envelope.kind() {
+                    TxKind::Call(addr) => Some(Address::from(addr)),
+                    TxKind::Create => None,
+                },
+                value: Wei::from(envelope.value()),
+                input: Bytes::from(envelope.input().clone()),
+                gas_limit: Gas::from(envelope.gas_limit()),
+                gas_price: envelope.max_fee_per_gas(),
+            },
+            signature,
+        };
 
-    // Recover the signer directly from the saved fields.
-    let recovered_signer = tx_input.recover_signer_address()?;
-    tx_input.execution_info.signer = Signer::Recovered(recovered_signer);
+        // Recover the signer directly from the saved fields.
+        let recovered_signer = tx_input.recover_signer_address()?;
+        tx_input.execution_info.signer = Signer::Recovered(recovered_signer);
 
-    Ok(tx_input)
-}
-
-fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow::Result<TransactionInput> {
-    build_transaction_input_from_envelope(value.inner.inner())
+        Ok(tx_input)
+    }
 }
 
 impl From<TransactionExecutionInput> for ExecutionInfo {
