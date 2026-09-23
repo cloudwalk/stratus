@@ -1,5 +1,4 @@
 use anyhow::Result;
-use anyhow::anyhow;
 use clap::Parser;
 use clap::ValueEnum;
 use display_json::DebugAsJson;
@@ -56,14 +55,20 @@ pub struct KafkaConfig {
     pub ssl_key_location: Option<String>,
 }
 
+/// The `[kafka]` section is missing fields required by its configured security protocol.
+#[derive(Debug, thiserror::Error)]
+#[error("incomplete `[kafka]` configuration: add {fields}")]
+pub struct IncompleteKafkaConfig {
+    fields: String,
+}
+
 impl KafkaConfig {
     pub fn init(&self) -> Result<KafkaConnector> {
         KafkaConnector::new(self)
     }
 
-    /// Returns an error listing the fields required by the configured security protocol that are
-    /// missing from the configuration.
-    pub fn missing_fields_error(&self) -> Option<String> {
+    /// Validates the fields required by the configured security protocol.
+    pub fn validate(&self) -> Result<(), IncompleteKafkaConfig> {
         let mut missing: Vec<&str> = Vec::new();
         for (field, value) in [
             ("kafka.bootstrap_servers", &self.bootstrap_servers),
@@ -101,10 +106,10 @@ impl KafkaConfig {
         }
 
         if missing.is_empty() {
-            return None;
+            return Ok(());
         }
         let fields = missing.iter().map(|field| format!("`{field}`")).collect::<Vec<_>>().join(", ");
-        Some(format!("incomplete `[kafka]` configuration: add {fields}"))
+        Err(IncompleteKafkaConfig { fields })
     }
 }
 
@@ -139,9 +144,7 @@ impl std::fmt::Display for KafkaSecurityProtocol {
 
 impl KafkaConnector {
     pub fn new(config: &KafkaConfig) -> Result<Self> {
-        if let Some(error) = config.missing_fields_error() {
-            return Err(anyhow!("{error}"));
-        }
+        config.validate()?;
 
         let bootstrap_servers = config.bootstrap_servers.as_deref().unwrap();
         let topic = config.topic.as_deref().unwrap();

@@ -12,7 +12,6 @@ use anyhow::Context;
 
 use self::palette::Palette;
 use crate::config::StratusConfig;
-use crate::infra::kafka::KafkaConfig;
 
 /// Severity of a step's findings: errors fail the validation, warnings do not.
 enum Severity {
@@ -64,7 +63,12 @@ impl Step {
     /// Returns an error listing the `[kafka]` fields required by the configured security protocol
     /// that are missing from the configuration.
     fn check_kafka_completeness(config: &StratusConfig) -> Vec<String> {
-        config.kafka_config.as_ref().and_then(KafkaConfig::missing_fields_error).into_iter().collect()
+        config
+            .kafka_config
+            .as_ref()
+            .and_then(|kafka| kafka.validate().err().map(|e| e.to_string()))
+            .into_iter()
+            .collect()
     }
 
     /// Returns a warning when a follower's miner block mode is not external.
