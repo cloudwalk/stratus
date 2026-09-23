@@ -675,8 +675,8 @@ mod tests {
         assert_eq!(config.executor.executor_chain_id, 100);
         assert_eq!(config.executor.executor_evm_spec.to_string(), "Cancun");
         assert_eq!(config.miner.block_mode, MinerMode::Interval(std::time::Duration::from_secs(1)));
-        assert_eq!(config.exporter.exporter_async_threads, 2);
-        assert_eq!(config.exporter.exporter_blocking_threads, 32);
+        assert_eq!(config.exporter.async_threads, 2);
+        assert_eq!(config.exporter.blocking_threads, 32);
         assert_eq!(config.storage.perm_storage.rocks_path_prefix.as_deref(), Some("temp_3001"));
         assert_eq!(config.storage.perm_storage.rocks_file_descriptors_limit, 1024);
         assert_eq!(config.storage.perm_storage.rocks_cf_cache.accounts, 1000);
