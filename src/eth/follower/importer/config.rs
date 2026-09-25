@@ -62,7 +62,7 @@ pub struct ImporterConfig {
 
     /// Number of Tokio worker threads dedicated to the online importer.
     #[arg(id = "importer.async_threads", long = "importer-async-threads", default_value = "4", required = false)]
-    pub importer_async_threads: usize,
+    pub async_threads: usize,
 
     /// Compute an access list for transactions before forwarding them to the leader.
     #[arg(
@@ -120,7 +120,7 @@ impl ImporterConfig {
         kafka_connector: Option<KafkaConnector>,
         importer_mode: ImporterMode,
     ) -> anyhow::Result<(Arc<ImporterConsensus>, ImporterRuntime)> {
-        tracing::info!(importer_async_threads = self.importer_async_threads, "creating importer for follower node");
+        tracing::info!(async_threads = self.async_threads, "creating importer for follower node");
 
         let external_rpc = self
             .external_rpc
@@ -137,7 +137,7 @@ impl ImporterConfig {
         });
 
         let importer_runtime = ImporterRuntime::start(ImporterRuntimeConfig {
-            async_threads: self.importer_async_threads,
+            async_threads: self.async_threads,
             importer_mode,
             external_rpc: external_rpc.to_string(),
             external_rpc_ws: self.external_rpc_ws.clone(),

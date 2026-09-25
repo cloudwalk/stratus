@@ -151,6 +151,7 @@ Heavy public checks proxy the checked-out commit to private workflows in `cloudw
 - File values are converted into command line tokens and parsed together with the CLI in a single pass (an argument's `id` is the dotted TOML path of its field), so clap enforces the precedence and validates file values with the CLI value parsers
 - Precedence: defaults < config file < explicitly provided CLI arguments
 - Unknown fields in the config file are ignored with a warning (surfaced in the logs)
+- Validation: `stratus --validate-config [--leader|--follower|--fake-leader] [--config <path>] [--<overrides>]` parses the configuration exactly as a real node, prints warnings (unknown fields, sections ignored by the node mode, conflicting settings such as an incomplete `[kafka]` or a follower with a non-external `block_mode`), prints the final merged configuration as TOML in the config-file dialect, and exits 0/1 without starting the node
 
 ### Remaining Environment Variables
 
