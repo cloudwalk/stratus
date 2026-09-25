@@ -355,16 +355,7 @@ impl GlobalState {
 
     /// Initializes the node mode based on the StratusConfig.
     pub fn initialize_node_mode(config: &StratusConfig) {
-        let StratusConfig {
-            follower, leader, fake_leader, ..
-        } = config;
-
-        let mode = match (follower, leader, fake_leader) {
-            (true, false, false) => NodeMode::Follower,
-            (false, true, false) => NodeMode::Leader,
-            (false, false, true) => NodeMode::FakeLeader,
-            _ => unreachable!("exactly one must be true, config should be checked by clap"),
-        };
+        let mode = config.node_mode();
         Self::set_node_mode(mode);
 
         let should_run_importer = mode != NodeMode::Leader;
