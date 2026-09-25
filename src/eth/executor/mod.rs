@@ -60,6 +60,7 @@ use crate::ext::OptionExt;
 use crate::ext::to_json_string;
 use crate::infra::tracing::SpanExt;
 use crate::utils::Semaphore;
+use crate::utils::SemaphoreMetrics;
 
 // -----------------------------------------------------------------------------
 // Executor
@@ -83,18 +84,18 @@ pub struct Executor {
 }
 
 impl Executor {
-    pub fn new(storage: Arc<StratusStorage>, miner: Arc<Miner>, config: ExecutorConfig) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, miner: Arc<Miner>, config: ExecutorConfig) -> anyhow::Result<Self> {
         tracing::info!(?config, "creating executor");
         let reject_not_contract = config.executor_reject_not_contract;
         let transaction_worker = TransactionWorker::spawn(Arc::clone(&storage), Arc::clone(&miner), &config);
-        let evms = EvmWorkerPool::spawn(Arc::clone(&storage), &config);
-        Self {
-            transaction_warmup: Semaphore::new(100),
+        let evms = EvmWorkerPool::spawn(Arc::clone(&storage), &config)?;
+        Ok(Self {
+            transaction_warmup: Semaphore::with_metrics(100, SemaphoreMetrics::LocalTransaction),
             transaction_worker,
             evms,
             storage,
             reject_not_contract,
-        }
+        })
     }
 
     // -------------------------------------------------------------------------
@@ -145,7 +146,7 @@ impl Executor {
     fn execute_external_transaction_inner(
         storage: &StratusStorage,
         miner: &Miner,
-        evm: &mut Evm<TransactionExecutionInput>,
+        evm: &mut Evm,
         tx: ExternalTransaction,
         receipt: ExternalReceipt,
         block_number: BlockNumber,

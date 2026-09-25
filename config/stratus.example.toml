@@ -65,11 +65,22 @@
 [executor]
 # Chain ID of the network. Required.
 chain_id = 2008
-# Number of EVMs to execute calls against the present state.
+# Total number of EVM workers in the unified pool, shared by every execution kind.
+# Defaults to the sum of the deprecated per-kind sizes, or 150 when none is set.
+# evm_workers = 150
+# Maximum number of concurrent calls against the present state. Defaults to the remaining pool capacity.
+# call_present_limit = 50
+# Maximum number of concurrent calls against past states.
+# call_past_limit = 50
+# Maximum number of concurrent inspector calls.
+# inspector_limit = 50
+# Extra permits that any kind can borrow when its own limit is exhausted (for example 20% of the pool).
+# evm_flex_quota = 0
+# Deprecated: number of EVMs to execute calls against the present state.
 # call_present_evms = 50
-# Number of EVMs to execute calls against past states.
+# Deprecated: number of EVMs to execute calls against past states.
 # call_past_evms = 50
-# Number of EVMs to execute inspector calls.
+# Deprecated: number of EVMs to execute inspector calls.
 # inspector_evms = 50
 # Should reject contract transactions and calls to accounts that are not contracts?
 # reject_not_contract = true

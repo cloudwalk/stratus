@@ -26,7 +26,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let miner = config.miner.init(Arc::clone(&storage)).await?;
 
     // Init executor
-    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner))?;
 
     let (consensus, importer_runtime) = if let Some(importer_config) = &config.importer {
         tracing::info!(?importer_config, "creating importer");
