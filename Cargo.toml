@@ -143,7 +143,7 @@ indicatif = { version = "=0.18.3", optional = true }
 # ------------------------------------------------------------------------------
 
 [target.'cfg(not(all(target_arch = "aarch64", target_os = "linux")))'.dependencies]
-revm = { version = "=42.0.1", features = [
+revm = { version = "=43.0.2", features = [
     "asm-keccak",
     "serde",
     "memory_limit",
@@ -157,7 +157,7 @@ revm = { version = "=42.0.1", features = [
 ] }
 
 [target.'cfg(all(target_arch = "aarch64", target_os = "linux"))'.dependencies]
-revm = { version = "=42.0.1", features = [
+revm = { version = "=43.0.2", features = [
     "serde",
     "memory_limit",
     "optional_balance_check",
