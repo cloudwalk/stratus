@@ -23,7 +23,7 @@ base64 = "=0.22.1"
 cfg-if = "=1.0.4"
 chrono = { version = "=0.4.43", features = ["serde"] }
 const_format = "=0.2.35"
-const-hex = "=1.19.0"
+const-hex = "=1.19.1"
 derive_more = "=2.0.1"
 derive-new = "=0.7.0"
 hash_hasher = "=2.0.4"
@@ -32,7 +32,7 @@ hex-literal = "=1.1.0"
 humantime = "=2.3.0"
 indexmap = { version = "=2.14.0", features = ["serde"] }
 itertools = "=0.14.0"
-nanoid = "=0.4.0"
+nanoid = "=0.5.0"
 oneshot = "=0.1.12"
 parking_lot = "=0.12.5"
 paste = "=1.0.15"
@@ -41,7 +41,7 @@ pin-project = "=1.1.13"
 rand = { version = "=0.9.4", features = ["small_rng"] }
 ring = "=0.17.14"
 rustc-hash = "=2.1.1"
-smallvec = "=1.15.1"
+smallvec = "=1.16.1"
 static_assertions = "=1.1.0"
 strum = { version = "=0.27.2", features = ["derive"] }
 sugars = "=3.0.1"
@@ -70,7 +70,7 @@ display_json = "=0.2.1"
 serde = "=1.0.228"
 serde_json = "=1.0.149"
 serde_urlencoded = "=0.7.1"
-serde_with = "=3.14.1"
+serde_with = "=3.21.0"
 
 # parallelism
 crossbeam-channel = "=0.5.15"
@@ -134,7 +134,7 @@ rdkafka = {version = "=0.38.0", features = ["ssl", "sasl"] }
 sasl2-sys = { version = "=0.1.22", features = ["vendored"] }
 
 # Data migration
-indicatif = { version = "=0.18.3", optional = true }
+indicatif = { version = "=0.18.6", optional = true }
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies
@@ -185,7 +185,7 @@ glob = "=0.3.3"
 
 [build-dependencies]
 anyhow = "=1.0.100"
-const-hex = "=1.19.0"
+const-hex = "=1.19.1"
 glob = "=0.3.3"
 hostname = "=0.4.2"
 nom = "=8.0.0"
