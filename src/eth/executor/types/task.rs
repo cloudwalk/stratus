@@ -40,9 +40,9 @@ pub enum EvmRoute {
 /// A task for the unified EVM pool.
 pub struct PoolTask {
     pub span: Span,
-    kind: EvmKind,
+    evm_kind: EvmKind,
     permit: Permit,
-    task: PoolTaskKind,
+    task_kind: PoolTaskKind,
 }
 
 enum PoolTaskKind {
@@ -55,32 +55,32 @@ impl PoolTask {
         debug_assert!(matches!(kind, EvmKind::CallPresent | EvmKind::CallPast));
         Self {
             span: Span::current(),
-            kind,
+            evm_kind: kind,
             permit,
-            task: PoolTaskKind::Call(task),
+            task_kind: PoolTaskKind::Call(task),
         }
     }
 
     pub fn inspect(task: InspectionTask, permit: Permit) -> Self {
         Self {
             span: Span::current(),
-            kind: EvmKind::Inspect,
+            evm_kind: EvmKind::Inspect,
             permit,
-            task: PoolTaskKind::Inspect(task),
+            task_kind: PoolTaskKind::Inspect(task),
         }
     }
 
     pub fn execute(self, evm: &mut Evm) -> anyhow::Result<(), StratusError> {
         let Self {
             span,
-            kind,
+            evm_kind,
             permit: _permit,
-            task,
+            task_kind,
         } = self;
         let _enter = span.enter();
-        let _busy = kind.mark_executor_pool_busy();
+        let _busy = evm_kind.mark_executor_pool_busy();
 
-        catch_unwind(AssertUnwindSafe(move || match task {
+        catch_unwind(AssertUnwindSafe(move || match task_kind {
             PoolTaskKind::Call(task) => task.execute(evm),
             PoolTaskKind::Inspect(task) => task.execute(evm),
         }))
