@@ -2,7 +2,6 @@ mod session;
 pub mod types;
 mod util;
 
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 use alloy_consensus::transaction::TransactionInfo;
@@ -48,13 +47,12 @@ use crate::eth::types::StratusError;
 pub type RevmResultAndState = ExecResultAndState<RevmExecResult>;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
-pub struct Evm<Input: EvmInput> {
+pub struct Evm {
     evm: GeneralRevm<RevmSession>,
     kind: EvmKind,
-    _input_type: PhantomData<Input>,
 }
 
-impl<Input: EvmInput> Evm<Input> {
+impl Evm {
     /// Creates a new instance of the Evm.
     pub fn new(storage: Arc<StratusStorage>, config: &ExecutorConfig, kind: EvmKind) -> Self {
         tracing::info!(?config, "creating revm");
@@ -65,12 +63,11 @@ impl<Input: EvmInput> Evm<Input> {
         Self {
             evm: create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage), kind),
             kind,
-            _input_type: PhantomData,
         }
     }
 
     /// Execute a transaction that deploys a contract or call a contract function.
-    pub fn execute(&mut self, input: Input) -> Result<(RevmResultAndState, ExecutionMetrics), StratusError> {
+    pub fn execute<Input: EvmInput>(&mut self, input: Input) -> Result<(RevmResultAndState, ExecutionMetrics), StratusError> {
         let metrics_context = input.metrics_context();
 
         // configure session
@@ -94,7 +91,7 @@ impl<Input: EvmInput> Evm<Input> {
     }
 }
 
-impl Evm<TransactionExecutionInput> {
+impl Evm {
     /// Execute a transaction using a tracer.
     pub fn inspect(&mut self, input: InspectorInput) -> Result<GethTrace, StratusError> {
         let InspectorInput {

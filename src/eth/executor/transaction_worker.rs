@@ -101,7 +101,7 @@ impl TransactionWorker {
     fn execute_local_transaction_attempts(
         storage: &StratusStorage,
         miner: &Miner,
-        evm: &mut Evm<TransactionExecutionInput>,
+        evm: &mut Evm,
         tx_input: TransactionInput,
         max_attempts: usize,
     ) -> LocalTransactionResult {
@@ -172,7 +172,7 @@ impl TransactionTask {
         }
     }
 
-    fn execute(self, storage: &StratusStorage, miner: &Miner, evm: &mut Evm<TransactionExecutionInput>) -> anyhow::Result<(), StratusError> {
+    fn execute(self, storage: &StratusStorage, miner: &Miner, evm: &mut Evm) -> anyhow::Result<(), StratusError> {
         let Self { span, kind } = self;
         let _enter = span.enter();
 

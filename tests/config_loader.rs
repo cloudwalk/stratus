@@ -32,7 +32,7 @@ fn test_cli_overrides_file() {
     let config = load_with(&[], file).unwrap();
     assert!(config.leader);
     assert_eq!(config.executor.executor_chain_id, 2008);
-    assert_eq!(config.executor.call_present_evms, 11);
+    assert_eq!(config.executor.call_present_evms, Some(11));
     assert_eq!(config.rpc_server.rpc_address.to_string(), "0.0.0.0:3001");
     assert_eq!(config.miner.block_mode, MinerMode::Interval(std::time::Duration::from_secs(1)));
 
@@ -40,7 +40,7 @@ fn test_cli_overrides_file() {
     let config = load_with(&["--executor-chain-id", "9999", "-a", "0.0.0.0:3002", "--block-mode", "automine"], file).unwrap();
     assert_eq!(config.executor.executor_chain_id, 9999);
     // file value preserved when not overridden in the CLI
-    assert_eq!(config.executor.call_present_evms, 11);
+    assert_eq!(config.executor.call_present_evms, Some(11));
     assert_eq!(config.rpc_server.rpc_address.to_string(), "0.0.0.0:3002");
     assert_eq!(config.miner.block_mode, MinerMode::Automine);
 }
@@ -62,7 +62,7 @@ fn test_clap_defaults_do_not_override_file() {
     let config = load_with(&["--async-threads", "8"], file).unwrap();
     assert_eq!(config.common.num_async_threads, 8);
     assert_eq!(config.common.num_blocking_threads, 64);
-    assert_eq!(config.executor.call_present_evms, 11);
+    assert_eq!(config.executor.call_present_evms, Some(11));
 }
 
 #[test]

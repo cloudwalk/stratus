@@ -5,20 +5,16 @@ use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::anyhow;
 use tracing::Span;
 
-use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::executor::evm::types::CallExecutionInput;
 use crate::eth::executor::evm::types::EvmInput;
+use crate::eth::executor::evm::types::EvmKind;
 use crate::eth::executor::evm::types::ExecutionMetrics;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::types::error::ExecutorError;
 use crate::eth::types::StratusError;
-
-pub struct EvmTask<T: Task + Send> {
-    pub span: Span,
-    task: T,
-}
+use crate::utils::Permit;
 
 #[derive(derive_new::new)]
 pub struct ExecutionTask<Input: EvmInput> {
@@ -41,38 +37,67 @@ pub enum EvmRoute {
     CallPast(CallExecutionInput),
 }
 
-impl<T: Task + Send> From<T> for EvmTask<T> {
-    fn from(task: T) -> Self {
-        Self { span: Span::current(), task }
+/// A task for the unified EVM pool.
+pub struct PoolTask {
+    pub span: Span,
+    kind: EvmKind,
+    permit: Permit,
+    task: PoolTaskKind,
+}
+
+enum PoolTaskKind {
+    Call(ExecutionTask<CallExecutionInput>),
+    Inspect(InspectionTask),
+}
+
+impl PoolTask {
+    pub fn call(task: ExecutionTask<CallExecutionInput>, kind: EvmKind, permit: Permit) -> Self {
+        debug_assert!(matches!(kind, EvmKind::CallPresent | EvmKind::CallPast));
+        Self {
+            span: Span::current(),
+            kind,
+            permit,
+            task: PoolTaskKind::Call(task),
+        }
+    }
+
+    pub fn inspect(task: InspectionTask, permit: Permit) -> Self {
+        Self {
+            span: Span::current(),
+            kind: EvmKind::Inspect,
+            permit,
+            task: PoolTaskKind::Inspect(task),
+        }
+    }
+
+    pub fn execute(self, evm: &mut Evm) -> anyhow::Result<(), StratusError> {
+        let Self {
+            span,
+            kind,
+            permit: _permit,
+            task,
+        } = self;
+        let _enter = span.enter();
+        let _busy = kind.mark_executor_pool_busy();
+
+        catch_unwind(AssertUnwindSafe(move || match task {
+            PoolTaskKind::Call(task) => task.execute(evm),
+            PoolTaskKind::Inspect(task) => task.execute(evm),
+        }))
+        .map_err(|err| ExecutorError::Panic { err: anyhow!("{err:?}") }.into())
     }
 }
 
-impl<T: Task + Send> EvmTask<T> {
-    pub fn execute(self, evm: &mut Evm<T::Input>) -> anyhow::Result<(), StratusError> {
-        let _enter = self.span.enter();
-        catch_unwind(AssertUnwindSafe(|| self.task.execute(evm))).map_err(|err| ExecutorError::Panic { err: anyhow!("{err:?}") }.into())
-    }
-}
-
-pub trait Task {
-    type Input: EvmInput;
-
-    fn execute(self, evm: &mut Evm<Self::Input>);
-}
-
-impl<Input: EvmInput> Task for ExecutionTask<Input> {
-    type Input = Input;
-
-    fn execute(self, evm: &mut Evm<Self::Input>) {
+impl<Input: EvmInput> ExecutionTask<Input> {
+    fn execute(self, evm: &mut Evm) {
         if let Err(e) = self.response_tx.send(evm.execute(self.input)) {
             tracing::error!(reason = ?e, "failed to send evm task execution result");
         }
     }
 }
 
-impl Task for InspectionTask {
-    type Input = TransactionExecutionInput;
-    fn execute(self, evm: &mut Evm<TransactionExecutionInput>) {
+impl InspectionTask {
+    fn execute(self, evm: &mut Evm) {
         if let Err(e) = self.response_tx.send(evm.inspect(self.input)) {
             tracing::error!(reason = ?e, "failed to send evm task execution result");
         }
