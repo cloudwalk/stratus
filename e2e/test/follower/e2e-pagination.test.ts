@@ -11,6 +11,14 @@ import { FOLLOWER_URL, rpcCall, waitForFollowerBlock, waitForReceipt } from "./h
 const MAX_RESPONSE_BYTES = 8192;
 const FAT_TX_DATA_BYTES = 50_000;
 
+// The stratus-native block DTO serializes hashes as byte arrays; convert them to hex for assertions.
+const bytesToHex = (bytes: number[]) => "0x" + Buffer.from(bytes).toString("hex");
+
+// The block DTO serializes block numbers as byte-order-swapped u32 (paired to_be/from_be serde in
+// Rust, the same wire contract as `stratus_get_block_with_changes`); swap them back for assertions.
+const swapU32 = (value: number) =>
+    ((value & 0xff) << 24) | ((value & 0xff00) << 8) | ((value >>> 8) & 0xff00) | (value >>> 24);
+
 describe("Pagination", () => {
     it("paginates oversized importer responses and keeps the follower syncing", async () => {
         // a fitting response is served normally, with no envelope, so old followers are unaffected
@@ -19,6 +27,18 @@ describe("Pagination", () => {
         const small = await send("stratus_getBlockAndReceipts", [earlyBlock.hash]);
         expect(small.stratus_paginated).to.be.undefined;
         expect(small.block.number).to.equal("0x1");
+
+        // the stratus-native format serves the block DTO directly, still without envelope when it fits
+        const smallStratus = await send("stratus_getBlockAndReceipts", [
+            earlyBlock.hash,
+            { offset: 0, format: "stratus" },
+        ]);
+        expect(smallStratus.stratus_paginated).to.be.undefined;
+        expect(smallStratus.block).to.be.undefined;
+        expect(smallStratus.receipts).to.be.undefined;
+        expect(bytesToHex(smallStratus.header.hash)).to.equal(earlyBlock.hash);
+        expect(swapU32(smallStratus.header.number)).to.equal(1);
+        expect(smallStratus.transactions).to.be.an("array");
 
         // fat contract deployment: the code always fails, but the fat data makes the response oversized
         const nonce = await send("eth_getTransactionCount", [ALICE.address]);
@@ -62,6 +82,39 @@ describe("Pagination", () => {
         expect(response.block.transactions).to.have.length(1);
         expect(response.receipts).to.have.length(1);
         expect(response.receipts[0].transactionHash).to.equal(txHash);
+
+        // the same oversized block paginates identically in the stratus-native format,
+        // with the format field riding every chunk request
+        let stratusAssembled: Buffer = Buffer.alloc(0);
+        let stratusTotal = 0;
+        for (
+            let offset = 0;
+            stratusTotal === 0 || stratusAssembled.length < stratusTotal;
+            offset = stratusAssembled.length
+        ) {
+            const envelope = await send("stratus_getBlockAndReceipts", [
+                fatBlockHash,
+                { offset: offset, format: "stratus" },
+            ]);
+            expect(envelope.stratus_paginated).to.not.be.undefined;
+            stratusTotal = envelope.stratus_paginated.total;
+            const chunk = Buffer.from(envelope.stratus_paginated.chunk, "base64");
+            expect(chunk.length).to.be.greaterThan(0);
+            stratusAssembled = Buffer.concat([stratusAssembled, chunk]);
+        }
+        expect(stratusAssembled.length).to.equal(stratusTotal);
+        expect(stratusTotal).to.be.greaterThan(MAX_RESPONSE_BYTES, "the stratus response should be oversized");
+
+        // the reassembled stratus content has the block DTO shape, with receipts embedded
+        const stratusResponse = JSON.parse(stratusAssembled.toString("utf8"));
+        expect(stratusResponse.block).to.be.undefined;
+        expect(stratusResponse.receipts).to.be.undefined;
+        expect(bytesToHex(stratusResponse.header.hash)).to.equal(fatBlockHash);
+        expect(swapU32(stratusResponse.header.number)).to.equal(fatBlockNumber);
+        expect(stratusResponse.transactions).to.have.length(1);
+        expect(bytesToHex(stratusResponse.transactions[0].input.hash)).to.equal(txHash);
+        expect(stratusResponse.transactions[0].execution).to.not.be.undefined;
+        expect(stratusResponse.transactions[0].logs).to.not.be.undefined;
 
         // the follower imports the fat block through the paginated importer
         await waitForFollowerBlock(fatBlockNumber);

@@ -477,6 +477,7 @@ mod tests {
             async_threads = 4
             forward_access_list = false
             stop_at_block = "0x2a"
+            response_format = "stratus"
 
             [kafka]
             bootstrap_servers = "localhost:29092"

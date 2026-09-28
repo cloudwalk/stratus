@@ -137,6 +137,9 @@ chain_id = 2008
 # async_threads = 4
 # Compute an access list for transactions before forwarding them to the leader.
 # forward_access_list = true
+# Response format for stratus_getBlockAndReceipts importer requests: "alloy" (default) or "stratus".
+# The stratus format serializes blocks with receipts directly from the stratus types.
+# response_format = "alloy"
 # Block number to stop importing at, e.g. `0x2a`. When absent, imports indefinitely.
 # stop_at_block = "0x2a"
 
