@@ -1,6 +1,7 @@
 mod config;
 mod evm;
 mod evm_worker_pool;
+mod pool_admission;
 mod transaction_worker;
 pub mod types;
 

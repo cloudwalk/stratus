@@ -12,9 +12,9 @@ use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::EvmKind;
 use crate::eth::executor::evm::types::ExecutionMetrics;
 use crate::eth::executor::evm::types::InspectorInput;
+use crate::eth::executor::pool_admission::PoolPermit;
 use crate::eth::executor::types::error::ExecutorError;
 use crate::eth::types::StratusError;
-use crate::utils::Permit;
 
 #[derive(derive_new::new)]
 pub struct ExecutionTask<Input: EvmInput> {
@@ -41,7 +41,7 @@ pub enum EvmRoute {
 pub struct PoolTask {
     pub span: Span,
     evm_kind: EvmKind,
-    permit: Permit,
+    permit: PoolPermit,
     task_kind: PoolTaskKind,
 }
 
@@ -51,7 +51,7 @@ enum PoolTaskKind {
 }
 
 impl PoolTask {
-    pub fn call(task: ExecutionTask<CallExecutionInput>, kind: EvmKind, permit: Permit) -> Self {
+    pub fn call(task: ExecutionTask<CallExecutionInput>, kind: EvmKind, permit: PoolPermit) -> Self {
         debug_assert!(matches!(kind, EvmKind::CallPresent | EvmKind::CallPast));
         Self {
             span: Span::current(),
@@ -61,7 +61,7 @@ impl PoolTask {
         }
     }
 
-    pub fn inspect(task: InspectionTask, permit: Permit) -> Self {
+    pub fn inspect(task: InspectionTask, permit: PoolPermit) -> Self {
         Self {
             span: Span::current(),
             evm_kind: EvmKind::Inspect,

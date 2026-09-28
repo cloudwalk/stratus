@@ -375,9 +375,11 @@ mod tests {
 
             [executor]
             chain_id = 100
-            call_present_evms = 1
-            call_past_evms = 2
-            inspector_evms = 3
+            evm_workers = 10
+            call_present_limit = 1
+            call_past_limit = 4
+            inspector_limit = 5
+            evm_busy_threshold = 75
             reject_not_contract = false
             evm_spec = "Cancun"
 
@@ -573,13 +575,10 @@ mod tests {
             [executor]
             chain_id = 100
             evm_workers = 10
-            call_present_limit = 7
+            call_present_limit = 1
             call_past_limit = 4
             inspector_limit = 5
-            evm_flex_quota = 1
-            call_present_evms = 1
-            call_past_evms = 2
-            inspector_evms = 3
+            evm_busy_threshold = 75
             reject_not_contract = false
             evm_spec = "Cancun"
 

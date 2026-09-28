@@ -112,11 +112,17 @@ metrics! {
         "Total number of EVM workers in the unified executor pool."
         gauge executor_workers_total{},
 
-        "Number of tasks waiting to acquire an executor pool permit, by semaphore kind."
-        gauge executor_pool_permits_waiting{kind},
+        "Number of tasks currently executing in the unified executor pool, by kind."
+        gauge executor_pool_inflight{kind},
 
-        "Number of executor pool permits currently held, by semaphore kind."
-        gauge executor_pool_permits_held{kind},
+        "Number of tasks waiting to be admitted to the unified executor pool, by kind."
+        gauge executor_pool_waiting{kind},
+
+        "Number of tasks currently executing in the unified executor pool."
+        gauge executor_pool_inflight_total{},
+
+        "Number of tasks admitted through the relaxed path while the pool was below the busy threshold, by kind."
+        counter executor_pool_relaxed_admissions{kind},
 
         "Length of the executor pool task queue."
         gauge executor_pool_queue_len{}

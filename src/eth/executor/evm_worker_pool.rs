@@ -13,6 +13,7 @@ use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::EvmKind;
 use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::executor::evm::types::InspectorInput;
+use crate::eth::executor::pool_admission::PoolAdmission;
 use crate::eth::executor::types::EvmRoute;
 use crate::eth::executor::types::ExecutionTask;
 use crate::eth::executor::types::InspectionTask;
@@ -22,18 +23,18 @@ use crate::eth::types::StratusError;
 use crate::eth::types::UnexpectedError;
 use crate::ext::spawn_thread;
 use crate::infra::tracing::warn_task_tx_closed;
-use crate::utils::Permit;
-use crate::utils::Semaphore;
-use crate::utils::SemaphoreMetrics;
 
 /// Total capacity of the unified EVM pool task queue.
 const TASK_QUEUE_CAPACITY: usize = 4096;
 
 /// Default number of EVM workers in the unified pool (sum of the old per-kind pool defaults).
-const DEFAULT_WORKERS: usize = 150;
+pub const DEFAULT_WORKERS: usize = 150;
 
 /// Default maximum number of concurrent call-past and inspector executions.
-const DEFAULT_KIND_LIMIT: usize = 50;
+pub const DEFAULT_KIND_LIMIT: usize = 50;
+
+/// Default pool busy percentage above which per-kind limits are enforced.
+pub const DEFAULT_BUSY_THRESHOLD: usize = 80;
 
 /// Effective configuration of the unified EVM pool, resolved from [`ExecutorConfig`].
 #[derive(Clone, Copy, Debug)]
@@ -50,116 +51,74 @@ pub struct PoolConfig {
     /// Maximum number of concurrent inspector executions.
     pub inspector_limit: usize,
 
-    /// Extra permits that any execution kind can borrow when its own limit is exhausted.
-    pub flex_quota: usize,
+    /// Pool busy percentage above which per-kind limits are enforced.
+    pub busy_threshold: usize,
 }
 
 impl PoolConfig {
-    /// Resolves the effective pool configuration, mapping deprecated fields to their new meaning.
+    /// Resolves the effective pool configuration.
     pub fn resolve(config: &ExecutorConfig) -> anyhow::Result<Self> {
-        if config.evm_workers == Some(0) {
-            bail!("executor.evm_workers must be greater than zero");
-        }
-
         for (field, value) in [
-            ("executor.call_present_evms", config.call_present_evms),
-            ("executor.call_past_evms", config.call_past_evms),
-            ("executor.inspector_evms", config.inspector_evms),
+            ("executor.evm_workers", config.evm_workers),
+            ("executor.call_past_limit", config.call_past_limit),
+            ("executor.inspector_limit", config.inspector_limit),
         ] {
-            if value.is_some() {
-                tracing::warn!(
-                    field,
-                    "deprecated executor pool field; use executor.evm_workers and the per-kind limit fields instead"
-                );
+            if value == 0 {
+                bail!("{field} must be greater than zero");
             }
         }
 
-        let call_past_limit = config.call_past_limit.or(config.call_past_evms).unwrap_or(DEFAULT_KIND_LIMIT);
-        let inspector_limit = config.inspector_limit.or(config.inspector_evms).unwrap_or(DEFAULT_KIND_LIMIT);
+        if let Some(0) = config.call_present_limit {
+            bail!("executor.call_present_limit must be greater than zero");
+        }
 
-        let workers = match config.evm_workers {
-            Some(workers) => workers,
-            // no old field set: default pool size
-            None if !config.has_deprecated_pool_sizes() => DEFAULT_WORKERS,
-            // at least one old field set: preserve the total capacity of the old per-kind pools
-            None =>
-                config.call_present_evms.unwrap_or(DEFAULT_KIND_LIMIT)
-                    + config.call_past_evms.unwrap_or(DEFAULT_KIND_LIMIT)
-                    + config.inspector_evms.unwrap_or(DEFAULT_KIND_LIMIT),
-        };
+        if config.evm_busy_threshold > 100 {
+            bail!("executor.evm_busy_threshold must be a percentage between 0 and 100");
+        }
 
-        let call_present_limit = config
-            .call_present_limit
-            .or(config.call_present_evms)
-            .unwrap_or_else(|| workers.saturating_sub(call_past_limit + inspector_limit));
+        // defaults to the remaining pool capacity
+        let call_present_limit = config.call_present_limit.unwrap_or_else(|| {
+            let remaining = config.evm_workers.saturating_sub(config.call_past_limit + config.inspector_limit);
+            if remaining == 0 {
+                tracing::warn!("call-present limit defaults to zero; call-present tasks will only be admitted while the pool is below the busy threshold");
+            }
+            remaining
+        });
 
         let resolved = Self {
-            workers,
+            workers: config.evm_workers,
             call_present_limit,
-            call_past_limit,
-            inspector_limit,
-            flex_quota: config.evm_flex_quota,
+            call_past_limit: config.call_past_limit,
+            inspector_limit: config.inspector_limit,
+            busy_threshold: config.evm_busy_threshold,
         };
 
-        let limits_sum = call_present_limit + call_past_limit + inspector_limit;
-        if limits_sum > workers {
+        let limits_sum = resolved.call_present_limit + resolved.call_past_limit + resolved.inspector_limit;
+        if limits_sum > resolved.workers {
             bail!(
-                "executor pool kind limits ({call_present_limit} call-present + {call_past_limit} call-past + {inspector_limit} inspector = {limits_sum}) \
-                 exceed the total number of workers ({workers}); increase executor.evm_workers or lower the limits"
+                "executor pool kind limits ({} call-present + {} call-past + {} inspector = {limits_sum}) \
+                 exceed the total number of workers ({}); increase executor.evm_workers or lower the limits",
+                resolved.call_present_limit,
+                resolved.call_past_limit,
+                resolved.inspector_limit,
+                resolved.workers
             );
         }
 
         tracing::info!(?resolved, "unified EVM pool configuration resolved");
         Ok(resolved)
     }
-}
 
-/// Per-kind concurrency limits of the unified EVM pool.
-struct PoolLimits {
-    call_present: Semaphore,
-    call_past: Semaphore,
-    inspector: Semaphore,
-    flex: Semaphore,
-}
-
-impl PoolLimits {
-    fn new(config: PoolConfig) -> Self {
-        Self {
-            call_present: Semaphore::with_metrics(config.call_present_limit, SemaphoreMetrics::Pool("call_present")),
-            call_past: Semaphore::with_metrics(config.call_past_limit, SemaphoreMetrics::Pool("call_past")),
-            inspector: Semaphore::with_metrics(config.inspector_limit, SemaphoreMetrics::Pool("inspector")),
-            flex: Semaphore::with_metrics(config.flex_quota, SemaphoreMetrics::Pool("flex")),
-        }
-    }
-
-    /// Own-limit semaphore of an execution kind.
-    fn own(&self, kind: EvmKind) -> &Semaphore {
-        match kind {
-            EvmKind::CallPresent => &self.call_present,
-            EvmKind::CallPast => &self.call_past,
-            EvmKind::Inspect => &self.inspector,
-            EvmKind::Transaction => unreachable!("transaction execution is not managed by the unified EVM pool"),
-        }
-    }
-
-    /// Acquires a permit for the kind, borrowing from the flex quota when the own limit is exhausted.
-    fn acquire(&self, kind: EvmKind) -> Option<Permit> {
-        if let Some(permit) = self.own(kind).try_acquire() {
-            return Some(permit);
-        }
-
-        if let Some(permit) = self.flex.try_acquire() {
-            return Some(permit);
-        }
-
-        self.own(kind).acquire_shutdown_aware()
+    /// In-flight task count at which relaxed admission ends and per-kind limits are enforced.
+    pub fn relaxed_limit(&self) -> usize {
+        self.workers * self.busy_threshold / 100
     }
 }
 
 /// Manages the unified EVM pool: one shared set of workers serving every execution kind.
 pub struct EvmWorkerPool {
     tx: crossbeam_channel::Sender<PoolTask>,
-    limits: Arc<PoolLimits>,
+    admission: Arc<PoolAdmission>,
 }
 
 impl EvmWorkerPool {
@@ -167,6 +126,7 @@ impl EvmWorkerPool {
     pub fn spawn(storage: Arc<StratusStorage>, config: &ExecutorConfig) -> anyhow::Result<Self> {
         let pool = PoolConfig::resolve(config)?;
         let (tx, rx) = crossbeam_channel::bounded::<PoolTask>(TASK_QUEUE_CAPACITY);
+        let admission = Arc::new(PoolAdmission::new(pool));
 
         for worker_index in 1..=pool.workers {
             let task_name = format!("evm-pool-{worker_index}");
@@ -185,10 +145,7 @@ impl EvmWorkerPool {
         }
         metrics::set_executor_workers_total(pool.workers as u64);
 
-        Ok(Self {
-            tx,
-            limits: Arc::new(PoolLimits::new(pool)),
-        })
+        Ok(Self { tx, admission })
     }
 
     /// Executes a call in the specified route.
@@ -201,7 +158,7 @@ impl EvmWorkerPool {
             EvmRoute::CallPast(_) => EvmKind::CallPast,
         };
 
-        let Some(permit) = self.limits.acquire(kind) else {
+        let Some(permit) = self.admission.acquire(kind) else {
             return Err(UnexpectedError::Unexpected(anyhow!("executor pool is shutting down")).into());
         };
 
@@ -225,7 +182,7 @@ impl EvmWorkerPool {
 
     /// Executes a transaction inspection (debug_traceTransaction).
     pub fn inspect(&self, input: InspectorInput) -> Result<GethTrace, StratusError> {
-        let Some(permit) = self.limits.acquire(EvmKind::Inspect) else {
+        let Some(permit) = self.admission.acquire(EvmKind::Inspect) else {
             return Err(UnexpectedError::Unexpected(anyhow!("executor pool is shutting down")).into());
         };
 
@@ -279,55 +236,28 @@ mod tests {
         assert_eq!(pool.call_present_limit, 50);
         assert_eq!(pool.call_past_limit, 50);
         assert_eq!(pool.inspector_limit, 50);
-        assert_eq!(pool.flex_quota, 0);
+        assert_eq!(pool.busy_threshold, DEFAULT_BUSY_THRESHOLD);
+        assert_eq!(pool.relaxed_limit(), 120);
     }
 
     #[test]
-    fn test_pool_config_maps_deprecated_fields() {
+    fn test_pool_config_explicit_call_present_limit() {
         let mut config = test_config();
-        config.call_present_evms = Some(100);
-        config.call_past_evms = Some(20);
-        config.inspector_evms = Some(30);
-        let pool = PoolConfig::resolve(&config).unwrap();
-        // total capacity preserved: 100 + 20 + 30
-        assert_eq!(pool.workers, 150);
-        assert_eq!(pool.call_present_limit, 100);
-        assert_eq!(pool.call_past_limit, 20);
-        assert_eq!(pool.inspector_limit, 30);
-    }
-
-    #[test]
-    fn test_pool_config_deprecated_fields_with_unset_kinds() {
-        let mut config = test_config();
-        config.call_present_evms = Some(100);
-        let pool = PoolConfig::resolve(&config).unwrap();
-        // unset deprecated fields keep their old defaults (50) when computing the total
-        assert_eq!(pool.workers, 200);
-        assert_eq!(pool.call_present_limit, 100);
-        assert_eq!(pool.call_past_limit, 50);
-        assert_eq!(pool.inspector_limit, 50);
-    }
-
-    #[test]
-    fn test_pool_config_new_fields_take_precedence() {
-        let mut config = test_config();
-        config.evm_workers = Some(200);
+        config.evm_workers = 200;
         config.call_present_limit = Some(120);
-        config.call_past_limit = Some(20);
-        config.inspector_limit = Some(30);
-        config.evm_flex_quota = 40;
+        config.call_past_limit = 20;
+        config.inspector_limit = 30;
         let pool = PoolConfig::resolve(&config).unwrap();
         assert_eq!(pool.workers, 200);
         assert_eq!(pool.call_present_limit, 120);
         assert_eq!(pool.call_past_limit, 20);
         assert_eq!(pool.inspector_limit, 30);
-        assert_eq!(pool.flex_quota, 40);
     }
 
     #[test]
     fn test_pool_config_call_present_uses_remaining_capacity() {
         let mut config = test_config();
-        config.evm_workers = Some(200);
+        config.evm_workers = 200;
         let pool = PoolConfig::resolve(&config).unwrap();
         assert_eq!(pool.call_present_limit, 200 - 50 - 50);
     }
@@ -335,17 +265,39 @@ mod tests {
     #[test]
     fn test_pool_config_rejects_limits_exceeding_workers() {
         let mut config = test_config();
-        config.evm_workers = Some(100);
+        config.evm_workers = 100;
         config.call_present_limit = Some(60);
-        config.call_past_limit = Some(50);
-        config.inspector_limit = Some(50);
+        config.call_past_limit = 50;
+        config.inspector_limit = 50;
         assert!(PoolConfig::resolve(&config).is_err());
     }
 
     #[test]
     fn test_pool_config_rejects_zero_workers() {
         let mut config = test_config();
-        config.evm_workers = Some(0);
+        config.evm_workers = 0;
         assert!(PoolConfig::resolve(&config).is_err());
+    }
+
+    #[test]
+    fn test_pool_config_rejects_zero_limit() {
+        let mut config = test_config();
+        config.call_past_limit = 0;
+        assert!(PoolConfig::resolve(&config).is_err());
+    }
+
+    #[test]
+    fn test_pool_config_rejects_threshold_above_100() {
+        let mut config = test_config();
+        config.evm_busy_threshold = 101;
+        assert!(PoolConfig::resolve(&config).is_err());
+    }
+
+    #[test]
+    fn test_pool_config_zero_threshold_is_strict() {
+        let mut config = test_config();
+        config.evm_busy_threshold = 0;
+        let pool = PoolConfig::resolve(&config).unwrap();
+        assert_eq!(pool.relaxed_limit(), 0);
     }
 }

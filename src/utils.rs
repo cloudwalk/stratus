@@ -1,12 +1,9 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use derive_more::Deref;
 use parking_lot::Condvar;
 use parking_lot::Mutex;
 use tokio::time::Instant;
-
-use crate::GlobalState;
 
 /// Amount of bytes in one GB (technically, GiB).
 pub const GIGABYTE: usize = 1024 * 1024 * 1024;
@@ -31,9 +28,6 @@ impl Drop for DropTimer {
     }
 }
 
-/// Interval between shutdown checks while blocked acquiring a shutdown-aware semaphore permit.
-const SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(250);
-
 #[derive(Deref, Default)]
 pub struct Semaphore {
     #[deref]
@@ -56,9 +50,6 @@ pub enum SemaphoreMetrics {
 
     /// Legacy metrics of the local transaction warmup semaphore (unlabeled).
     LocalTransaction,
-
-    /// Unified executor pool permit metrics, labeled by semaphore kind.
-    Pool(&'static str),
 }
 
 impl SemaphoreMetrics {
@@ -66,7 +57,6 @@ impl SemaphoreMetrics {
         match *self {
             Self::Disabled => {}
             Self::LocalTransaction => stratus_metrics::inc_executor_local_transaction_semaphore_waiting(1),
-            Self::Pool(kind) => stratus_metrics::inc_executor_pool_permits_waiting(1, kind),
         }
     }
 
@@ -74,7 +64,6 @@ impl SemaphoreMetrics {
         match *self {
             Self::Disabled => {}
             Self::LocalTransaction => stratus_metrics::dec_executor_local_transaction_semaphore_waiting(1),
-            Self::Pool(kind) => stratus_metrics::dec_executor_pool_permits_waiting(1, kind),
         }
     }
 
@@ -82,7 +71,6 @@ impl SemaphoreMetrics {
         match *self {
             Self::Disabled => {}
             Self::LocalTransaction => stratus_metrics::inc_executor_local_transaction_permit_holders(1),
-            Self::Pool(kind) => stratus_metrics::inc_executor_pool_permits_held(1, kind),
         }
     }
 
@@ -90,7 +78,6 @@ impl SemaphoreMetrics {
         match *self {
             Self::Disabled => {}
             Self::LocalTransaction => stratus_metrics::dec_executor_local_transaction_permit_holders(1),
-            Self::Pool(kind) => stratus_metrics::dec_executor_pool_permits_held(1, kind),
         }
     }
 }
@@ -126,37 +113,6 @@ impl Semaphore {
         self.metrics.waiting_removed();
         self.metrics.permit_acquired();
         Permit { sem: Arc::clone(&self.sem) }
-    }
-
-    /// Tries to acquire a permit without blocking.
-    pub fn try_acquire(&self) -> Option<Permit> {
-        let mut permits = self.permits.lock();
-        if *permits == 0 {
-            return None;
-        }
-        *permits -= 1;
-        drop(permits);
-        self.metrics.permit_acquired();
-        Some(Permit { sem: Arc::clone(&self.sem) })
-    }
-
-    /// Blocks until a permit is available or the application starts shutting down.
-    pub fn acquire_shutdown_aware(&self) -> Option<Permit> {
-        self.metrics.waiting_added();
-        let mut permits = self.permits.lock();
-        while *permits == 0 {
-            if GlobalState::is_shutdown() {
-                drop(permits);
-                self.metrics.waiting_removed();
-                return None;
-            }
-            self.cvar.wait_for(&mut permits, SHUTDOWN_POLL_INTERVAL);
-        }
-        *permits -= 1;
-        drop(permits);
-        self.metrics.waiting_removed();
-        self.metrics.permit_acquired();
-        Some(Permit { sem: Arc::clone(&self.sem) })
     }
 }
 

@@ -6,6 +6,9 @@ use display_json::DebugAsJson;
 use revm::primitives::hardfork::SpecId;
 
 use crate::eth::executor::Executor;
+use crate::eth::executor::evm_worker_pool::DEFAULT_BUSY_THRESHOLD;
+use crate::eth::executor::evm_worker_pool::DEFAULT_KIND_LIMIT;
+use crate::eth::executor::evm_worker_pool::DEFAULT_WORKERS;
 use crate::eth::miner::Miner;
 use crate::eth::storage::StratusStorage;
 
@@ -17,24 +20,26 @@ pub struct ExecutorConfig {
     pub executor_chain_id: u64,
 
     /// Total number of EVM workers in the unified pool, shared by every execution kind.
-    #[arg(id = "executor.evm_workers", long = "executor-evm-workers")]
-    pub evm_workers: Option<usize>,
+    #[arg(id = "executor.evm_workers", long = "executor-evm-workers", default_value_t = DEFAULT_WORKERS)]
+    pub evm_workers: usize,
 
     /// Maximum number of concurrent call-present executions.
+    /// Defaults to the remaining pool capacity (`evm_workers` minus the other limits).
     #[arg(id = "executor.call_present_limit", long = "executor-call-present-limit")]
     pub call_present_limit: Option<usize>,
 
     /// Maximum number of concurrent call-past executions.
-    #[arg(id = "executor.call_past_limit", long = "executor-call-past-limit")]
-    pub call_past_limit: Option<usize>,
+    #[arg(id = "executor.call_past_limit", long = "executor-call-past-limit", default_value_t = DEFAULT_KIND_LIMIT)]
+    pub call_past_limit: usize,
 
     /// Maximum number of concurrent inspector executions.
-    #[arg(id = "executor.inspector_limit", long = "executor-inspector-limit")]
-    pub inspector_limit: Option<usize>,
+    #[arg(id = "executor.inspector_limit", long = "executor-inspector-limit", default_value_t = DEFAULT_KIND_LIMIT)]
+    pub inspector_limit: usize,
 
-    /// Extra permits that any execution kind can borrow when its own limit is exhausted.
-    #[arg(id = "executor.evm_flex_quota", long = "executor-evm-flex-quota", default_value_t = 0)]
-    pub evm_flex_quota: usize,
+    /// Pool busy percentage above which per-kind limits are enforced: while the pool is below this
+    /// threshold, tasks are admitted even above their kind's limit.
+    #[arg(id = "executor.evm_busy_threshold", long = "executor-evm-busy-threshold", default_value_t = DEFAULT_BUSY_THRESHOLD)]
+    pub evm_busy_threshold: usize,
 
     /// Should reject contract transactions and calls to accounts that are not contracts?
     #[arg(
@@ -52,18 +57,6 @@ pub struct ExecutorConfig {
     #[arg(id = "executor.evm_spec", long = "executor-evm-spec", default_value = "Prague", value_parser = parse_evm_spec)]
     #[serde(rename = "evm_spec", with = "spec_id_serde")]
     pub executor_evm_spec: SpecId,
-
-    /// Deprecated alias of `executor.call_present_limit`.
-    #[arg(id = "executor.call_present_evms", long = "executor-call-present-evms")]
-    pub call_present_evms: Option<usize>,
-
-    /// Deprecated alias of `executor.call_past_limit`.
-    #[arg(id = "executor.call_past_evms", long = "executor-call-past-evms")]
-    pub call_past_evms: Option<usize>,
-
-    /// Deprecated alias of `executor.inspector_limit`.
-    #[arg(id = "executor.inspector_evms", long = "executor-inspector-evms")]
-    pub inspector_evms: Option<usize>,
 }
 
 #[cfg(test)]
@@ -71,16 +64,13 @@ impl Default for ExecutorConfig {
     fn default() -> Self {
         Self {
             executor_chain_id: 0,
-            evm_workers: None,
+            evm_workers: DEFAULT_WORKERS,
             call_present_limit: None,
-            call_past_limit: None,
-            inspector_limit: None,
-            evm_flex_quota: 0,
+            call_past_limit: DEFAULT_KIND_LIMIT,
+            inspector_limit: DEFAULT_KIND_LIMIT,
+            evm_busy_threshold: DEFAULT_BUSY_THRESHOLD,
             executor_reject_not_contract: true,
             executor_evm_spec: SpecId::PRAGUE,
-            call_present_evms: None,
-            call_past_evms: None,
-            inspector_evms: None,
         }
     }
 }
@@ -109,12 +99,6 @@ fn parse_evm_spec(input: &str) -> anyhow::Result<SpecId> {
 }
 
 impl ExecutorConfig {
-    /// Returns whether any deprecated per-kind pool size field is set
-    /// (`call_present_evms`, `call_past_evms` or `inspector_evms`).
-    pub fn has_deprecated_pool_sizes(&self) -> bool {
-        self.call_present_evms.is_some() || self.call_past_evms.is_some() || self.inspector_evms.is_some()
-    }
-
     /// Initializes Executor.
     ///
     /// Note: Should be called only after async runtime is initialized.
