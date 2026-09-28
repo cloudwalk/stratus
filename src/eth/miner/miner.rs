@@ -275,8 +275,7 @@ impl Miner {
 
     /// Mines an imported stratus block and its reexecuted transactions.
     ///
-    /// Mirrors [`Self::mine_external`], but the imported block is already in the stratus-native
-    /// format. Local transactions are not allowed to be part of the block.
+    /// Local transactions are not allowed to be part of the block.
     pub fn mine_imported(&self, imported_block: Block) -> anyhow::Result<(Block, State<Complete>)> {
         // track
         #[cfg(feature = "tracing")]

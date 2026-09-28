@@ -194,9 +194,6 @@ impl BlockchainClient {
     /// Sends the pagination capability parameter so a pagination-aware leader can split
     /// responses that do not fit in a single message (see `eth::rpc::pagination`). Old leaders
     /// ignore the extra parameter and answer normally, which is handled transparently.
-    ///
-    /// The `format` parameter, when set, rides the pagination object so the leader serializes
-    /// every chunk of the response in the requested format.
     async fn request_importer_data<T: serde::de::DeserializeOwned>(
         &self,
         method: &'static str,
@@ -209,10 +206,6 @@ impl BlockchainClient {
         let value = match serde_json::from_str::<T>(full.get()) {
             Ok(value) => value,
             Err(e) if format == Some(ResponseFormat::Stratus) && Self::is_legacy_alloy_response(full.get()) => {
-                // A leader that does not know the format parameter ignores it and answers with
-                // the legacy alloy shape. Surface the cause instead of a cryptic missing-field
-                // deserialization error (the original error `e` is discarded on purpose: the
-                // shape check below pinpoints the cause).
                 let _ = e;
                 tracing::error!(method, "leader answered the stratus format request with the legacy alloy format");
                 anyhow::bail!(
@@ -226,8 +219,7 @@ impl BlockchainClient {
         Ok(Some(value))
     }
 
-    /// Checks whether a response has the legacy alloy shape (top-level `block` and `receipts`
-    /// objects) instead of the stratus DTO shape (top-level `header` and `transactions` objects).
+    /// Checks whether a response has the legacy alloy shape (top-level `block` and `receipts` objects).
     fn is_legacy_alloy_response(response: &str) -> bool {
         serde_json::from_str::<serde_json::Value>(response).is_ok_and(|value| value.get("block").is_some() && value.get("receipts").is_some())
     }
@@ -300,11 +292,6 @@ impl BlockchainClient {
     }
 
     /// Fetches a block by number with receipts.
-    ///
-    /// The response is deserialized according to the requested `response_format`: the legacy
-    /// alloy format (block and receipts as alloy RPC types) or the stratus-native format
-    /// (block with embedded receipts from the storage DTO). The format also rides the request
-    /// parameters so the leader serializes the response accordingly.
     pub async fn fetch_block_and_receipts(
         &self,
         block_number: BlockNumber,

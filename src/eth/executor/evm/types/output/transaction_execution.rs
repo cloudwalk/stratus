@@ -258,16 +258,7 @@ impl TransactionExecutionOutput {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Imported stratus transactions
-    // -------------------------------------------------------------------------
-
     /// Creates an execution from an imported stratus transaction that failed.
-    ///
-    /// Mirrors [`Self::from_failed_external_transaction`]: failed transactions are not re-executed
-    /// (the local re-execution runs with max gas and zero gas price, which could make a
-    /// transaction that failed under the original conditions succeed), so the outcome is
-    /// recreated from the stored execution instead.
     pub fn from_failed_imported_transaction(sender: Account, gas_price: Wei, stored: &TransactionExecutionResult) -> anyhow::Result<Self> {
         if stored.result.is_success() {
             return log_and_err!("cannot create failed execution for successful transaction");
@@ -302,9 +293,6 @@ impl TransactionExecutionOutput {
     }
 
     /// Checks if current execution state matches the stored execution of an imported transaction.
-    ///
-    /// Mirrors [`Self::compare_with_receipt`], comparing against the stratus-native stored
-    /// execution instead of an alloy receipt.
     pub fn compare_with_imported(&self, tx_hash: Hash, stored: &TransactionExecutionResult) -> anyhow::Result<()> {
         // compare execution status
         if self.is_success() != stored.result.is_success() {
@@ -366,8 +354,7 @@ impl TransactionExecutionOutput {
     ///
     /// This causes some attributes to be different from the stored execution.
     ///
-    /// This method updates the attributes that can diverge based on the stored execution, mirroring
-    /// [`Self::apply_receipt`]: `gas_price` and `sender` come from the imported transaction input.
+    /// This method updates the attributes that can diverge based on the stored execution of the imported transaction.
     pub fn apply_imported(&mut self, stored: &TransactionExecutionResult, gas_price: Wei, sender: Address) -> anyhow::Result<()> {
         // fix gas
         self.gas_used = stored.gas_used;

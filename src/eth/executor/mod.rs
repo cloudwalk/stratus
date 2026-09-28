@@ -223,14 +223,7 @@ impl Executor {
         Ok(())
     }
 
-    // -------------------------------------------------------------------------
-    // Imported stratus transactions
-    // -------------------------------------------------------------------------
-
     /// Reexecutes an imported stratus block locally and imports it to the temporary storage.
-    ///
-    /// Mirrors [`Executor::execute_external_block`], but the block is already in the stratus-native
-    /// format, so the receipt data is embedded in each [`TransactionMined`] execution result.
     #[timed(executor_imported_block)]
     pub fn execute_imported_block(&self, mut block: Block) -> anyhow::Result<()> {
         #[cfg(feature = "tracing")]
@@ -271,7 +264,6 @@ impl Executor {
         tx: TransactionMined,
         block_number: BlockNumber,
     ) -> anyhow::Result<()> {
-        // deconstruct the stored transaction into its parts
         let TransactionExecution {
             info,
             signature,
@@ -280,23 +272,18 @@ impl Executor {
         } = tx.execution;
         let tx_hash = info.hash;
 
-        // rebuild the transaction input from the stored fields to recover the signer
         let tx_input = TransactionInput {
             transaction_info: info,
             execution_info: stored_input.clone().into(),
             signature,
         };
 
-        // rederive the signer from the saved signature so the follower executes with the same
-        // address the leader derived from the same saved fields (mirrors the external path)
         let recovered = tx_input.recover_signer_address()?;
 
-        // reuse the stored execution input, overriding the sender with the recovered signer
         let mut evm_input = stored_input;
         evm_input.from = recovered;
         let gas_price = Wei::from(evm_input.gas_price);
 
-        // when the stored transaction failed, create fake transaction instead of reexecuting
         let (tx_execution, state) = match stored_output.result.is_success() {
             // successful imported transaction, re-execute locally
             true => {
@@ -330,7 +317,6 @@ impl Executor {
 
                 (TransactionExecution::new(info, signature, evm_input, evm_result.outcome), evm_result.state)
             }
-            //
             // failed imported transaction, re-create from the stored execution without re-executing
             false => {
                 let (sender, _) = storage.read_account(recovered, ExecutionKind::Transaction)?;

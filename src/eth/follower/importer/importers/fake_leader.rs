@@ -35,7 +35,6 @@ impl ImporterWorker for FakeLeaderWorker {
 
     #[timed(import_online_mined_block)]
     async fn import(&self, (fetched, (expected_block, expected_changes)): Self::DataType) -> anyhow::Result<usize> {
-        // prepare the block for local reexecution depending on the fetched response format
         let (block_tx_len, transactions) = match fetched {
             FetchedBlockWithReceipts::Alloy { block, .. } => {
                 let block_tx_len = block.transactions.len();
@@ -54,8 +53,6 @@ impl ImporterWorker for FakeLeaderWorker {
                 let transactions = std::mem::take(&mut block.transactions)
                     .into_iter()
                     .map(|tx| -> anyhow::Result<TransactionInput> {
-                        // rebuild the transaction input from the stored execution, recovering the
-                        // signer the same way the reexecution importer does
                         let TransactionExecution {
                             info,
                             signature,

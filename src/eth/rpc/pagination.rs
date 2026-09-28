@@ -76,20 +76,12 @@ pub struct PaginationParams {
     /// Byte offset of the requested chunk within the serialized response.
     pub offset: u64,
 
-    /// Response format requested from the leader for endpoints that support more than one
-    /// serialization. Only `stratus_getBlockAndReceipts` currently does; the field is ignored by
-    /// endpoints with a single format and by old leaders (serde ignores unknown fields).
+    /// Response format requested from the leader for endpoints that support more than one serialization.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format: Option<ResponseFormat>,
 }
 
 /// Response format for importer endpoints that support more than one serialization.
-///
-/// - [`ResponseFormat::Alloy`] is the legacy format: block and receipts converted to alloy
-///   JSON-RPC types. It is the default, so followers that do not opt in keep today's behavior.
-/// - [`ResponseFormat::Stratus`] is the native format: block with embedded receipts serialized
-///   directly from the stratus storage types, with no conversion. Requires an upgraded leader;
-///   old leaders ignore the parameter and answer in the alloy format.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ResponseFormat {

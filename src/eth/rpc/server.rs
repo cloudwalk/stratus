@@ -982,7 +982,6 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     let (sequence, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
     let pagination = pagination::parse_request(sequence)?;
 
-    // absent format parameter means the legacy alloy format
     let response_format = pagination.as_ref().and_then(|params| params.format).unwrap_or_default();
 
     // track
@@ -997,10 +996,7 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
 
     // serialize in the requested format
     let value = match response_format {
-        ResponseFormat::Stratus => {
-            // receipts are embedded in the stratus storage types
-            to_json_value(BlockRocksdb::from(block))
-        }
+        ResponseFormat::Stratus => to_json_value(BlockRocksdb::from(block)),
         ResponseFormat::Alloy => {
             let receipts = block.transactions.iter().cloned().map(AlloyReceipt::from).collect::<Vec<_>>();
             json!({

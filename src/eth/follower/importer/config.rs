@@ -81,9 +81,7 @@ pub struct ImporterConfig {
     #[arg(id = "importer.stop_at_block", long = "stop-at-block")]
     pub stop_at_block: Option<BlockNumber>,
 
-    /// Response format used by the block-and-receipts importer RPC (importer online). Use
-    /// "stratus" to request stratus-native serialization (issue #2709), or "alloy" for the legacy
-    /// alloy-based serialization.
+    /// Response format used by the block-and-receipts importer RPC (importer online).
     #[arg(id = "importer.response_format", long = "response-format", default_value = "alloy", required = false)]
     pub response_format: ResponseFormat,
 }

@@ -14,9 +14,6 @@ use crate::eth::types::ExternalBlock;
 use crate::eth::types::ExternalReceipt;
 
 /// Block with receipts fetched from the leader, in either supported response format.
-///
-/// The variants hold large transient payloads that are consumed immediately, so the size
-/// difference is harmless.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum FetchedBlockWithReceipts {
@@ -104,7 +101,6 @@ impl DataFetcher for BlockWithReceiptsFetcher {
                 Ok(FetchedBlockWithReceipts::Alloy { block, receipts })
             }
             FetchedBlockWithReceipts::Stratus(block) => {
-                // transactions are stored in order, so no sorting is needed; only check indices
                 for window in block.transactions.windows(2) {
                     let tx_index = window[0].mined_data.index.0;
                     let next_tx_index = window[1].mined_data.index.0;

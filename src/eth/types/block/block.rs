@@ -101,10 +101,6 @@ impl Block {
         }
     }
 
-    /// Patches this locally mined block with the header and mined data of an imported stratus block.
-    ///
-    /// Mirrors [`Self::apply_external`], but the imported block is already in the stratus-native
-    /// format, so the transaction hashes and header match the local reexecution by construction.
     pub fn apply_imported(&mut self, imported_block: &Block) {
         self.header.hash = imported_block.hash();
         assert!(*self.header.timestamp == *imported_block.header.timestamp);
