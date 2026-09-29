@@ -631,11 +631,11 @@ impl RlpDecodable for TransactionInput {
         }
 
         let tx = match raw_bytes[0] {
-            byte if byte >= 0xc0 => Self::decode_legacy(raw_bytes).map_err(alloy_rlp::Error::from)?,
+            byte if byte >= 0xc0 => Self::decode_legacy(raw_bytes)?,
             byte if byte <= 0x7f => {
                 let tx_type = byte;
                 let payload = &raw_bytes[1..];
-                Self::decode_typed(tx_type, payload, raw_bytes).map_err(alloy_rlp::Error::from)?
+                Self::decode_typed(tx_type, payload, raw_bytes)?
             }
             _ => return Err(TransactionDecodeError::InvalidTypeByte.into()),
         };
