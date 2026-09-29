@@ -1,6 +1,7 @@
 mod config;
 mod evm;
 mod evm_worker_pool;
+mod pool_admission;
 mod transaction_worker;
 pub mod types;
 
@@ -39,7 +40,6 @@ use crate::eth::executor::evm::types::CallExecutionInput;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm_worker_pool::EvmWorkerPool;
 use crate::eth::executor::transaction_worker::TransactionWorker;
-use crate::eth::executor::types::EvmRoute;
 use crate::eth::miner::Miner;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
@@ -52,7 +52,6 @@ use crate::eth::types::ExternalReceipt;
 use crate::eth::types::ExternalReceipts;
 use crate::eth::types::ExternalTransaction;
 use crate::eth::types::Hash;
-use crate::eth::types::PointInTime;
 use crate::eth::types::StratusError;
 use crate::eth::types::TransactionInput;
 #[cfg(feature = "metrics")]
@@ -145,7 +144,7 @@ impl Executor {
     fn execute_external_transaction_inner(
         storage: &StratusStorage,
         miner: &Miner,
-        evm: &mut Evm<TransactionExecutionInput>,
+        evm: &mut Evm,
         tx: ExternalTransaction,
         receipt: ExternalReceipt,
         block_number: BlockNumber,
@@ -293,12 +292,7 @@ impl Executor {
 
         let evm_input = CallExecutionInput::create(call_input, block_info, kind);
 
-        let evm_route = match kind.point_in_time() {
-            PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input),
-            PointInTime::Past(_) => EvmRoute::CallPast(evm_input),
-        };
-
-        self.evms.execute::<Output>(evm_route).map(|(output, _metrics)| output)
+        self.evms.execute::<Output>(evm_input).map(|(output, _metrics)| output)
     }
 
     #[timed(executor_inspect, labels(

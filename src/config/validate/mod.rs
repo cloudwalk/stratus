@@ -27,6 +27,9 @@ enum Step {
     /// Shares the block-mode conflict check of `MinerConfig::init`
     MinerExternalBlockMode,
 
+    /// Shares the suboptimal-configuration warnings of `PoolConfig::validate`
+    ExecutorPoolLimits,
+
     /// A genesis file that does not exist is silently replaced by the default genesis block at runtime.
     #[cfg(feature = "dev")]
     GenesisFileExists,
@@ -36,6 +39,7 @@ impl Step {
     const WORKFLOW: &'static [Self] = &[
         Self::KafkaCompleteness,
         Self::MinerExternalBlockMode,
+        Self::ExecutorPoolLimits,
         #[cfg(feature = "dev")]
         Self::GenesisFileExists,
     ];
@@ -45,6 +49,7 @@ impl Step {
         match self {
             Self::KafkaCompleteness => Severity::Error,
             Self::MinerExternalBlockMode => Severity::Warning,
+            Self::ExecutorPoolLimits => Severity::Warning,
             #[cfg(feature = "dev")]
             Self::GenesisFileExists => Severity::Warning,
         }
@@ -55,6 +60,7 @@ impl Step {
         match self {
             Self::KafkaCompleteness => Self::check_kafka_completeness(config),
             Self::MinerExternalBlockMode => Self::check_miner_external_block_mode(config),
+            Self::ExecutorPoolLimits => Self::check_executor_pool_limits(config),
             #[cfg(feature = "dev")]
             Self::GenesisFileExists => Self::check_genesis_file_exists(config),
         }
@@ -77,6 +83,11 @@ impl Step {
             return vec!["conflicting `miner.block_mode`: a follower's miner can only start as external, the configured value is ignored".to_string()];
         }
         Vec::new()
+    }
+
+    /// Returns warnings about suboptimal executor pool configurations.
+    fn check_executor_pool_limits(config: &StratusConfig) -> Vec<String> {
+        config.executor.pool.validate()
     }
 
     /// Returns a warning when the configured genesis file does not exist.

@@ -272,6 +272,7 @@ mod tests {
     use std::ffi::OsString;
 
     use clap::CommandFactory;
+    use clap::Parser;
 
     use crate::config::Environment;
     use crate::config::StratusConfig;
@@ -375,9 +376,11 @@ mod tests {
 
             [executor]
             chain_id = 100
-            call_present_evms = 1
-            call_past_evms = 2
-            inspector_evms = 3
+            evm_workers = 10
+            call_present_limit = 1
+            call_past_limit = 4
+            inspector_limit = 5
+            evm_busy_threshold = 75
             reject_not_contract = false
             evm_spec = "Cancun"
 
@@ -572,9 +575,11 @@ mod tests {
 
             [executor]
             chain_id = 100
-            call_present_evms = 1
-            call_past_evms = 2
-            inspector_evms = 3
+            evm_workers = 10
+            call_present_limit = 1
+            call_past_limit = 4
+            inspector_limit = 5
+            evm_busy_threshold = 75
             reject_not_contract = false
             evm_spec = "Cancun"
 
@@ -699,14 +704,7 @@ mod tests {
     fn test_empty_config_uses_defaults() {
         // an empty file plus the minimal valid arguments must yield exactly the defaults
         let config = load_with(&["--leader", "--executor-chain-id", "1"], "").unwrap();
-        let default = StratusConfig {
-            leader: true,
-            executor: crate::eth::executor::ExecutorConfig {
-                executor_chain_id: 1,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
+        let default = StratusConfig::try_parse_from(["stratus", "--leader", "--executor-chain-id", "1"]).unwrap();
         assert_eq!(serde_json::to_value(&config).unwrap(), serde_json::to_value(&default).unwrap());
     }
 }

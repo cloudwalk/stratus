@@ -107,7 +107,19 @@ metrics! {
         histogram_duration executor_inspect{trace_type},
 
         "Number of EVM pool workers busy executing right now."
-        gauge executor_workers_busy{pool}
+        gauge executor_workers_busy{pool},
+
+        "Total number of EVM workers in the unified executor pool."
+        gauge executor_workers_total{},
+
+        "Number of tasks currently executing in the unified executor pool, by kind."
+        gauge executor_pool_inflight{kind},
+
+        "Number of tasks waiting to be admitted to the unified executor pool, by kind."
+        gauge executor_pool_waiting{kind},
+
+        "Number of tasks admitted through the relaxed path while the pool was below the busy threshold, by kind."
+        counter executor_pool_relaxed_admissions{kind}
     },
 
     group: rocks {

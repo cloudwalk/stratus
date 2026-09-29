@@ -12,109 +12,61 @@ use crate::eth::executor::evm::EvmKind;
 use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::executor::evm::types::CallExecutionInput;
 use crate::eth::executor::evm::types::InspectorInput;
-use crate::eth::executor::types::EvmRoute;
-use crate::eth::executor::types::EvmTask;
+use crate::eth::executor::pool_admission::PoolAdmission;
 use crate::eth::executor::types::ExecutionTask;
 use crate::eth::executor::types::InspectionTask;
-use crate::eth::executor::types::Task;
+use crate::eth::executor::types::PoolTask;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::StratusError;
 use crate::eth::types::UnexpectedError;
 use crate::ext::spawn_thread;
 use crate::infra::tracing::warn_task_tx_closed;
 
-/// Manages EVM pool and communication channels.
+/// Total capacity of the unified EVM pool task queue.
+const TASK_QUEUE_CAPACITY: usize = 4096;
+
+/// Manages the unified EVM pool: one shared set of workers serving every execution kind.
 pub struct EvmWorkerPool {
-    /// Pool for parallel execution of calls (eth_call and eth_estimateGas) reading from current state. Usually contains multiple EVMs.
-    pub call_present: crossbeam_channel::Sender<EvmTask<ExecutionTask<CallExecutionInput>>>,
-
-    /// Pool for parallel execution of calls (eth_call and eth_estimateGas) reading from past state. Usually contains multiple EVMs.
-    pub call_past: crossbeam_channel::Sender<EvmTask<ExecutionTask<CallExecutionInput>>>,
-
-    /// Pool for parallel execution of tx inspections (debug_traceTransaction). Usually contains multiple EVMs.
-    pub inspector: crossbeam_channel::Sender<EvmTask<InspectionTask>>,
+    tx: crossbeam_channel::Sender<PoolTask>,
+    admission: Arc<PoolAdmission>,
 }
 
 impl EvmWorkerPool {
-    /// Spawns EVM tasks in background.
+    /// Spawns the unified EVM pool workers.
     pub fn spawn(storage: Arc<StratusStorage>, config: &ExecutorConfig) -> Self {
-        // function executed by evm threads
-        fn worker<T: Task + Send>(
-            task_name: &str,
-            storage: Arc<StratusStorage>,
-            config: ExecutorConfig,
-            task_rx: crossbeam_channel::Receiver<EvmTask<T>>,
-            kind: EvmKind,
-        ) {
-            let mut evm = Evm::new(Arc::clone(&storage), &config, kind);
+        let pool = config.pool;
+        let (tx, rx) = crossbeam_channel::bounded::<PoolTask>(TASK_QUEUE_CAPACITY);
+        let admission = Arc::new(PoolAdmission::new(pool));
 
-            // keep executing transactions until the channel is closed
-            while let Ok(task) = task_rx.recv() {
-                if GlobalState::is_shutdown_warn(task_name) {
-                    return;
-                }
-
-                let _guard = kind.mark_executor_pool_busy();
-                if let Err(StratusError::Executor(ExecutorError::Panic { err: panic_err })) = task.execute(&mut evm) {
-                    tracing::error!(?panic_err, "executor panicked; recreating EVM");
-                    evm = Evm::new(Arc::clone(&storage), &config, kind);
-                }
-            }
-            warn_task_tx_closed(task_name);
+        for worker_index in 1..=pool.evm_workers {
+            let task_name = format!("evm-pool-{worker_index}");
+            let worker_storage = Arc::clone(&storage);
+            let worker_config = *config;
+            let worker_rx = rx.clone();
+            let thread_name = task_name.clone();
+            spawn_thread(&thread_name, move || {
+                Self::worker(&task_name, worker_storage, worker_config, worker_rx);
+            });
         }
 
-        // function that spawn evm threads
-        fn spawn_evms<T: Task + Send + 'static>(
-            task_name: &str,
-            num_evms: usize,
-            kind: EvmKind,
-            storage: &Arc<StratusStorage>,
-            config: &ExecutorConfig,
-        ) -> crossbeam_channel::Sender<EvmTask<T>> {
-            let (evm_tx, evm_rx) = crossbeam_channel::bounded::<EvmTask<T>>(4096);
-
-            for evm_index in 1..=num_evms {
-                let evm_task_name = format!("{task_name}-{evm_index}");
-                let evm_storage = Arc::clone(storage);
-                let evm_config = *config;
-                let evm_rx = evm_rx.clone();
-                let thread_name = evm_task_name.clone();
-                spawn_thread(&thread_name, move || {
-                    worker(&evm_task_name, evm_storage, evm_config, evm_rx, kind);
-                });
-            }
+        // initialize the gauges so every kind series exists from startup
+        for kind in [EvmKind::CallPresent, EvmKind::CallPast, EvmKind::Inspect] {
             metrics::set_executor_workers_busy(0, kind);
-            evm_tx
         }
+        metrics::set_executor_workers_total(pool.evm_workers as u64);
 
-        let call_present = spawn_evms("evm-call-present", config.call_present_evms, EvmKind::CallPresent, &storage, config);
-        let call_past = spawn_evms("evm-call-past", config.call_past_evms, EvmKind::CallPast, &storage, config);
-        let inspector = spawn_evms("inspector", config.inspector_evms, EvmKind::Inspect, &storage, config);
-
-        EvmWorkerPool {
-            call_present,
-            call_past,
-            inspector,
-        }
+        Self { tx, admission }
     }
 
-    /// Executes a transaction in the specified route.
-    pub fn execute<Output>(&self, route: EvmRoute) -> Result<(Output, ExecutionMetrics), StratusError>
+    /// Executes a call in the specified route.
+    pub fn execute<Output>(&self, input: CallExecutionInput) -> Result<(Output, ExecutionMetrics), StratusError>
     where
         Output: TryFrom<RevmResultAndState, Error = StratusError>,
     {
         let (execution_tx, execution_rx) = oneshot::channel::<Result<(RevmResultAndState, ExecutionMetrics), StratusError>>();
 
-        match route {
-            EvmRoute::CallPresent(input) => {
-                let task = ExecutionTask::new(input, execution_tx).into();
-                self.call_present.send(task)?;
-            }
-            EvmRoute::CallPast(input) => {
-                let task = ExecutionTask::new(input, execution_tx).into();
-                self.call_past.send(task)?;
-            }
-        };
+        let task = PoolTask::call(ExecutionTask::new(input, execution_tx), &self.admission)?;
+        self.tx.send(task)?;
 
         match execution_rx.recv() {
             Ok(result) => {
@@ -125,13 +77,115 @@ impl EvmWorkerPool {
         }
     }
 
+    /// Executes a transaction inspection (debug_traceTransaction).
     pub fn inspect(&self, input: InspectorInput) -> Result<GethTrace, StratusError> {
         let (inspector_tx, inspector_rx) = oneshot::channel::<Result<GethTrace, StratusError>>();
-        let task = InspectionTask::new(input, inspector_tx).into();
-        let _ = self.inspector.send(task);
+        let task = PoolTask::inspect(InspectionTask::new(input, inspector_tx), &self.admission)?;
+        let _ = self.tx.send(task);
         match inspector_rx.recv() {
             Ok(result) => result,
             Err(_) => Err(UnexpectedError::ChannelClosed { channel: "evm" }.into()),
         }
+    }
+
+    /// Function executed by the unified EVM pool worker threads.
+    fn worker(task_name: &str, storage: Arc<StratusStorage>, config: ExecutorConfig, task_rx: crossbeam_channel::Receiver<PoolTask>) {
+        let mut evm = Evm::new(Arc::clone(&storage), &config, EvmKind::CallPresent);
+
+        while let Ok(task) = task_rx.recv() {
+            if GlobalState::is_shutdown_warn(task_name) {
+                return;
+            }
+
+            if let Err(StratusError::Executor(ExecutorError::Panic { err: panic_err })) = task.execute(&mut evm) {
+                tracing::error!(?panic_err, "executor panicked; recreating EVM");
+                evm = Evm::new(Arc::clone(&storage), &config, EvmKind::CallPresent);
+            }
+        }
+        warn_task_tx_closed(task_name);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Tests
+// -----------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::*;
+
+    fn test_config(args: &[&str]) -> ExecutorConfig {
+        let mut arguments = vec!["stratus", "--executor-chain-id", "1"];
+        arguments.extend_from_slice(args);
+        ExecutorConfig::parse_from(arguments)
+    }
+
+    #[test]
+    fn test_pool_config_resolves_defaults() {
+        let pool = test_config(&[]).pool;
+        assert_eq!(pool.evm_workers, 150);
+        assert_eq!(pool.call_present_limit(), 50);
+        assert_eq!(pool.call_past_limit, 50);
+        assert_eq!(pool.inspector_limit, 50);
+        assert_eq!(pool.evm_busy_threshold, 80);
+        assert_eq!(pool.relaxed_limit(), 120);
+        assert!(pool.validate().is_empty());
+    }
+
+    #[test]
+    fn test_pool_config_explicit_call_present_limit() {
+        let pool = test_config(&[
+            "--executor-evm-workers",
+            "200",
+            "--executor-call-present-limit",
+            "120",
+            "--executor-call-past-limit",
+            "20",
+            "--executor-inspector-limit",
+            "30",
+        ])
+        .pool;
+        assert_eq!(pool.evm_workers, 200);
+        assert_eq!(pool.call_present_limit(), 120);
+        assert_eq!(pool.call_past_limit, 20);
+        assert_eq!(pool.inspector_limit, 30);
+    }
+
+    #[test]
+    fn test_pool_config_call_present_uses_remaining_capacity() {
+        let pool = test_config(&["--executor-evm-workers", "200"]).pool;
+        assert_eq!(pool.call_present_limit(), 200 - 50 - 50);
+    }
+
+    #[test]
+    fn test_pool_config_warns_on_limits_exceeding_workers() {
+        let pool = test_config(&["--executor-evm-workers", "100", "--executor-call-present-limit", "60"]).pool;
+        assert!(!pool.validate().is_empty());
+    }
+
+    #[test]
+    fn test_pool_config_rejects_zero_workers() {
+        let result = ExecutorConfig::try_parse_from(["stratus", "--executor-chain-id", "1", "--executor-evm-workers", "0"]);
+        assert!(result.is_err(), "must reject zero workers");
+    }
+
+    #[test]
+    fn test_pool_config_rejects_zero_limit() {
+        let result = ExecutorConfig::try_parse_from(["stratus", "--executor-chain-id", "1", "--executor-call-past-limit", "0"]);
+        assert!(result.is_err(), "must reject zero limit");
+    }
+
+    #[test]
+    fn test_pool_config_rejects_threshold_above_100() {
+        let result = ExecutorConfig::try_parse_from(["stratus", "--executor-chain-id", "1", "--executor-evm-busy-threshold", "101"]);
+        assert!(result.is_err(), "must reject threshold above 100");
+    }
+
+    #[test]
+    fn test_pool_config_zero_threshold_is_strict() {
+        let pool = test_config(&["--executor-evm-busy-threshold", "0"]).pool;
+        assert_eq!(pool.relaxed_limit(), 0);
     }
 }
