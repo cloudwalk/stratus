@@ -3,6 +3,8 @@ use std::sync::Arc;
 use derive_more::Deref;
 use parking_lot::Condvar;
 use parking_lot::Mutex;
+#[cfg(feature = "metrics")]
+use stratus_metrics as metrics;
 use tokio::time::Instant;
 
 /// Amount of bytes in one GB (technically, GiB).
@@ -38,48 +40,6 @@ pub struct Semaphore {
 pub struct SemaphoreInner {
     permits: Mutex<usize>,
     cvar: Condvar,
-    metrics: SemaphoreMetrics,
-}
-
-/// Metrics recorded by a [`Semaphore`] when its permits change.
-#[derive(Clone, Copy, Default)]
-pub enum SemaphoreMetrics {
-    /// Do not record any metric.
-    #[default]
-    Disabled,
-
-    /// Legacy metrics of the local transaction warmup semaphore (unlabeled).
-    LocalTransaction,
-}
-
-impl SemaphoreMetrics {
-    fn waiting_added(&self) {
-        match *self {
-            Self::Disabled => {}
-            Self::LocalTransaction => stratus_metrics::inc_executor_local_transaction_semaphore_waiting(1),
-        }
-    }
-
-    fn waiting_removed(&self) {
-        match *self {
-            Self::Disabled => {}
-            Self::LocalTransaction => stratus_metrics::dec_executor_local_transaction_semaphore_waiting(1),
-        }
-    }
-
-    fn permit_acquired(&self) {
-        match *self {
-            Self::Disabled => {}
-            Self::LocalTransaction => stratus_metrics::inc_executor_local_transaction_permit_holders(1),
-        }
-    }
-
-    fn permit_released(&self) {
-        match *self {
-            Self::Disabled => {}
-            Self::LocalTransaction => stratus_metrics::dec_executor_local_transaction_permit_holders(1),
-        }
-    }
 }
 
 pub struct Permit {
@@ -88,30 +48,27 @@ pub struct Permit {
 
 impl Semaphore {
     pub fn new(permits: usize) -> Self {
-        Self::with_metrics(permits, SemaphoreMetrics::Disabled)
-    }
-
-    pub fn with_metrics(permits: usize, metrics: SemaphoreMetrics) -> Self {
         Self {
             sem: Arc::new(SemaphoreInner {
                 permits: Mutex::new(permits),
                 cvar: Condvar::new(),
-                metrics,
             }),
         }
     }
 
-    /// Blocks until a permit is available.
     pub fn acquire(&self) -> Permit {
-        self.metrics.waiting_added();
+        #[cfg(feature = "metrics")]
+        metrics::inc_executor_local_transaction_semaphore_waiting(1);
         let mut permits = self.permits.lock();
         while *permits == 0 {
             self.cvar.wait(&mut permits);
         }
         *permits -= 1;
         drop(permits);
-        self.metrics.waiting_removed();
-        self.metrics.permit_acquired();
+        #[cfg(feature = "metrics")]
+        metrics::dec_executor_local_transaction_semaphore_waiting(1);
+        #[cfg(feature = "metrics")]
+        metrics::inc_executor_local_transaction_permit_holders(1);
         Permit { sem: Arc::clone(&self.sem) }
     }
 }
@@ -121,7 +78,8 @@ impl Drop for Permit {
         let mut permits = self.sem.permits.lock();
         *permits += 1;
         self.sem.cvar.notify_one();
-        self.sem.metrics.permit_released();
+        #[cfg(feature = "metrics")]
+        metrics::dec_executor_local_transaction_permit_holders(1);
     }
 }
 

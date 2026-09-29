@@ -1,5 +1,6 @@
 use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
+use std::sync::Arc;
 
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::anyhow;
@@ -12,8 +13,11 @@ use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::EvmKind;
 use crate::eth::executor::evm::types::ExecutionMetrics;
 use crate::eth::executor::evm::types::InspectorInput;
+use crate::eth::executor::pool_admission::PoolAdmission;
 use crate::eth::executor::pool_admission::PoolPermit;
 use crate::eth::executor::types::error::ExecutorError;
+use crate::eth::types::PointInTime;
+use crate::eth::types::StateError;
 use crate::eth::types::StratusError;
 
 #[derive(derive_new::new)]
@@ -28,21 +32,11 @@ pub struct InspectionTask {
     pub response_tx: oneshot::Sender<Result<GethTrace, StratusError>>,
 }
 
-#[derive(Debug, Clone, strum::Display)]
-pub enum EvmRoute {
-    #[strum(to_string = "call_present")]
-    CallPresent(CallExecutionInput),
-
-    #[strum(to_string = "call_past")]
-    CallPast(CallExecutionInput),
-}
-
 /// A task for the unified EVM pool.
 pub struct PoolTask {
-    pub span: Span,
-    evm_kind: EvmKind,
+    span: Span,
     permit: PoolPermit,
-    task_kind: PoolTaskKind,
+    task: PoolTaskKind,
 }
 
 enum PoolTaskKind {
@@ -51,40 +45,46 @@ enum PoolTaskKind {
 }
 
 impl PoolTask {
-    pub fn call(task: ExecutionTask<CallExecutionInput>, kind: EvmKind, permit: PoolPermit) -> Self {
-        debug_assert!(matches!(kind, EvmKind::CallPresent | EvmKind::CallPast));
-        Self {
+    /// Creates a call task, acquiring an admission slot for it. Fails when the pool is shutting down.
+    pub fn call(task: ExecutionTask<CallExecutionInput>, admission: &Arc<PoolAdmission>) -> Result<Self, StateError> {
+        let permit = admission.acquire(call_evm_kind(&task.input))?;
+        Ok(Self {
             span: Span::current(),
-            evm_kind: kind,
             permit,
-            task_kind: PoolTaskKind::Call(task),
-        }
+            task: PoolTaskKind::Call(task),
+        })
     }
 
-    pub fn inspect(task: InspectionTask, permit: PoolPermit) -> Self {
-        Self {
+    /// Creates an inspection task, acquiring an admission slot for it. Fails when the pool is shutting down.
+    pub fn inspect(task: InspectionTask, admission: &Arc<PoolAdmission>) -> Result<Self, StateError> {
+        let permit = admission.acquire(EvmKind::Inspect)?;
+        Ok(Self {
             span: Span::current(),
-            evm_kind: EvmKind::Inspect,
             permit,
-            task_kind: PoolTaskKind::Inspect(task),
-        }
+            task: PoolTaskKind::Inspect(task),
+        })
     }
 
+    /// Executes the task on the EVM. The admission slot is released when the task finishes.
     pub fn execute(self, evm: &mut Evm) -> anyhow::Result<(), StratusError> {
-        let Self {
-            span,
-            evm_kind,
-            permit: _permit,
-            task_kind,
-        } = self;
+        let Self { span, permit, task } = self;
         let _enter = span.enter();
-        let _busy = evm_kind.mark_executor_pool_busy();
+        let _busy = permit.evm_kind().mark_executor_pool_busy();
 
-        catch_unwind(AssertUnwindSafe(move || match task_kind {
+        catch_unwind(AssertUnwindSafe(move || match task {
             PoolTaskKind::Call(task) => task.execute(evm),
             PoolTaskKind::Inspect(task) => task.execute(evm),
         }))
         .map_err(|err| ExecutorError::Panic { err: anyhow!("{err:?}") }.into())
+    }
+}
+
+/// Returns the pool kind of a call: calls against the latest state and calls against a past state
+/// are admitted by different pool gates.
+fn call_evm_kind(input: &CallExecutionInput) -> EvmKind {
+    match input.kind.point_in_time() {
+        PointInTime::Pending | PointInTime::Latest => EvmKind::CallPresent,
+        PointInTime::Past(_) => EvmKind::CallPast,
     }
 }
 

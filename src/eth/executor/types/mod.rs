@@ -8,7 +8,6 @@ pub use error::ExecutorError;
 pub use execution_result::ExecutionResult;
 pub use execution_result::RevertReason;
 pub use state::State;
-pub use task::EvmRoute;
 pub use task::ExecutionTask;
 pub use task::InspectionTask;
 pub use task::PoolTask;

@@ -40,7 +40,6 @@ use crate::eth::executor::evm::types::CallExecutionInput;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm_worker_pool::EvmWorkerPool;
 use crate::eth::executor::transaction_worker::TransactionWorker;
-use crate::eth::executor::types::EvmRoute;
 use crate::eth::miner::Miner;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
@@ -53,7 +52,6 @@ use crate::eth::types::ExternalReceipt;
 use crate::eth::types::ExternalReceipts;
 use crate::eth::types::ExternalTransaction;
 use crate::eth::types::Hash;
-use crate::eth::types::PointInTime;
 use crate::eth::types::StratusError;
 use crate::eth::types::TransactionInput;
 #[cfg(feature = "metrics")]
@@ -61,7 +59,6 @@ use crate::ext::OptionExt;
 use crate::ext::to_json_string;
 use crate::infra::tracing::SpanExt;
 use crate::utils::Semaphore;
-use crate::utils::SemaphoreMetrics;
 
 // -----------------------------------------------------------------------------
 // Executor
@@ -85,18 +82,18 @@ pub struct Executor {
 }
 
 impl Executor {
-    pub fn new(storage: Arc<StratusStorage>, miner: Arc<Miner>, config: ExecutorConfig) -> anyhow::Result<Self> {
+    pub fn new(storage: Arc<StratusStorage>, miner: Arc<Miner>, config: ExecutorConfig) -> Self {
         tracing::info!(?config, "creating executor");
         let reject_not_contract = config.executor_reject_not_contract;
         let transaction_worker = TransactionWorker::spawn(Arc::clone(&storage), Arc::clone(&miner), &config);
-        let evms = EvmWorkerPool::spawn(Arc::clone(&storage), &config)?;
-        Ok(Self {
-            transaction_warmup: Semaphore::with_metrics(100, SemaphoreMetrics::LocalTransaction),
+        let evms = EvmWorkerPool::spawn(Arc::clone(&storage), &config);
+        Self {
+            transaction_warmup: Semaphore::new(100),
             transaction_worker,
             evms,
             storage,
             reject_not_contract,
-        })
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -295,12 +292,7 @@ impl Executor {
 
         let evm_input = CallExecutionInput::create(call_input, block_info, kind);
 
-        let evm_route = match kind.point_in_time() {
-            PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input),
-            PointInTime::Past(_) => EvmRoute::CallPast(evm_input),
-        };
-
-        self.evms.execute::<Output>(evm_route).map(|(output, _metrics)| output)
+        self.evms.execute::<Output>(evm_input).map(|(output, _metrics)| output)
     }
 
     #[timed(executor_inspect, labels(

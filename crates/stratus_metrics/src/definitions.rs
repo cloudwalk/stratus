@@ -118,14 +118,8 @@ metrics! {
         "Number of tasks waiting to be admitted to the unified executor pool, by kind."
         gauge executor_pool_waiting{kind},
 
-        "Number of tasks currently executing in the unified executor pool."
-        gauge executor_pool_inflight_total{},
-
         "Number of tasks admitted through the relaxed path while the pool was below the busy threshold, by kind."
-        counter executor_pool_relaxed_admissions{kind},
-
-        "Length of the executor pool task queue."
-        gauge executor_pool_queue_len{}
+        counter executor_pool_relaxed_admissions{kind}
     },
 
     group: rocks {

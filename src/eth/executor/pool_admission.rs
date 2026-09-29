@@ -8,21 +8,18 @@ use parking_lot::Mutex;
 use stratus_metrics as metrics;
 
 use crate::GlobalState;
+use crate::eth::executor::config::PoolConfig;
 use crate::eth::executor::evm::EvmKind;
-use crate::eth::executor::evm_worker_pool::PoolConfig;
+use crate::eth::types::StateError;
 
 /// Interval between shutdown checks while blocked waiting for a kind slot.
 const SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(250);
-
-struct KindState {
-    inflight: usize,
-}
 
 /// Per-kind admission state, counting in-flight tasks admitted by both the relaxed and throttled paths.
 struct KindGate {
     kind: EvmKind,
     limit: usize,
-    state: Mutex<KindState>,
+    inflight: Mutex<usize>,
     cvar: Condvar,
 }
 
@@ -33,46 +30,42 @@ impl KindGate {
         Self {
             kind,
             limit,
-            state: Mutex::new(KindState { inflight: 0 }),
+            inflight: Mutex::new(0),
             cvar: Condvar::new(),
         }
     }
 
     /// Relaxed admission: increments the in-flight count without checking the limit.
     fn admit_relaxed(&self) {
-        let mut state = self.state.lock();
-        state.inflight += 1;
-        drop(state);
+        *self.inflight.lock() += 1;
         metrics::inc_executor_pool_inflight(1, self.kind);
     }
 
     /// Throttled admission: blocks until the kind's in-flight count drops below its limit.
-    /// Returns `None` when the application starts shutting down.
-    fn admit_throttled(&self) -> Option<()> {
+    /// Returns an error when the application starts shutting down.
+    fn admit_throttled(&self) -> Result<(), StateError> {
         metrics::inc_executor_pool_waiting(1, self.kind);
 
-        let mut state = self.state.lock();
-        while state.inflight >= self.limit {
+        let mut inflight = self.inflight.lock();
+        while *inflight >= self.limit {
             if GlobalState::is_shutdown() {
-                drop(state);
+                drop(inflight);
                 metrics::dec_executor_pool_waiting(1, self.kind);
-                return None;
+                return Err(StateError::StratusShutdown);
             }
-            self.cvar.wait_for(&mut state, SHUTDOWN_POLL_INTERVAL);
+            self.cvar.wait_for(&mut inflight, SHUTDOWN_POLL_INTERVAL);
         }
 
-        state.inflight += 1;
-        drop(state);
+        *inflight += 1;
+        drop(inflight);
         metrics::dec_executor_pool_waiting(1, self.kind);
         metrics::inc_executor_pool_inflight(1, self.kind);
-        Some(())
+        Ok(())
     }
 
     /// Releases an admission slot of the kind.
     fn release(&self) {
-        let mut state = self.state.lock();
-        state.inflight -= 1;
-        drop(state);
+        *self.inflight.lock() -= 1;
         self.cvar.notify_one();
         metrics::dec_executor_pool_inflight(1, self.kind);
     }
@@ -94,9 +87,8 @@ pub struct PoolAdmission {
 
 impl PoolAdmission {
     pub fn new(config: PoolConfig) -> Self {
-        metrics::set_executor_pool_inflight_total(0);
         Self {
-            call_present: Arc::new(KindGate::new(EvmKind::CallPresent, config.call_present_limit)),
+            call_present: Arc::new(KindGate::new(EvmKind::CallPresent, config.call_present_limit())),
             call_past: Arc::new(KindGate::new(EvmKind::CallPast, config.call_past_limit)),
             inspector: Arc::new(KindGate::new(EvmKind::Inspect, config.inspector_limit)),
             inflight_total: AtomicUsize::new(0),
@@ -114,8 +106,8 @@ impl PoolAdmission {
     }
 
     /// Admits a task of the kind: immediately while the pool is below the busy threshold (even above
-    /// the kind's limit), blocking on the kind's limit otherwise. Returns `None` on shutdown.
-    pub fn acquire(self: &Arc<Self>, kind: EvmKind) -> Option<PoolPermit> {
+    /// the kind's limit), blocking on the kind's limit otherwise. Returns an error on shutdown.
+    pub fn acquire(self: &Arc<Self>, kind: EvmKind) -> Result<PoolPermit, StateError> {
         if self.inflight_total.load(Ordering::Relaxed) < self.relaxed_limit {
             metrics::inc_executor_pool_relaxed_admissions(kind);
             self.gate(kind).admit_relaxed();
@@ -123,8 +115,7 @@ impl PoolAdmission {
             self.gate(kind).admit_throttled()?;
         }
         self.inflight_total.fetch_add(1, Ordering::Relaxed);
-        metrics::inc_executor_pool_inflight_total(1);
-        Some(PoolPermit {
+        Ok(PoolPermit {
             admission: Arc::clone(self),
             kind,
         })
@@ -134,7 +125,6 @@ impl PoolAdmission {
     fn release(&self, kind: EvmKind) {
         self.gate(kind).release();
         self.inflight_total.fetch_sub(1, Ordering::Relaxed);
-        metrics::dec_executor_pool_inflight_total(1);
     }
 }
 
@@ -142,6 +132,13 @@ impl PoolAdmission {
 pub struct PoolPermit {
     admission: Arc<PoolAdmission>,
     kind: EvmKind,
+}
+
+impl PoolPermit {
+    /// Kind of the task holding the permit.
+    pub(crate) fn evm_kind(&self) -> EvmKind {
+        self.kind
+    }
 }
 
 impl Drop for PoolPermit {
@@ -158,11 +155,11 @@ mod tests {
 
     fn admission(workers: usize, busy_threshold: usize, call_past_limit: usize) -> Arc<PoolAdmission> {
         let config = PoolConfig {
-            workers,
-            call_present_limit: 0,
+            evm_workers: workers,
+            call_present_limit: None,
             call_past_limit,
             inspector_limit: workers,
-            busy_threshold,
+            evm_busy_threshold: busy_threshold,
         };
         Arc::new(PoolAdmission::new(config))
     }
@@ -229,7 +226,7 @@ mod tests {
     /// test would poison the other admission tests when run in parallel. Run with `--ignored`.
     #[test]
     #[ignore = "triggers process-global shutdown"]
-    fn test_throttled_admission_returns_none_on_shutdown() {
+    fn test_throttled_admission_fails_on_shutdown() {
         let admission = admission(10, 80, 1);
 
         let _first = admission.acquire(EvmKind::CallPast).unwrap();
