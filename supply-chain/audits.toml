@@ -503,6 +503,12 @@ criteria = "safe-to-deploy"
 version = "1.8.0"
 notes = "Proc-macro crate generating Borsh serialize/deserialize/schema impls at compile time. No build.rs (build=false), no unsafe, no extern 'C', no transmute, no as_ptr/from_raw, no env::var, no std::fs/net/process, no Command, no network/fs access. Sensitive-pattern grep hits are only registry/homepage URL strings in Cargo.lock/TOML/README plus one doc-comment URL. Dependencies are standard proc-macro "
 
+[[audits.bs58]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+version = "0.5.1"
+notes = "Base58 codec, ~1.6k lines (alphabet/decode/encode/lib). Enters the lock via serde_with's optional base58 feature (stratus leaves that feature off). Crate is #![deny(unsafe_code)] with a single allow in encode.rs: as_bytes_mut on the output String so ASCII encode bytes can be written in place, guarded by a Drop impl that replaces invalid bytes with nul bytes to restore UTF-8 validity before the String is observed. Optional deps (sha2, tinyvec, smallvec) all feature-gated. Runtime code is pure byte manipulation over caller-provided buffers."
+
 [[audits.bytemuck]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
@@ -597,6 +603,12 @@ criteria = "safe-to-deploy"
 delta = "0.16.0 -> 0.16.1"
 notes = "Reviewed 0.16.0->0.16.1: adds Display wrapper for ansi stripping, QNX cfmakeraw shim; no new unsafe."
 
+[[audits.console]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "0.16.1 -> 0.16.6"
+notes = "Reviewed 0.16.1 -> 0.16.6 via cargo vet diff --mode local. ansi.rs reworks escape-sequence scanning into an EscSequence trait with OSC (BEL/ST-terminated) and DCS (ST-terminated) handling; term.rs refactors TermInner construction into with_buffer; utils/lib add true-color detection and set_true_colors_enabled overrides. Env access is TERM/COLORTERM/LANG terminal detection, matching the crate's existing pattern. I/O stays terminal writes via the existing backend modules."
+
 [[audits.const-hex]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -630,6 +642,12 @@ Behavioral changes:
 - Added no_prefix serde submodule for serialization without 0x prefix.
 - All existing public APIs behaviorally unchanged.
 """
+
+[[audits.const-hex]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "1.19.0 -> 1.19.1"
+notes = "Reviewed 1.19.0 -> 1.19.1 via cargo vet diff --mode local. Decode entry points across all arch modules (aarch64, generic, portable_simd, wasm32, x86) now write into &mut [MaybeUninit<u8>]; Vec-based decode uses spare_capacity_mut and calls set_len only after decode_checked reports success, replacing the uninit_vec allocation. slice_assume_init_mut became slice_as_uninit_mut with the transmute direction and SAFETY argument updated accordingly. SIMD intrinsic bodies and their preconditions are byte-for-byte unchanged."
 
 [[audits.const-oid]]
 who = "Rodrigo Bronzelle"
@@ -790,6 +808,12 @@ criteria = "safe-to-deploy"
 delta = "0.18.2 -> 0.18.3"
 notes = "0.18.3 removes demo examples, derives Default for MultiProgressAlignment/ProgressFinish, and adds ProgressBar::set_elapsed which rewinds the start Instant via checked_sub; no unsafe code touched."
 
+[[audits.indicatif]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "0.18.3 -> 0.18.6"
+notes = "Reviewed 0.18.3 -> 0.18.6 via cargo vet diff --mode local. draw_target.rs: line wrapping now computes wrapped_metrics with a column walk honoring wide CJK chars (unicode-width now a first-class feature instead of forwarded through console), MultiProgress state delegates width/is_hidden/is_stderr to the child draw_target, and DrawTarget::term() hides itself when the terminal reports dumb or closed. is_none_or replaces a map_or(true, ..). Feature table reshuffles unicode-width/wasmbind wiring; MSRV 1.71 -> 1.85. Diff stays within terminal drawing and rate limiting."
+
 [[audits.jni]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
@@ -841,6 +865,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "0.1.4 -> 0.2.0"
 notes = "API refactor from eager to lazy evaluation: MacroString now wraps an Expr with deferred .eval()/.error() methods and added Clone derives; no new unsafe/FFI/network/build.rs/runtime fs-env access introduced. Only new import is std::fmt::Display. MSRV bump (1.61→1.71) and syn clone-impls feature are non-security churn; trybuild dev-dep bump is test-only. Existing include!/env! evaluation logic (fs_r"
+
+[[audits.nanoid]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "0.4.0 -> 0.5.0"
+notes = "Reviewed 0.4.0 -> 0.5.0 via cargo vet diff --mode local. rand 0.8 -> 0.9: default RNG is StdRng::from_os_rng (still an OS CSPRNG), thread_local uses rand::rng(). format() now takes an FnMut generator and alphabets whose length is a power of two get a mask-based fast_impl that consumes every random byte (no rejection loop). Added HEX_LOWERCASE/HEX_UPPERCASE consts and an optional smartstring/compact-str output. Default SAFE alphabet changed its last symbol from '~' to '-'; stratus passes an explicit ALPHABET so its IDs are unaffected. Whole crate is safe Rust."
 
 [[audits.nonmax]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
@@ -961,6 +991,12 @@ who = "Droid (cargo-vet automation)"
 criteria = "safe-to-deploy"
 delta = "1.1.10 -> 1.1.13"
 notes = "Proc-macro changes are lint attribute adjustments, let else / is_some_and syntax modernization, and derive macro reordering. #![forbid(unsafe_code)] still present. No build scripts. No advisories."
+
+[[audits.portable-atomic]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "1.11.1 -> 1.15.0"
+notes = "Reviewed 1.11.1 -> 1.15.0 via cargo vet diff --mode local. The ~20k-line diff is dominated by the crate's generated sources: new/extended atomic impls for additional targets and architecture versions (imp/atomic64, atomic128, interrupt, detect), their tests, and docs. unsafe stays confined to the atomic intrinsic/asm implementations that define this crate, following its existing structure. build.rs reads CARGO_CFG_TARGET_* and PORTABLE_ATOMIC_* variables for compile-time target/feature detection only. Runtime behavior remains lock-free atomic operations over caller-provided memory."
 
 [[audits.prettyplease]]
 who = "Rodrigo Bronzelle"
@@ -1337,6 +1373,18 @@ criteria = "safe-to-deploy"
 version = "1.0.149"
 notes = "1.0.145 -> 1.0.149 reviewed via cargo vet diff --mode local. Main change is float formatting backend switch from ryu to zmij plus parser/format normalization and tests; no new unsafe blocks, network/filesystem access, proc-macro, or suspicious build-time behavior in serde_json diff."
 
+[[audits.serde_with]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "3.14.1 -> 3.21.0"
+notes = "Reviewed 3.14.1 -> 3.21.0 via cargo vet diff --mode local. Additive APIs: NoneAsZero, OneOrMany sequence/set extensions, VecSkipError/MapSkipError error inspection, base58 adapters behind a non-default feature, hashbrown 0.16/0.17 and smallvec_1 support. Security-relevant fix for GHSA-7gcf-g7xr-8hxj: collection preallocation during deserialization is now capped through vec_with_capacity_cautious/size_hint_cautious instead of trusting visitor size hints. serde re-exports moved to the serde_core-based __private__ module. Whole crate is safe Rust with no I/O."
+
+[[audits.serde_with_macros]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "3.14.1 -> 3.21.0"
+notes = "Reviewed 3.14.1 -> 3.21.0 via cargo vet diff --mode local. Only functional change is the generated code's trait paths moving from serde:: re-exports to the serde_with::__private__ shim (serde_core compatibility); token construction and expansion logic are unchanged, the rest of the diff is docs. darling 0.21 -> 0.23 dependency bump."
+
 [[audits.sha1]]
 who = "Rodrigo Bronzelle"
 criteria = "safe-to-deploy"
@@ -1378,6 +1426,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 version = "0.1.0"
 notes = "Pure data-structure crate (SmallBTreeMap: ArrayVec spilling to BTreeMap). ~990 lines safe Rust, zero unsafe/FFI/transmute, no build.rs, no env/net/fs/process. Single trusted dep arrayvec 0.7.6. From Boa project. Nothing exploitable."
+
+[[audits.smallvec]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "1.15.1 -> 1.16.1"
+notes = "Reviewed 1.15.1 -> 1.16.1 via cargo vet diff --mode local. src/ changes are a rustfmt pass (import grouping, brace style) plus one fix in the Drain iterator: needs_move now computes mem::size_of::<T::Item>() instead of the iterator type's size. Benches, tests, and debug metadata were dropped from the published crate along with their dev-dependencies; Cargo.toml gains an include list. Unsafe surface (MaybeUninit inline buffer in SmallVecData) is unchanged from the audited base."
 
 [[audits.syn]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"

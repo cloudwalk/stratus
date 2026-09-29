@@ -4,7 +4,7 @@ use crate::eth::rpc::BlockFilter;
 use crate::eth::types::ErrorCode;
 
 /// Errors that can occur while decoding a raw transaction.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TransactionDecodeError {
     #[error("missing field: {0}")]
     MissingField(&'static str),
@@ -33,6 +33,9 @@ pub enum TransactionDecodeError {
     #[error("invalid legacy v value")]
     InvalidLegacyV,
 
+    #[error("unsupported field: {0}")]
+    UnsupportedField(&'static str),
+
     #[error("rlp decode error: {0}")]
     RlpError(String),
 
@@ -52,6 +55,7 @@ impl From<TransactionDecodeError> for alloy_rlp::Error {
             TransactionDecodeError::EmptyBytes => "empty transaction bytes",
             TransactionDecodeError::LegacyNotTyped => "legacy transaction type is not typed",
             TransactionDecodeError::InvalidLegacyV => "invalid legacy v value",
+            TransactionDecodeError::UnsupportedField(_) => "unsupported field",
             TransactionDecodeError::RlpError(_) => "rlp decode error",
             TransactionDecodeError::Custom(_) => "failed to decode transaction",
         };

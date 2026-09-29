@@ -34,6 +34,17 @@ impl RpcClientApp {
 
         RpcClientApp::Identified(create_client_scope(&name))
     }
+
+    /// Parses a configured client value: an already normalized scope (`infra::blockscout`) is
+    /// kept as is — so a serialized value survives being re-parsed —, a raw app name
+    /// (`blockscout`) is mapped to its scope.
+    pub fn parse_config_value(input: &str) -> RpcClientApp {
+        if input.contains("::") {
+            Self::Identified(input.to_string())
+        } else {
+            Self::parse(input)
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -59,7 +70,7 @@ impl<'de> serde::Deserialize<'de> for RpcClientApp {
         let value = String::deserialize(deserializer)?;
         match value.as_str() {
             "unknown" => Ok(Self::Unknown),
-            _ => Ok(Self::Identified(value)),
+            value => Ok(Self::parse_config_value(value)),
         }
     }
 }

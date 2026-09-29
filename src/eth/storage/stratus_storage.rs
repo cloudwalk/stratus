@@ -473,27 +473,25 @@ impl StratusStorage {
         self.temp.reset();
 
         // Try to load genesis block from the genesis file or use default
-        let genesis_block = if let Some(genesis_path) = &self.perm_config.genesis_file.genesis_path {
-            if std::path::Path::new(genesis_path).exists() {
-                match GenesisConfig::load_from_file(genesis_path) {
-                    Ok(genesis_config) => match genesis_config.to_genesis_block() {
-                        Ok(block) => {
-                            tracing::info!("using genesis block from file: {:?}", genesis_path);
-                            block
-                        }
-                        Err(e) => {
-                            tracing::error!("failed to create genesis block from file: {:?}", e);
-                            Block::genesis()
-                        }
-                    },
+        let genesis_block = if let Some(genesis_path) = self.perm_config.genesis_file.missing_file() {
+            tracing::error!("genesis file not found at: {:?}", genesis_path);
+            Block::genesis()
+        } else if let Some(genesis_path) = self.perm_config.genesis_file.genesis_path.as_deref() {
+            match GenesisConfig::load_from_file(genesis_path) {
+                Ok(genesis_config) => match genesis_config.to_genesis_block() {
+                    Ok(block) => {
+                        tracing::info!("using genesis block from file: {:?}", genesis_path);
+                        block
+                    }
                     Err(e) => {
-                        tracing::error!("failed to load genesis file: {:?}", e);
+                        tracing::error!("failed to create genesis block from file: {:?}", e);
                         Block::genesis()
                     }
+                },
+                Err(e) => {
+                    tracing::error!("failed to load genesis file: {:?}", e);
+                    Block::genesis()
                 }
-            } else {
-                tracing::error!("genesis file not found at: {:?}", genesis_path);
-                Block::genesis()
             }
         } else {
             tracing::info!("using default genesis block");
@@ -501,34 +499,32 @@ impl StratusStorage {
         };
         // Try to load genesis.json from the path specified in GenesisFileConfig
         // or use default genesis configuration
-        let (genesis_accounts, genesis_slots) = if let Some(genesis_path) = &self.perm_config.genesis_file.genesis_path {
-            if std::path::Path::new(genesis_path).exists() {
-                tracing::info!("found genesis file at: {:?}", genesis_path);
-                match GenesisConfig::load_from_file(genesis_path) {
-                    Ok(genesis) => match genesis.to_stratus_accounts_and_slots() {
-                        Ok((accounts, slots)) => {
-                            tracing::info!("loaded {} accounts from genesis.json", accounts.len());
-                            if !slots.is_empty() {
-                                tracing::info!("loaded {} storage slots from genesis.json", slots.len());
-                            }
-                            (accounts, slots)
+        let (genesis_accounts, genesis_slots) = if let Some(genesis_path) = self.perm_config.genesis_file.missing_file() {
+            tracing::error!("genesis file not found at: {:?}", genesis_path);
+            // Fallback to test accounts
+            (test_accounts(), vec![])
+        } else if let Some(genesis_path) = self.perm_config.genesis_file.genesis_path.as_deref() {
+            tracing::info!("found genesis file at: {:?}", genesis_path);
+            match GenesisConfig::load_from_file(genesis_path) {
+                Ok(genesis) => match genesis.to_stratus_accounts_and_slots() {
+                    Ok((accounts, slots)) => {
+                        tracing::info!("loaded {} accounts from genesis.json", accounts.len());
+                        if !slots.is_empty() {
+                            tracing::info!("loaded {} storage slots from genesis.json", slots.len());
                         }
-                        Err(e) => {
-                            tracing::error!("failed to convert genesis accounts: {:?}", e);
-                            // Fallback to test accounts
-                            (test_accounts(), vec![])
-                        }
-                    },
+                        (accounts, slots)
+                    }
                     Err(e) => {
-                        tracing::error!("failed to load genesis file: {:?}", e);
+                        tracing::error!("failed to convert genesis accounts: {:?}", e);
                         // Fallback to test accounts
                         (test_accounts(), vec![])
                     }
+                },
+                Err(e) => {
+                    tracing::error!("failed to load genesis file: {:?}", e);
+                    // Fallback to test accounts
+                    (test_accounts(), vec![])
                 }
-            } else {
-                tracing::error!("genesis file not found at: {:?}", genesis_path);
-                // Fallback to test accounts
-                (test_accounts(), vec![])
             }
         } else {
             // No genesis path specified, use default genesis configuration
