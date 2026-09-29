@@ -92,6 +92,14 @@ struct TypedTxCommonFields {
     input: Bytes,
 }
 
+/// Rejects a transaction field that cannot be represented by `TransactionInput`.
+fn ensure_supported(supported: bool, field: &'static str) -> Result<(), TransactionDecodeError> {
+    if !supported {
+        return Err(TransactionDecodeError::UnsupportedField(field));
+    }
+    Ok(())
+}
+
 #[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
 #[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
 pub struct TransactionInfo {
@@ -513,7 +521,8 @@ impl TransactionInput {
         let to = decode_next::<TxTo>(rlp, "to")?.0;
         let value = decode_next::<Wei>(rlp, "value")?;
         let input = decode_next::<Bytes>(rlp, "input")?;
-        let _: AccessList = decode_next(rlp, "accessList")?;
+        let access_list: AccessList = decode_next(rlp, "accessList")?;
+        ensure_supported(access_list.is_empty(), "accessList")?;
 
         Ok(TypedTxCommonFields { gas_limit, to, value, input })
     }
@@ -523,7 +532,7 @@ impl TransactionInput {
     fn decode_dynamic_fee_gas_price(rlp: &mut alloy_rlp::Rlp<'_>) -> Result<u128, TransactionDecodeError> {
         let max_priority_fee_per_gas = decode_next::<u128>(rlp, "maxPriorityFeePerGas")?;
         let max_fee_per_gas = decode_next::<u128>(rlp, "maxFeePerGas")?;
-        let _ = max_priority_fee_per_gas;
+        ensure_supported(max_priority_fee_per_gas == max_fee_per_gas, "maxPriorityFeePerGas")?;
         Ok(max_fee_per_gas)
     }
 
@@ -564,15 +573,18 @@ impl TransactionInput {
             TxType::Eip4844 => {
                 gas_price = Self::decode_dynamic_fee_gas_price(&mut rlp)?;
                 TypedTxCommonFields { gas_limit, to, value, input } = Self::decode_access_list_fields(&mut rlp)?;
-                let _: u128 = decode_next(&mut rlp, "maxFeePerBlobGas")?;
-                let _: Vec<B256> = decode_next(&mut rlp, "blobVersionedHashes")?;
+                let max_fee_per_blob_gas: u128 = decode_next(&mut rlp, "maxFeePerBlobGas")?;
+                let blob_versioned_hashes: Vec<B256> = decode_next(&mut rlp, "blobVersionedHashes")?;
+                ensure_supported(max_fee_per_blob_gas == 0, "maxFeePerBlobGas")?;
+                ensure_supported(blob_versioned_hashes.is_empty(), "blobVersionedHashes")?;
                 (v, r, s) = Self::decode_signature(&mut rlp)?;
             }
 
             TxType::Eip7702 => {
                 gas_price = Self::decode_dynamic_fee_gas_price(&mut rlp)?;
                 TypedTxCommonFields { gas_limit, to, value, input } = Self::decode_access_list_fields(&mut rlp)?;
-                let _: Vec<SignedAuthorization> = decode_next(&mut rlp, "authorizationList")?;
+                let authorization_list: Vec<SignedAuthorization> = decode_next(&mut rlp, "authorizationList")?;
+                ensure_supported(authorization_list.is_empty(), "authorizationList")?;
                 (v, r, s) = Self::decode_signature(&mut rlp)?;
             }
 
@@ -642,6 +654,16 @@ impl TryFrom<ExternalTransaction> for TransactionInput {
 
     fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
         let envelope = value.0.inner.inner();
+
+        // Reject fields that were used to sign the transaction but are not stored in `TransactionInput`.
+        ensure_supported(envelope.access_list().is_none_or(|list| list.is_empty()), "accessList")?;
+        ensure_supported(
+            envelope.max_priority_fee_per_gas().is_none_or(|fee| fee == envelope.max_fee_per_gas()),
+            "maxPriorityFeePerGas",
+        )?;
+        ensure_supported(envelope.max_fee_per_blob_gas().is_none_or(|fee| fee == 0), "maxFeePerBlobGas")?;
+        ensure_supported(envelope.blob_versioned_hashes().is_none_or(|hashes| hashes.is_empty()), "blobVersionedHashes")?;
+        ensure_supported(envelope.authorization_list().is_none_or(|list| list.is_empty()), "authorizationList")?;
 
         // Get signature components from the envelope
         let signature = envelope.signature();
@@ -911,5 +933,143 @@ mod tests {
             authorization_list: Vec::new(),
         };
         assert_direct_decode(tx, 4);
+    }
+
+    /// Encodes a transaction to raw EIP-2718 bytes.
+    fn encode_raw_2718<T>(tx: T) -> Vec<u8>
+    where
+        T: alloy_consensus::SignableTransaction<AlloySignature> + alloy_consensus::transaction::RlpEcdsaEncodableTx + alloy_eips::Typed2718,
+    {
+        let signed = Signed::new_unchecked(tx, AlloySignature::test_signature(), B256::default());
+        let mut raw_bytes = Vec::new();
+        signed.encode_2718(&mut raw_bytes);
+        raw_bytes
+    }
+
+    /// Asserts that decoding the raw bytes fails with the expected unsupported field.
+    fn assert_unsupported_field(raw_bytes: &[u8], expected_field: &'static str) {
+        let tx_type = raw_bytes[0];
+        let payload = &raw_bytes[1..];
+        let error = TransactionInput::decode_typed(tx_type, payload, raw_bytes).expect_err("decoding should fail with an unsupported field");
+        assert_eq!(error, TransactionDecodeError::UnsupportedField(expected_field));
+    }
+
+    fn non_empty_access_list() -> AccessList {
+        AccessList::from(vec![alloy_eips::eip2930::AccessListItem {
+            address: AlloyAddress::default(),
+            storage_keys: vec![B256::default()],
+        }])
+    }
+
+    #[test]
+    fn reject_eip2930_with_non_empty_access_list() {
+        let tx = TxEip2930 {
+            chain_id: 1,
+            nonce: 1,
+            gas_price: 1_000_000_000,
+            gas_limit: 21000,
+            to: TxKind::Call(AlloyAddress::default()),
+            value: U256::from(100),
+            input: AlloyBytes::new(),
+            access_list: non_empty_access_list(),
+        };
+        assert_unsupported_field(&encode_raw_2718(tx), "accessList");
+    }
+
+    #[test]
+    fn reject_eip1559_with_non_empty_access_list() {
+        let tx = TxEip1559 {
+            chain_id: 1,
+            nonce: 1,
+            max_priority_fee_per_gas: 1_000_000_000,
+            max_fee_per_gas: 1_000_000_000,
+            gas_limit: 21000,
+            to: TxKind::Call(AlloyAddress::default()),
+            value: U256::from(100),
+            input: AlloyBytes::new(),
+            access_list: non_empty_access_list(),
+        };
+        assert_unsupported_field(&encode_raw_2718(tx), "accessList");
+    }
+
+    #[test]
+    fn reject_eip1559_with_distinct_priority_fee() {
+        let tx = TxEip1559 {
+            chain_id: 1,
+            nonce: 1,
+            max_priority_fee_per_gas: 500_000_000,
+            max_fee_per_gas: 1_000_000_000,
+            gas_limit: 21000,
+            to: TxKind::Call(AlloyAddress::default()),
+            value: U256::from(100),
+            input: AlloyBytes::new(),
+            access_list: AccessList::default(),
+        };
+        assert_unsupported_field(&encode_raw_2718(tx), "maxPriorityFeePerGas");
+    }
+
+    #[test]
+    fn reject_eip4844_with_blob_fields() {
+        let tx = TxEip4844 {
+            chain_id: 1,
+            nonce: 1,
+            max_priority_fee_per_gas: 1_000_000_000,
+            max_fee_per_gas: 1_000_000_000,
+            gas_limit: 21000,
+            to: AlloyAddress::default(),
+            value: U256::from(100),
+            input: AlloyBytes::new(),
+            access_list: AccessList::default(),
+            blob_versioned_hashes: vec![B256::default()],
+            max_fee_per_blob_gas: 1,
+        };
+        assert_unsupported_field(&encode_raw_2718(tx), "maxFeePerBlobGas");
+    }
+
+    #[test]
+    fn reject_eip4844_with_blob_versioned_hashes() {
+        let tx = TxEip4844 {
+            chain_id: 1,
+            nonce: 1,
+            max_priority_fee_per_gas: 1_000_000_000,
+            max_fee_per_gas: 1_000_000_000,
+            gas_limit: 21000,
+            to: AlloyAddress::default(),
+            value: U256::from(100),
+            input: AlloyBytes::new(),
+            access_list: AccessList::default(),
+            blob_versioned_hashes: vec![B256::default()],
+            max_fee_per_blob_gas: 0,
+        };
+        assert_unsupported_field(&encode_raw_2718(tx), "blobVersionedHashes");
+    }
+
+    #[test]
+    fn reject_eip7702_with_authorization_list() {
+        // An EIP-7702 authorization signed with arbitrary signature components.
+        let authorization = SignedAuthorization::new_unchecked(
+            alloy_eips::eip7702::Authorization {
+                chain_id: U256::from(1u64),
+                address: AlloyAddress::default(),
+                nonce: 0,
+            },
+            0,
+            U256::from(1u64),
+            U256::from(2u64),
+        );
+
+        let tx = TxEip7702 {
+            chain_id: 1,
+            nonce: 1,
+            max_priority_fee_per_gas: 1_000_000_000,
+            max_fee_per_gas: 1_000_000_000,
+            gas_limit: 21000,
+            to: AlloyAddress::default(),
+            value: U256::from(100),
+            input: AlloyBytes::new(),
+            access_list: AccessList::default(),
+            authorization_list: vec![authorization],
+        };
+        assert_unsupported_field(&encode_raw_2718(tx), "authorizationList");
     }
 }
