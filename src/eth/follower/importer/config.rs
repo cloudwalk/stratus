@@ -82,7 +82,7 @@ pub struct ImporterConfig {
     pub stop_at_block: Option<BlockNumber>,
 
     /// Response format used by the block-and-receipts importer RPC (importer online).
-    #[arg(id = "importer.response_format", long = "response-format", default_value = "alloy", required = false)]
+    #[arg(id = "importer.response_format", long = "response-format", default_value = "alloy")]
     pub response_format: ResponseFormat,
 }
 

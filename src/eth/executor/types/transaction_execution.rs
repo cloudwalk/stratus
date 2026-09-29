@@ -30,6 +30,15 @@ pub struct TransactionExecution {
 }
 
 impl TransactionExecution {
+    /// Rebuilds the transaction input that produced this execution.
+    pub fn transaction_input(&self) -> TransactionInput {
+        TransactionInput {
+            transaction_info: self.info,
+            execution_info: self.input.clone().into(),
+            signature: self.signature,
+        }
+    }
+
     pub fn create_alloy_logs(&self) -> Vec<AlloyLog> {
         self.logs()
             .iter()

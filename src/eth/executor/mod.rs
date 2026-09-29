@@ -265,18 +265,12 @@ impl Executor {
         tx: TransactionMined,
         block_number: BlockNumber,
     ) -> anyhow::Result<()> {
+        let tx_input = tx.execution.transaction_input();
         let TransactionExecution {
-            info,
-            signature,
             input: stored_input,
             output: stored_output,
+            ..
         } = tx.execution;
-
-        let tx_input = TransactionInput {
-            transaction_info: info,
-            execution_info: stored_input.clone().into(),
-            signature,
-        };
 
         let recovered = tx_input.recover_signer_address()?;
 
@@ -286,9 +280,7 @@ impl Executor {
 
         let (tx_execution, state) = match stored_output.result.is_success() {
             // successful imported transaction, re-execute locally
-            true => {
-                Self::reexecute_imported_transaction(evm, &tx_input, evm_input, &stored_output, gas_price, recovered, block_number)?
-            }
+            true => Self::reexecute_imported_transaction(evm, &tx_input, evm_input, &stored_output, gas_price, recovered, block_number)?,
             // failed imported transaction, re-create from the stored execution without re-executing
             false => Self::recreate_failed_imported_transaction(storage, &tx_input, evm_input, &stored_output, gas_price, recovered)?,
         };

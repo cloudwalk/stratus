@@ -6,7 +6,6 @@ use stratus_metrics::timed;
 use crate::GlobalState;
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorError;
-use crate::eth::executor::types::TransactionExecution;
 use crate::eth::follower::importer::fetchers::DataFetcher;
 use crate::eth::follower::importer::fetchers::block_with_receipts::FetchedBlockWithReceipts;
 use crate::eth::follower::importer::fetchers::fake_leader::FakeLeaderFetcher;
@@ -53,17 +52,7 @@ impl ImporterWorker for FakeLeaderWorker {
                 let transactions = std::mem::take(&mut block.transactions)
                     .into_iter()
                     .map(|tx| -> anyhow::Result<TransactionInput> {
-                        let TransactionExecution {
-                            info,
-                            signature,
-                            input: stored_input,
-                            output: _,
-                        } = tx.execution;
-                        let tx_input = TransactionInput {
-                            transaction_info: info,
-                            execution_info: stored_input.into(),
-                            signature,
-                        };
+                        let tx_input = tx.execution.transaction_input();
                         tx_input.recover_signer_address()?;
                         Ok(tx_input)
                     })

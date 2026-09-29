@@ -25,6 +25,15 @@ use crate::eth::types::Wei;
 use crate::ext::not;
 use crate::log_and_err;
 
+/// `ERC20Trace` event hash, whose first 32 data bytes carry the transaction `gasLeft` at emit time.
+const ERC20_TRACE_EVENT_HASH: [u8; 32] = hex!("31738ac4a7c9a10ecbbfd3fed5037971ba81b8f6aa4f72a23f5364e9bc76d671");
+
+/// `BalanceTrackerTrace` event hash, whose first 32 data bytes carry the transaction `gasLeft` at emit time.
+const BALANCE_TRACKER_TRACE_EVENT_HASH: [u8; 32] = hex!("63f1e32b72965e2be75e03024856287aff9e4cdbcec65869c51014fc2c1c95d9");
+
+/// Event hashes whose first 32 data bytes carry the transaction `gasLeft` at emit time.
+const GAS_LEFT_EVENT_HASHES: [&[u8]; 2] = [&ERC20_TRACE_EVENT_HASH, &BALANCE_TRACKER_TRACE_EVENT_HASH];
+
 /// Output of a transaction executed in the EVM.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, Default, Deref, DerefMut)]
 #[cfg_attr(test, derive(fake::Dummy))]
@@ -229,16 +238,16 @@ impl TransactionExecutionOutput {
     ///
     /// The overwriting should be done by copying the first 32 bytes from the receipt to log in `self`.
     fn fix_logs_gas_left(&mut self, receipt: &ExternalReceipt) {
-        const ERC20_TRACE_EVENT_HASH: [u8; 32] = hex!("31738ac4a7c9a10ecbbfd3fed5037971ba81b8f6aa4f72a23f5364e9bc76d671");
-        const BALANCE_TRACKER_TRACE_EVENT_HASH: [u8; 32] = hex!("63f1e32b72965e2be75e03024856287aff9e4cdbcec65869c51014fc2c1c95d9");
-
-        const EVENT_HASHES: [&[u8]; 2] = [&ERC20_TRACE_EVENT_HASH, &BALANCE_TRACKER_TRACE_EVENT_HASH];
-
         let receipt_logs = receipt.inner.logs();
 
         for (execution_log, receipt_log) in self.logs.iter_mut().zip(receipt_logs) {
-            let execution_log_matches = || execution_log.topic0.is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
-            let receipt_log_matches = || receipt_log.topics().first().is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
+            let execution_log_matches = || execution_log.topic0.is_some_and(|topic| GAS_LEFT_EVENT_HASHES.contains(&topic.as_ref()));
+            let receipt_log_matches = || {
+                receipt_log
+                    .topics()
+                    .first()
+                    .is_some_and(|topic| GAS_LEFT_EVENT_HASHES.contains(&topic.as_ref()))
+            };
 
             // only try overwriting if both logs refer to the target event
             let should_overwrite = execution_log_matches() && receipt_log_matches();
@@ -390,14 +399,9 @@ impl TransactionExecutionOutput {
     /// Imported transactions are re-executed locally with a different amount of gas limit, so rely
     /// on the stored logs to copy the `gasLeft` values, mirroring [`Self::fix_logs_gas_left`].
     fn fix_logs_gas_left_from_stored(&mut self, stored_logs: &[Log]) {
-        const ERC20_TRACE_EVENT_HASH: [u8; 32] = hex!("31738ac4a7c9a10ecbbfd3fed5037971ba81b8f6aa4f72a23f5364e9bc76d671");
-        const BALANCE_TRACKER_TRACE_EVENT_HASH: [u8; 32] = hex!("63f1e32b72965e2be75e03024856287aff9e4cdbcec65869c51014fc2c1c95d9");
-
-        const EVENT_HASHES: [&[u8]; 2] = [&ERC20_TRACE_EVENT_HASH, &BALANCE_TRACKER_TRACE_EVENT_HASH];
-
         for (execution_log, stored_log) in self.logs.iter_mut().zip(stored_logs) {
-            let execution_log_matches = || execution_log.topic0.is_some_and(|topic| EVENT_HASHES.contains(&topic.0.as_ref()));
-            let stored_log_matches = || stored_log.topic0.is_some_and(|topic| EVENT_HASHES.contains(&topic.0.as_ref()));
+            let execution_log_matches = || execution_log.topic0.is_some_and(|topic| GAS_LEFT_EVENT_HASHES.contains(&topic.0.as_ref()));
+            let stored_log_matches = || stored_log.topic0.is_some_and(|topic| GAS_LEFT_EVENT_HASHES.contains(&topic.0.as_ref()));
 
             // only try overwriting if both logs refer to the target event
             let should_overwrite = execution_log_matches() && stored_log_matches();

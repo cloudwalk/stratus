@@ -206,8 +206,7 @@ impl BlockchainClient {
         let value = match serde_json::from_str::<T>(full.get()) {
             Ok(value) => value,
             Err(e) if format == Some(ResponseFormat::Stratus) && Self::is_legacy_alloy_response(full.get()) => {
-                let _ = e;
-                tracing::error!(method, "leader answered the stratus format request with the legacy alloy format");
+                tracing::error!(reason = ?e, method, "leader answered the stratus format request with the legacy alloy format");
                 anyhow::bail!(
                     "leader answered the stratus format request with the legacy alloy format, \
                      which means it likely runs an old version without stratus response format support; \
