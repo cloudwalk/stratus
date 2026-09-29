@@ -143,7 +143,7 @@ impl StratusError {
             Self::RPC(RpcError::ClientBlocked { client }) => to_json_value(client),
 
             // Transaction
-            Self::RPC(RpcError::TransactionInvalid { decode_error }) => to_json_value(decode_error),
+            Self::RPC(RpcError::TransactionInvalid { decode_error }) => to_json_value(decode_error.to_string()),
             Self::Executor(ExecutorError::EvmFailed(e)) => JsonValue::String(e.to_string()),
             Self::Executor(ExecutorError::RevertedCall { output }) => to_json_value(output),
             Self::Executor(ExecutorError::RevertedCallWithReason { reason }) => to_json_value(reason),

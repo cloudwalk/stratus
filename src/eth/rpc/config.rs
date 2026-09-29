@@ -86,7 +86,7 @@ impl RpcServerConfig {
             bail!("invalid client list");
         }
 
-        let set: HashSet<RpcClientApp> = input.split(',').map(|s| RpcClientApp::parse(s.trim())).collect();
+        let set: HashSet<RpcClientApp> = input.split(',').map(|s| RpcClientApp::parse_config_value(s.trim())).collect();
 
         if set.is_empty() { bail!("invalid client list") } else { Ok(set) }
     }

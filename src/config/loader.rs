@@ -38,7 +38,7 @@ use crate::config::StratusConfig;
 use crate::infra::build_info;
 
 /// Arguments that make no sense as config file fields; they warn as unknown when present in a file.
-const CLI_ONLY_ARGUMENTS: &[&str] = &["config_path", "nocapture", "help", "version"];
+const CLI_ONLY_ARGUMENTS: &[&str] = &["config_path", "validate_config", "nocapture", "help", "version"];
 
 /// Node mode flags: file mode values are skipped when the CLI provides a mode.
 const NODE_MODE_ARGUMENTS: &[&str] = &["leader", "follower", "fake_leader"];
@@ -65,6 +65,11 @@ struct ConfigCli {
     /// Path to the TOML configuration file. When absent, `config/{binary}.{env}.toml` is used.
     #[arg(long = "config", value_name = "FILE")]
     config_path: Option<PathBuf>,
+
+    /// Parses the configuration, prints warnings, the final config and the verdict, then exits
+    /// without starting the node.
+    #[arg(long = "validate-config")]
+    validate_config: bool,
 
     #[command(flatten)]
     config: StratusConfig,
@@ -158,11 +163,16 @@ fn merged_parse_error(error: Error) -> anyhow::Error {
 
 /// Builds the merged configuration from matches parsed over the file tokens plus the command line.
 fn config_from_matches(matches: &ArgMatches) -> anyhow::Result<StratusConfig> {
-    let mut config = ConfigCli::from_arg_matches(matches)?.config;
+    let cli = ConfigCli::from_arg_matches(matches)?;
+    let mut config = cli.config;
 
     // a leader ignores follower-only sections instead of failing on them
     config.ignore_follower_sections();
     config.ignore_sentry_without_url();
+
+    if cli.validate_config {
+        config.validate_and_exit();
+    }
 
     Ok(config)
 }
@@ -313,6 +323,137 @@ mod tests {
         let config = load_with(&[], file).unwrap();
         assert!(config.leader);
         assert_eq!(config.executor.executor_chain_id, 2008);
+    }
+
+    #[test]
+    fn test_validate_config_is_cli_only() {
+        let file = r#"
+            leader = true
+            validate_config = true
+
+            [executor]
+            chain_id = 2008
+        "#;
+        let command = super::ConfigCli::command();
+        let table = super::parse_config_table(file).unwrap();
+        assert_eq!(super::unknown_fields(&table, &command), ["validate_config"]);
+    }
+
+    #[test]
+    fn test_final_config_toml_round_trip() {
+        let file = r#"
+            follower = true
+
+            [common]
+            env = "production"
+            async_threads = 8
+            blocking_threads = 64
+            unknown_client_enabled = false
+            blocked_clients = ["metamask", "blockscout"]
+
+            [common.tracing]
+            url = "http://collector:4317"
+            protocol = "http-json"
+            headers = ["key=value"]
+            log_format = "json"
+            filter = "debug"
+
+            [common.sentry]
+            url = "https://sentry.io/123"
+
+            [common.metrics]
+            exporter_address = "0.0.0.0:9001"
+
+            [rpc]
+            address = "0.0.0.0:3001"
+            max_connections = 100
+            max_response_size_bytes = 20971520
+            max_subscriptions = 10
+            health_check_interval_ms = 200
+            batch_request_limit = 50
+            debug_trace_unsuccessful_only = ["blockscout"]
+
+            [executor]
+            chain_id = 100
+            call_present_evms = 1
+            call_past_evms = 2
+            inspector_evms = 3
+            reject_not_contract = false
+            evm_spec = "Cancun"
+
+            [miner]
+            block_mode = "1s"
+
+            [storage.cache]
+            account_history_cache_capacity = 30000
+            slot_history_cache_capacity = 400000
+
+            [storage.permanent]
+            path_prefix = "temp_3001"
+            shutdown_timeout = "1m"
+            disable_sync_write = true
+            cf_size_metrics_interval = "30s"
+            file_descriptors_limit = 1024
+
+            [storage.permanent.cf_cache]
+            accounts = 1000
+            accounts_history = 2000
+            account_slots = 3000
+            account_slots_history = 4000
+            transactions = 5000
+            blocks_by_number = 6000
+            blocks_by_hash = 7000
+            blocks_by_timestamp = 8000
+            block_changes = 9000
+
+            {GENESIS_SECTION}
+
+            [importer]
+            external_rpc = "http://localhost:3000/"
+            external_rpc_ws = "ws://localhost:3000/"
+            external_rpc_timeout = "5s"
+            sync_interval = "250ms"
+            enable_block_changes_replication = true
+            async_threads = 7
+            forward_access_list = false
+            stop_at_block = "0x2a"
+
+            [kafka]
+            bootstrap_servers = "localhost:29092"
+            topic = "stratus-events"
+            client_id = "stratus-producer"
+            group_id = "stratus-group"
+            security_protocol = "sasl-ssl"
+            sasl_mechanisms = "plain"
+            sasl_username = "user"
+            sasl_password = "pass"
+            ssl_ca_location = "/ca.pem"
+            ssl_certificate_location = "/cert.pem"
+            ssl_key_location = "/key.pem"
+        "#;
+
+        #[cfg(feature = "dev")]
+        const GENESIS_SECTION: &str = "[storage.permanent.genesis]\n            path = \"config/genesis.local.json\"";
+        #[cfg(not(feature = "dev"))]
+        const GENESIS_SECTION: &str = "";
+
+        let file = file.replace("{GENESIS_SECTION}", GENESIS_SECTION);
+        let config = load_with(&[], &file).unwrap();
+        let rendered = config.render_as_toml().unwrap();
+        let table = super::parse_config_table(&rendered).unwrap();
+        let command = super::ConfigCli::command();
+        let unknown = super::unknown_fields(&table, &command);
+        assert!(
+            unknown.is_empty(),
+            "unknown fields in the rendered configuration (serde field name drifted from the argument id?): {unknown:?}"
+        );
+
+        let reparsed = load_with(&[], &rendered).unwrap();
+        assert_eq!(
+            serde_json::to_value(&config).unwrap(),
+            serde_json::to_value(&reparsed).unwrap(),
+            "the rendered configuration does not round-trip"
+        );
     }
 
     #[test]
@@ -534,8 +675,8 @@ mod tests {
         assert_eq!(config.executor.executor_chain_id, 100);
         assert_eq!(config.executor.executor_evm_spec.to_string(), "Cancun");
         assert_eq!(config.miner.block_mode, MinerMode::Interval(std::time::Duration::from_secs(1)));
-        assert_eq!(config.exporter.exporter_async_threads, 2);
-        assert_eq!(config.exporter.exporter_blocking_threads, 32);
+        assert_eq!(config.exporter.async_threads, 2);
+        assert_eq!(config.exporter.blocking_threads, 32);
         assert_eq!(config.storage.perm_storage.rocks_path_prefix.as_deref(), Some("temp_3001"));
         assert_eq!(config.storage.perm_storage.rocks_file_descriptors_limit, 1024);
         assert_eq!(config.storage.perm_storage.rocks_cf_cache.accounts, 1000);

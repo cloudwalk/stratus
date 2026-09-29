@@ -15,7 +15,10 @@ metrics! {
         histogram_counter rpc_response_size{client, method},
 
         "Number of JSON-RPC subscriptions active right now."
-        gauge rpc_subscriptions_active{subscription, client}
+        gauge rpc_subscriptions_active{subscription, client},
+
+        "Number of times the RPC server was restarted due to unhealthy state."
+        counter rpc_server_restarts{}
     },
 
     group: storage_read {
