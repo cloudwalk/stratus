@@ -11,7 +11,6 @@ use crate::alias::JsonValue;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::types::BlockHeader;
 use crate::eth::types::BlockNumber;
-use crate::eth::types::ExternalBlock;
 use crate::eth::types::Hash;
 use crate::eth::types::Index;
 use crate::eth::types::LogMessage;
@@ -89,15 +88,6 @@ impl Block {
         if !self.transactions.is_empty() {
             let transactions_hashes: Vec<B256> = self.transactions.iter().map(|x| x.info.hash).map(B256::from).collect();
             self.header.transactions_root = ordered_trie_root(&transactions_hashes).into();
-        }
-    }
-
-    pub fn apply_external(&mut self, external_block: &ExternalBlock) {
-        self.header.hash = external_block.hash();
-        assert!(*self.header.timestamp == external_block.header.timestamp);
-        for transaction in self.transactions.iter_mut() {
-            assert!(transaction.input.block_timestamp == self.header.timestamp);
-            transaction.mined_data.block_hash = external_block.hash();
         }
     }
 

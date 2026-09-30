@@ -53,9 +53,7 @@ impl ReexecutionFollower {
             kafka_connector,
         };
 
-        let fetcher = BlockWithReceiptsFetcher {
-            chain: Arc::clone(&chain),
-        };
+        let fetcher = BlockWithReceiptsFetcher { chain: Arc::clone(&chain) };
 
         Self { fetcher, importer }
     }
@@ -66,9 +64,7 @@ impl FakeLeader {
         let importer = FakeLeaderWorker { executor, miner, storage };
 
         let fetcher = FakeLeaderFetcher {
-            block_with_receipts_fetcher: BlockWithReceiptsFetcher {
-                chain: Arc::clone(&chain),
-            },
+            block_with_receipts_fetcher: BlockWithReceiptsFetcher { chain: Arc::clone(&chain) },
             block_with_changes_fetcher: BlockWithChangesFetcher { chain },
         };
 

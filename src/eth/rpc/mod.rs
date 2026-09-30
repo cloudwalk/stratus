@@ -156,14 +156,7 @@ mod tests {
             .expect("multi-byte char");
         assert!(!full.is_char_boundary(misaligned));
 
-        let raw = respond(
-            value,
-            Some(PaginationParams {
-                offset: misaligned as u64,
-            }),
-            MARGIN + 8,
-        )
-        .expect("should respond");
+        let raw = respond(value, Some(PaginationParams { offset: misaligned as u64 }), MARGIN + 8).expect("should respond");
         assert!(is_envelope(raw.get()));
 
         let envelope = parse_envelope(raw.get()).expect("parse envelope");
@@ -401,10 +394,7 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        let error = client
-            .fetch_block_and_receipts(BlockNumber::from(1))
-            .await
-            .expect_err("fetch should fail");
+        let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
         assert!(error.to_string().contains("failed to fetch block with receipts"));
     }
 
@@ -436,10 +426,7 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        let error = client
-            .fetch_block_and_receipts(BlockNumber::from(1))
-            .await
-            .expect_err("fetch should fail");
+        let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
         assert!(format!("{error:#}").contains("failed to deserialize importer data"));
     }
 
@@ -467,10 +454,7 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        let fetched = client
-            .fetch_block_and_receipts(BlockNumber::from(1))
-            .await
-            .expect("fetch block");
+        let fetched = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect("fetch block");
         assert!(fetched.is_none(), "null response must deserialize to Ok(None)");
     }
 
@@ -500,10 +484,7 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        let error = client
-            .fetch_block_and_receipts(BlockNumber::from(1))
-            .await
-            .expect_err("fetch should fail");
+        let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
         assert!(format!("{error:?}").contains("exceeds the reassembly cap"));
     }
 
@@ -539,10 +520,7 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        let error = client
-            .fetch_block_and_receipts(BlockNumber::from(1))
-            .await
-            .expect_err("fetch should fail");
+        let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
         assert!(format!("{error:?}").contains("expected paginated chunk but got normal response"));
     }
 

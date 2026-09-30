@@ -1,5 +1,4 @@
 use alloy_consensus::Signed;
-use alloy_consensus::Transaction;
 use alloy_consensus::TxEip1559;
 use alloy_consensus::TxEip2930;
 use alloy_consensus::TxEip4844;
@@ -32,7 +31,6 @@ use crate::eth::rpc::TransactionDecodeError;
 use crate::eth::types::Address;
 use crate::eth::types::Bytes;
 use crate::eth::types::ChainId;
-use crate::eth::types::ExternalTransaction;
 use crate::eth::types::Gas;
 use crate::eth::types::Hash;
 use crate::eth::types::Nonce;
@@ -649,63 +647,6 @@ impl RlpDecodable for TransactionInput {
 // -----------------------------------------------------------------------------
 // Conversion: Other -> Self
 // -----------------------------------------------------------------------------
-impl TryFrom<ExternalTransaction> for TransactionInput {
-    type Error = anyhow::Error;
-
-    fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
-        let envelope = value.0.inner.inner();
-
-        // Reject fields that were used to sign the transaction but are not stored in `TransactionInput`.
-        ensure_supported(envelope.access_list().is_none_or(|list| list.is_empty()), "accessList")?;
-        ensure_supported(
-            envelope.max_priority_fee_per_gas().is_none_or(|fee| fee == envelope.max_fee_per_gas()),
-            "maxPriorityFeePerGas",
-        )?;
-        ensure_supported(envelope.max_fee_per_blob_gas().is_none_or(|fee| fee == 0), "maxFeePerBlobGas")?;
-        ensure_supported(envelope.blob_versioned_hashes().is_none_or(|hashes| hashes.is_empty()), "blobVersionedHashes")?;
-        ensure_supported(envelope.authorization_list().is_none_or(|list| list.is_empty()), "authorizationList")?;
-
-        // Get signature components from the envelope
-        let signature = envelope.signature();
-        let signature = Signature {
-            r: signature.r(),
-            s: signature.s(),
-            v: if signature.v() { U64::ONE } else { U64::ZERO },
-        };
-
-        // Build the TransactionInput from the fields we currently support, leaving the
-        // signer unrecovered. We intentionally ignore any signer that may
-        // already be present in the source transaction so that the leader and the follower always derive the same address
-        // from the same set of saved fields.
-        let mut tx_input = TransactionInput {
-            transaction_info: TransactionInfo {
-                tx_type: Some(U64::from(envelope.tx_type() as u8)),
-                hash: Hash::from(*envelope.tx_hash()),
-            },
-            execution_info: ExecutionInfo {
-                chain_id: envelope.chain_id().map(Into::into),
-                nonce: Nonce::from(envelope.nonce()),
-                signer: Signer::Unrecovered,
-                to: match envelope.kind() {
-                    TxKind::Call(addr) => Some(Address::from(addr)),
-                    TxKind::Create => None,
-                },
-                value: Wei::from(envelope.value()),
-                input: Bytes::from(envelope.input().clone()),
-                gas_limit: Gas::from(envelope.gas_limit()),
-                gas_price: envelope.max_fee_per_gas(),
-            },
-            signature,
-        };
-
-        // Recover the signer directly from the saved fields.
-        let recovered_signer = tx_input.recover_signer_address()?;
-        tx_input.execution_info.signer = Signer::Recovered(recovered_signer);
-
-        Ok(tx_input)
-    }
-}
-
 impl From<TransactionExecutionInput> for ExecutionInfo {
     fn from(value: TransactionExecutionInput) -> Self {
         Self {

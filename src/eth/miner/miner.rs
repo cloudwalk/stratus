@@ -23,7 +23,6 @@ use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::Block;
 use crate::eth::types::BlockHeader;
-use crate::eth::types::ExternalBlock;
 use crate::eth::types::Hash;
 use crate::eth::types::LogMessage;
 use crate::eth::types::StratusError;
@@ -239,38 +238,6 @@ impl Miner {
         }
 
         Ok(())
-    }
-
-    /// Mines external block and external transactions.
-    ///
-    /// Local transactions are not allowed to be part of the block.
-    pub fn mine_external(&self, external_block: ExternalBlock) -> anyhow::Result<(Block, State<Complete>)> {
-        // track
-        #[cfg(feature = "tracing")]
-        let _span = info_span!("miner::mine_external", block_number = field::Empty).entered();
-
-        // lock
-        let _mine_lock = self.locks.mine.lock();
-
-        // mine block
-        let (pending_block, changes) = self.storage.finish_pending_block();
-        let mut block: Block = pending_block.into();
-
-        Span::with(|s| s.rec_str("block_number", &block.header.number));
-        block.apply_external(&external_block);
-
-        match external_block == block {
-            true => Ok((block, changes)),
-            false => Err(anyhow!(
-                "mismatching block info:\n\tlocal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}\n\texternal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}",
-                block.number(),
-                block.header.timestamp,
-                block.hash(),
-                external_block.number(),
-                external_block.timestamp(),
-                external_block.hash()
-            )),
-        }
     }
 
     /// Mines an imported stratus block and its reexecuted transactions.
