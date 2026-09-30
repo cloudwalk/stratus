@@ -18,20 +18,16 @@ use tokio::sync::RwLockReadGuard;
 
 use crate::GlobalState;
 use crate::alias::AlloyBytes;
-use crate::alias::AlloyTransaction;
+use crate::alias::AlloyHeader;
 use crate::alias::JsonValue;
 use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::ExecutorError;
-use crate::eth::follower::importer::fetchers::block_with_receipts::FetchedBlockWithReceipts;
 use crate::eth::rpc::pagination;
-use crate::eth::rpc::pagination::ResponseFormat;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::types::Address;
+use crate::eth::types::Block;
 use crate::eth::types::BlockNumber;
-use crate::eth::types::ExternalBlock;
-use crate::eth::types::ExternalBlockWithReceipts;
-use crate::eth::types::ExternalReceipt;
 use crate::eth::types::Hash;
 use crate::eth::types::StratusError;
 use crate::eth::types::Wei;
@@ -194,48 +190,22 @@ impl BlockchainClient {
     /// Sends the pagination capability parameter so a pagination-aware leader can split
     /// responses that do not fit in a single message (see `eth::rpc::pagination`). Old leaders
     /// ignore the extra parameter and answer normally, which is handled transparently.
-    async fn request_importer_data<T: serde::de::DeserializeOwned>(
-        &self,
-        method: &'static str,
-        block_number: BlockNumber,
-        format: Option<ResponseFormat>,
-    ) -> anyhow::Result<Option<T>> {
-        let Some(full) = self.fetch_serialized_response(method, block_number, format).await? else {
+    async fn request_importer_data<T: serde::de::DeserializeOwned>(&self, method: &'static str, block_number: BlockNumber) -> anyhow::Result<Option<T>> {
+        let Some(full) = self.fetch_serialized_response(method, block_number).await? else {
             return Ok(None); // block not available yet
         };
-        let value = match serde_json::from_str::<T>(full.get()) {
-            Ok(value) => value,
-            Err(e) if format == Some(ResponseFormat::Stratus) && Self::is_legacy_alloy_response(full.get()) => {
-                tracing::error!(reason = ?e, method, "leader answered the stratus format request with the legacy alloy format");
-                anyhow::bail!(
-                    "leader answered the stratus format request with the legacy alloy format, \
-                     which means it likely runs an old version without stratus response format support; \
-                     set importer response_format back to alloy or upgrade the leader"
-                );
-            }
-            Err(e) => return Err(e).with_context(|| format!("failed to deserialize importer data from {method}")),
-        };
+        let value = serde_json::from_str::<T>(full.get()).with_context(|| format!("failed to deserialize importer data from {method}"))?;
         Ok(Some(value))
     }
 
-    /// Checks whether a response has the legacy alloy shape (top-level `block` and `receipts` objects).
-    fn is_legacy_alloy_response(response: &str) -> bool {
-        serde_json::from_str::<serde_json::Value>(response).is_ok_and(|value| value.get("block").is_some() && value.get("receipts").is_some())
-    }
-
     /// Fetches the full serialized response for an importer method, reassembling pagination chunks.
-    async fn fetch_serialized_response(
-        &self,
-        method: &'static str,
-        block_number: BlockNumber,
-        format: Option<ResponseFormat>,
-    ) -> anyhow::Result<Option<Box<RawValue>>> {
+    async fn fetch_serialized_response(&self, method: &'static str, block_number: BlockNumber) -> anyhow::Result<Option<Box<RawValue>>> {
         tracing::debug!(%block_number, method, "fetching importer data");
 
         let number = to_json_value(block_number);
 
         // first request from offset zero
-        let params = [number.clone(), pagination::request_params(0, format)];
+        let params = [number.clone(), pagination::request_params(0)];
         let result = self.http.request::<Option<Box<RawValue>>, _>(method, params).await;
         let raw = match result {
             Ok(Some(raw)) => raw,
@@ -272,7 +242,7 @@ impl BlockchainClient {
             }
 
             // next chunk from the current offset
-            let params = [number.clone(), pagination::request_params(reassembler.next_offset(), format)];
+            let params = [number.clone(), pagination::request_params(reassembler.next_offset())];
             let result = self.http.request::<Box<RawValue>, _>(method, params).await;
             let raw = match result {
                 Ok(raw) => raw,
@@ -291,33 +261,13 @@ impl BlockchainClient {
     }
 
     /// Fetches a block by number with receipts.
-    pub async fn fetch_block_and_receipts(
-        &self,
-        block_number: BlockNumber,
-        response_format: ResponseFormat,
-    ) -> anyhow::Result<Option<FetchedBlockWithReceipts>> {
-        tracing::debug!(%block_number, %response_format, "fetching block");
+    pub async fn fetch_block_and_receipts(&self, block_number: BlockNumber) -> anyhow::Result<Option<Block>> {
+        tracing::debug!(%block_number, "fetching block");
 
         const METHOD: &str = "stratus_getBlockAndReceipts";
 
-        let result = match response_format {
-            ResponseFormat::Alloy => self
-                .request_importer_data::<ExternalBlockWithReceipts>(METHOD, block_number, Some(response_format))
-                .await
-                .map(|block| {
-                    block.map(|response| FetchedBlockWithReceipts::Alloy {
-                        block: response.block,
-                        receipts: response.receipts,
-                    })
-                }),
-            ResponseFormat::Stratus => self
-                .request_importer_data::<BlockRocksdb>(METHOD, block_number, Some(response_format))
-                .await
-                .map(|block| block.map(|block| FetchedBlockWithReceipts::Stratus(block.into()))),
-        };
-
-        match result {
-            Ok(block) => Ok(block),
+        match self.request_importer_data::<BlockRocksdb>(METHOD, block_number).await {
+            Ok(block) => Ok(block.map(|block| block.into())),
             Err(e) => log_and_err!(reason = e, "failed to fetch block with receipts"),
         }
     }
@@ -326,51 +276,9 @@ impl BlockchainClient {
     pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<(BlockRocksdb, BlockChangesRocksdb)>> {
         tracing::debug!(%block_number, "fetching block with changes");
 
-        match self.request_importer_data("stratus_getBlockWithChanges", block_number, None).await {
+        match self.request_importer_data("stratus_getBlockWithChanges", block_number).await {
             Ok(block) => Ok(block),
             Err(e) => log_and_err!(reason = e, "failed to fetch block with changes"),
-        }
-    }
-
-    /// Fetches a block by number.
-    pub async fn fetch_block(&self, block_number: BlockNumber) -> anyhow::Result<Option<ExternalBlock>> {
-        tracing::debug!(%block_number, "fetching block");
-
-        let number = to_json_value(block_number);
-        let result = self
-            .http
-            .request::<Option<ExternalBlock>, _>("eth_getBlockByNumber", [number, JsonValue::Bool(true)])
-            .await;
-
-        match result {
-            Ok(block) => Ok(block),
-            Err(e) => log_and_err!(reason = e, "failed to fetch block by number"),
-        }
-    }
-
-    /// Fetches a transaction by hash.
-    pub async fn fetch_transaction(&self, tx_hash: Hash) -> anyhow::Result<Option<AlloyTransaction>> {
-        tracing::debug!(%tx_hash, "fetching transaction");
-
-        let hash = to_json_value(tx_hash);
-        let result = self.http.request::<Option<AlloyTransaction>, _>("eth_getTransactionByHash", [hash]).await;
-
-        match result {
-            Ok(tx) => Ok(tx),
-            Err(e) => log_and_err!(reason = e, "failed to fetch transaction by hash"),
-        }
-    }
-
-    /// Fetches a receipt by hash.
-    pub async fn fetch_receipt(&self, tx_hash: Hash) -> anyhow::Result<Option<ExternalReceipt>> {
-        tracing::debug!(%tx_hash, "fetching transaction receipt");
-
-        let hash = to_json_value(tx_hash);
-        let result = self.http.request::<Option<ExternalReceipt>, _>("eth_getTransactionReceipt", [hash]).await;
-
-        match result {
-            Ok(receipt) => Ok(receipt),
-            Err(e) => log_and_err!(reason = e, "failed to fetch transaction receipt by hash"),
         }
     }
 
@@ -415,7 +323,7 @@ impl BlockchainClient {
     // RPC subscriptions
     // -------------------------------------------------------------------------
 
-    pub async fn subscribe_new_heads(&self) -> anyhow::Result<Subscription<ExternalBlock>> {
+    pub async fn subscribe_new_heads(&self) -> anyhow::Result<Subscription<AlloyHeader>> {
         const TASK_NAME: &str = "blockchain::subscribe_new_heads";
         tracing::debug!("subscribing to newHeads event");
 
@@ -427,7 +335,7 @@ impl BlockchainClient {
 
             let ws_read = self.require_ws().await?;
             let result = ws_read
-                .subscribe::<ExternalBlock, _>("eth_subscribe", [JsonValue::String("newHeads".to_owned())], "eth_unsubscribe")
+                .subscribe::<AlloyHeader, _>("eth_subscribe", [JsonValue::String("newHeads".to_owned())], "eth_unsubscribe")
                 .await;
 
             match result {

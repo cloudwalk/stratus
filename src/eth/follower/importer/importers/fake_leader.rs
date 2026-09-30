@@ -7,7 +7,6 @@ use crate::GlobalState;
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorError;
 use crate::eth::follower::importer::fetchers::DataFetcher;
-use crate::eth::follower::importer::fetchers::block_with_receipts::FetchedBlockWithReceipts;
 use crate::eth::follower::importer::fetchers::fake_leader::FakeLeaderFetcher;
 use crate::eth::follower::importer::importers::ImportData;
 use crate::eth::follower::importer::importers::ImporterWorker;
@@ -25,7 +24,7 @@ pub struct FakeLeaderWorker {
 
 impl ImportData for <FakeLeaderWorker as ImporterWorker>::DataType {
     fn block_number(&self) -> crate::eth::types::BlockNumber {
-        self.0.block_number()
+        self.0.number()
     }
 }
 
@@ -33,33 +32,17 @@ impl ImporterWorker for FakeLeaderWorker {
     type DataType = <FakeLeaderFetcher as DataFetcher>::PostProcessType;
 
     #[timed(import_online_mined_block)]
-    async fn import(&self, (fetched, (expected_block, expected_changes)): Self::DataType) -> anyhow::Result<usize> {
-        let (block_tx_len, transactions) = match fetched {
-            FetchedBlockWithReceipts::Alloy { block, .. } => {
-                let block_tx_len = block.transactions.len();
-                self.storage.set_pending_from_external(&block);
-                let transactions = block
-                    .0
-                    .transactions
-                    .into_transactions()
-                    .map(|tx| tx.try_into())
-                    .collect::<Result<Vec<TransactionInput>, _>>()?;
-                (block_tx_len, transactions)
-            }
-            FetchedBlockWithReceipts::Stratus(mut block) => {
-                let block_tx_len = block.transactions.len();
-                self.storage.set_pending_header(block.number(), block.timestamp());
-                let transactions = std::mem::take(&mut block.transactions)
-                    .into_iter()
-                    .map(|tx| -> anyhow::Result<TransactionInput> {
-                        let tx_input = tx.execution.transaction_input();
-                        tx_input.recover_signer_address()?;
-                        Ok(tx_input)
-                    })
-                    .collect::<anyhow::Result<Vec<_>>>()?;
-                (block_tx_len, transactions)
-            }
-        };
+    async fn import(&self, (mut block, (expected_block, expected_changes)): Self::DataType) -> anyhow::Result<usize> {
+        let block_tx_len = block.transactions.len();
+        self.storage.set_pending_header(block.number(), block.timestamp());
+        let transactions = std::mem::take(&mut block.transactions)
+            .into_iter()
+            .map(|tx| -> anyhow::Result<TransactionInput> {
+                let tx_input = tx.execution.transaction_input();
+                tx_input.recover_signer_address()?;
+                Ok(tx_input)
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
 
         for tx in transactions {
             tracing::info!(?tx, "executing tx as fake miner");

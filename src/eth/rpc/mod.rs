@@ -87,10 +87,8 @@ mod tests {
 
     #[test]
     fn request_params_wire_format() {
-        // without a format the wire parameter is unchanged, so old leaders see the same bytes
-        assert_eq!(request_params(5, None), json!({"offset": 5}));
-        // with a format the field rides the pagination parameter for endpoints that support it
-        assert_eq!(request_params(5, Some(ResponseFormat::Stratus)), json!({"offset": 5, "format": "stratus"}));
+        // the wire parameter is unchanged, so old leaders see the same bytes
+        assert_eq!(request_params(5), json!({"offset": 5}));
     }
 
     #[test]
@@ -325,19 +323,15 @@ mod wire_tests {
     use serde_json::json;
 
     use super::pagination::MAX_REASSEMBLY_TOTAL;
-    use super::pagination::ResponseFormat;
     use super::pagination::parse_request;
     use super::pagination::respond;
     use super::parser::next_rpc_param;
     use super::types::BlockFilter;
     use crate::alias::JsonValue;
     use crate::eth::follower::importer::BlockchainClient;
-    use crate::eth::follower::importer::FetchedBlockWithReceipts;
     use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
     use crate::eth::types::Block;
     use crate::eth::types::BlockNumber;
-    use crate::eth::types::ExternalBlockWithReceipts;
-    use crate::eth::types::ExternalReceipt;
     use crate::eth::types::StratusError;
     use crate::eth::types::TransactionMined;
     use crate::ext::to_json_value;
@@ -347,17 +341,18 @@ mod wire_tests {
     /// Response limit for both leader and follower sides in the tests below.
     const MAX_RESPONSE_BYTES: u32 = 2048;
 
-    /// Builds an importer response well above the response limits.
-    fn big_block_with_receipts() -> ExternalBlockWithReceipts {
-        let mut block = fake_first::<ExternalBlockWithReceipts>();
-        block.receipts = fake_list::<ExternalReceipt>(200);
+    /// Builds an importer block well above the response limits, in the stratus-native format.
+    fn big_block() -> Block {
+        let mut block = fake_first::<Block>();
+        block.header.number = BlockNumber::from(1u32);
+        block.transactions = fake_list::<TransactionMined>(200);
         block
     }
 
     /// Asserts the serialized form of the test value cannot fit in the response limits.
     #[test]
     fn test_value_is_oversized() {
-        let value = to_json_value(big_block_with_receipts());
+        let value = to_json_value(BlockRocksdb::from(big_block()));
         let serialized = serde_json::to_string(&value).expect("serialize");
         assert!(
             serialized.len() > MAX_RESPONSE_BYTES as usize,
@@ -368,8 +363,9 @@ mod wire_tests {
 
     #[tokio::test]
     async fn oversized_importer_response_is_paginated_over_the_wire() {
-        let expected = big_block_with_receipts();
-        let storage = Arc::new(RwLock::new(to_json_value(expected.clone())));
+        let expected_rocks = BlockRocksdb::from(big_block());
+        let expected: Block = expected_rocks.clone().into();
+        let storage = Arc::new(RwLock::new(to_json_value(expected_rocks)));
 
         // leader with a tiny response limit, using the same handler shape as the real one
         let server_config = jsonrpsee::server::ServerConfig::builder().max_response_body_size(MAX_RESPONSE_BYTES).build();
@@ -394,20 +390,17 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        let fetched = client
-            .fetch_block_and_receipts(BlockNumber::from(1), ResponseFormat::Alloy)
+        let fetched_block = client
+            .fetch_block_and_receipts(BlockNumber::from(1))
             .await
-            .expect("fetch block");
-        let FetchedBlockWithReceipts::Alloy { block, receipts } = fetched.expect("block present") else {
-            panic!("expected alloy response");
-        };
-        assert_eq!(block, expected.block);
-        assert_eq!(receipts, expected.receipts);
+            .expect("fetch block")
+            .expect("block present");
+        assert_eq!(fetched_block, expected);
     }
 
     #[tokio::test]
     async fn old_leader_without_pagination_still_fails_as_before() {
-        let storage = Arc::new(RwLock::new(to_json_value(big_block_with_receipts())));
+        let storage = Arc::new(RwLock::new(to_json_value(BlockRocksdb::from(big_block()))));
 
         // old leader: ignores the extra pagination parameter, returns the full response
         let server_config = jsonrpsee::server::ServerConfig::builder().max_response_body_size(MAX_RESPONSE_BYTES).build();
@@ -431,22 +424,21 @@ mod wire_tests {
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
         let error = client
-            .fetch_block_and_receipts(BlockNumber::from(1), ResponseFormat::Alloy)
+            .fetch_block_and_receipts(BlockNumber::from(1))
             .await
             .expect_err("fetch should fail");
         assert!(error.to_string().contains("failed to fetch block with receipts"));
     }
 
     #[tokio::test]
-    async fn stratus_format_against_old_leader_answers_with_clear_error() {
-        // minimal legacy alloy-shape response, so the old leader delivers it in a single message
+    async fn legacy_alloy_shape_fails_to_deserialize() {
+        // a leader still answering the pre-cleanup alloy shape now fails fast at deserialization
         let alloy_response = serde_json::json!({
             "block": { "number": "0x1" },
             "receipts": [],
         });
         let storage = Arc::new(RwLock::new(alloy_response));
 
-        // old leader: ignores the format parameter, answers with the legacy alloy shape
         let server_config = jsonrpsee::server::ServerConfig::builder().max_response_body_size(MAX_RESPONSE_BYTES).build();
         let server = Server::builder().set_config(server_config).build("127.0.0.1:0").await.expect("build server");
         let addr = server.local_addr().expect("server addr");
@@ -466,14 +458,11 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        // the follower requests the stratus format; the error must explain the real cause
         let error = client
-            .fetch_block_and_receipts(BlockNumber::from(1), ResponseFormat::Stratus)
+            .fetch_block_and_receipts(BlockNumber::from(1))
             .await
             .expect_err("fetch should fail");
-        let message = format!("{error:#}");
-        assert!(message.contains("legacy alloy format"), "unexpected error: {message}");
-        assert!(message.contains("old version"), "unexpected error: {message}");
+        assert!(format!("{error:#}").contains("failed to deserialize importer data"));
     }
 
     #[tokio::test]
@@ -501,7 +490,7 @@ mod wire_tests {
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
         let fetched = client
-            .fetch_block_and_receipts(BlockNumber::from(1), ResponseFormat::Alloy)
+            .fetch_block_and_receipts(BlockNumber::from(1))
             .await
             .expect("fetch block");
         assert!(fetched.is_none(), "null response must deserialize to Ok(None)");
@@ -534,7 +523,7 @@ mod wire_tests {
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
         let error = client
-            .fetch_block_and_receipts(BlockNumber::from(1), ResponseFormat::Alloy)
+            .fetch_block_and_receipts(BlockNumber::from(1))
             .await
             .expect_err("fetch should fail");
         assert!(format!("{error:?}").contains("exceeds the reassembly cap"));
@@ -573,19 +562,16 @@ mod wire_tests {
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
         let error = client
-            .fetch_block_and_receipts(BlockNumber::from(1), ResponseFormat::Alloy)
+            .fetch_block_and_receipts(BlockNumber::from(1))
             .await
             .expect_err("fetch should fail");
         assert!(format!("{error:?}").contains("expected paginated chunk but got normal response"));
     }
 
     #[tokio::test]
-    async fn stratus_format_response_round_trips_and_format_rides_every_chunk() {
+    async fn stratus_native_response_round_trips_through_paginated_fetch() {
         // a big block in the stratus-native format, above the response limits
-        let mut block = fake_first::<Block>();
-        block.header.number = BlockNumber::from(1u32);
-        block.transactions = fake_list::<TransactionMined>(200);
-        let expected_rocks = BlockRocksdb::from(block);
+        let expected_rocks = BlockRocksdb::from(big_block());
         let expected: Block = expected_rocks.clone().into();
         let storage = Arc::new(RwLock::new(to_json_value(expected_rocks)));
 
@@ -602,8 +588,6 @@ mod wire_tests {
             .register_method("stratus_getBlockAndReceipts", |params, storage, _| {
                 let (sequence, _filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
                 let pagination = parse_request(sequence)?;
-                // the response format must ride every chunk request so the leader keeps it stable
-                assert_eq!(pagination.as_ref().and_then(|params| params.format), Some(ResponseFormat::Stratus));
                 let value = storage.read().expect("read storage").clone();
                 respond(value, pagination, MAX_RESPONSE_BYTES)
             })
@@ -614,13 +598,11 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        let fetched = client
-            .fetch_block_and_receipts(BlockNumber::from(1), ResponseFormat::Stratus)
+        let fetched_block = client
+            .fetch_block_and_receipts(BlockNumber::from(1))
             .await
-            .expect("fetch block");
-        let FetchedBlockWithReceipts::Stratus(fetched_block) = fetched.expect("block present") else {
-            panic!("expected stratus response");
-        };
+            .expect("fetch block")
+            .expect("block present");
         assert_eq!(fetched_block, expected);
     }
 }

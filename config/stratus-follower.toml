@@ -10,9 +10,6 @@ chain_id = 2008
 [importer]
 external_rpc = "http://localhost:3000/"
 external_rpc_ws = "ws://localhost:3000/"
-# Response format for stratus_getBlockAndReceipts importer requests: "alloy" (default) or "stratus".
-# The stratus format serializes blocks with receipts directly from the stratus types.
-# response_format = "stratus"
 
 [common.tracing]
 filter = "info,stratus::eth::rpc::rpc_subscriptions::rx=off,stratus::eth::consensus::rx=off,stratus::eth::consensus=off,jsonrpsee-server=debug"

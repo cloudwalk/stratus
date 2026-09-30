@@ -211,11 +211,9 @@ pub fn respond(value: JsonValue, pagination: Option<PaginationParams>, max_respo
 
 /// Builds pagination request params for the follower side.
 ///
-/// When `format` is `None`, the serialized params are byte-identical to the pre-format wire
-/// format (`{"offset": N}`); when set, the format rides alongside the offset so the leader
-/// serializes every chunk of the response in the requested format.
-pub fn request_params(offset: u64, format: Option<ResponseFormat>) -> JsonValue {
-    to_json_value(PaginationParams { offset, format })
+/// The serialized params are byte-identical to the pre-format wire format (`{"offset": N}`).
+pub fn request_params(offset: u64) -> JsonValue {
+    to_json_value(PaginationParams { offset, format: None })
 }
 
 /// Progressive reassembly of a paginated response, with validation against a malicious peer.

@@ -12,7 +12,6 @@ use std::time::Duration;
 
 use anyhow::bail;
 pub use config::ImporterConfig;
-pub use fetchers::block_with_receipts::FetchedBlockWithReceipts;
 pub use importers::BlockchainClient;
 pub use runtime::ImporterRuntime;
 pub use runtime::ImporterRuntimeConfig;
@@ -156,8 +155,8 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
             tracing::info!("{} awaiting block number from newHeads subscription", TASK_NAME);
             match timeout(TIMEOUT_NEW_HEADS, sub.next()).await {
                 Ok(Some(Ok(block))) => {
-                    tracing::info!(block_number = %block.number(), "{} received newHeads event", TASK_NAME);
-                    set_external_rpc_current_block(block.number());
+                    tracing::info!(block_number = %block.number, "{} received newHeads event", TASK_NAME);
+                    set_external_rpc_current_block(BlockNumber::from(block.number));
                     continue;
                 }
                 Ok(None) =>

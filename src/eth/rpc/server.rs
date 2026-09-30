@@ -698,7 +698,6 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         async_threads: 4,
         forward_access_list: true,
         stop_at_block: None,
-        response_format: ResponseFormat::default(),
     };
 
     importer_config.init_follower_importer(ctx).await
