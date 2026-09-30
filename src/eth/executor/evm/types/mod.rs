@@ -34,25 +34,12 @@ pub const GAS_MAX_LIMIT: u64 = 100_000_000;
 pub type ContextWithDB<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB, Journal<DB>>;
 pub type GeneralRevm<DB, I = ()> = RevmEvm<ContextWithDB<DB>, I, EthInstructions<EthInterpreter, ContextWithDB<DB>>, EthPrecompiles, EthFrame>;
 
-/// Classification of an EVM by the kind of execution it performs. Used to route
-/// work to the right EVM worker pool and as a metrics label.
+/// Executor worker pool lane. Determines which pool executes the task and
+/// labels the `executor_workers_busy` gauge.
 #[derive(Clone, Copy)]
-pub enum EvmKind {
+pub enum Lane {
     Transaction,
-    CallPast,
     CallPresent,
-    Inspect,
-}
-
-impl EvmKind {
-    pub fn is_call(&self) -> bool {
-        match self {
-            EvmKind::Transaction => false,
-            EvmKind::CallPast | EvmKind::CallPresent | EvmKind::Inspect => true,
-        }
-    }
-
-    pub fn is_transaction(&self) -> bool {
-        !self.is_call()
-    }
+    CallPast,
+    Inspector,
 }

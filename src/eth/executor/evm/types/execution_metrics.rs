@@ -14,7 +14,7 @@ use crate::eth::codegen::SoliditySignature;
 use crate::eth::storage::FoundAt;
 use crate::eth::types::Address;
 use crate::eth::types::Bytes;
-use crate::eth::types::ExecutionKind;
+use crate::eth::types::ExecutionContext;
 use crate::eth::types::Gas;
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -58,7 +58,7 @@ pub struct StorageMetrics {
 #[derive(Debug, Clone, Copy)]
 pub struct ExecutionMetricsContext {
     #[cfg(feature = "metrics")]
-    kind: ExecutionKind,
+    execution_context: ExecutionContext,
     #[cfg(feature = "metrics")]
     contract: ContractName,
     #[cfg(feature = "metrics")]
@@ -66,18 +66,18 @@ pub struct ExecutionMetricsContext {
 }
 
 impl ExecutionMetricsContext {
-    pub fn new(kind: ExecutionKind, to: &Option<Address>, input: &Bytes) -> Self {
+    pub fn new(context: ExecutionContext, to: &Option<Address>, input: &Bytes) -> Self {
         #[cfg(feature = "metrics")]
         {
             Self {
-                kind,
+                execution_context: context,
                 contract: codegen::contract_name(to),
                 function: codegen::function_sig(input),
             }
         }
         #[cfg(not(feature = "metrics"))]
         {
-            let _ = (kind, to, input);
+            let _ = (context, to, input);
             Self {}
         }
     }
@@ -104,7 +104,12 @@ impl ExecutionMetrics {
     fn publish(&self) {
         let context = &self.context;
         self.storage_metrics.publish(context);
-        metrics::inc_evm_execution_gas(self.gas_used.as_u64() as usize, context.kind.as_ref(), context.contract, context.function);
+        metrics::inc_evm_execution_gas(
+            self.gas_used.as_u64() as usize,
+            context.execution_context.metrics_label(),
+            context.contract,
+            context.function,
+        );
     }
 }
 
@@ -118,7 +123,7 @@ impl Drop for ExecutionMetrics {
 impl StorageMetrics {
     #[cfg(feature = "metrics")]
     fn publish(&self, context: &ExecutionMetricsContext) {
-        let execution_kind = context.kind.as_ref();
+        let execution_kind = context.execution_context.metrics_label();
         for (found_at, stats) in self.account_reads.iter() {
             if stats.count > 0 {
                 metrics::inc_n_evm_execution_account_reads(stats.count as u64, execution_kind, found_at.as_str(), context.contract, context.function);

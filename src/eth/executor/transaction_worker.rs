@@ -10,12 +10,12 @@ use tracing::Span;
 use crate::GlobalState;
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;
-use crate::eth::executor::EvmKind;
 use crate::eth::executor::ExecutionMetrics;
 use crate::eth::executor::ExecutionResult;
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::ExecutorError;
+use crate::eth::executor::Job;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::TransactionExecutionOutput;
@@ -49,7 +49,7 @@ impl TransactionWorker {
         let config = *config;
 
         spawn_thread(TASK_NAME, move || {
-            let mut evm = Evm::new(Arc::clone(&storage), &config, EvmKind::Transaction);
+            let mut evm = Evm::new(Arc::clone(&storage), &config, Job::Transaction);
 
             while let Ok(task) = task_rx.recv() {
                 if GlobalState::is_shutdown_warn(TASK_NAME) {
@@ -58,7 +58,7 @@ impl TransactionWorker {
 
                 if let Err(StratusError::Executor(ExecutorError::Panic { err: panic_err })) = task.execute(&storage, &miner, &mut evm) {
                     tracing::error!(?panic_err, "executor panicked; recreating EVM");
-                    evm = Evm::new(Arc::clone(&storage), &config, EvmKind::Transaction);
+                    evm = Evm::new(Arc::clone(&storage), &config, Job::Transaction);
                 }
             }
             warn_task_tx_closed(TASK_NAME);

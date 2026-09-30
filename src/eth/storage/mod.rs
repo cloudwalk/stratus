@@ -23,7 +23,9 @@ use clap::Parser;
 use display_json::DebugAsJson;
 pub use temporary::compute_pending_block_number;
 
-pub use crate::eth::types::ExecutionKind;
+pub use crate::eth::types::ExecutionContext;
+pub use crate::eth::types::Job;
+pub use crate::eth::types::StateView;
 use crate::eth::types::StratusError;
 
 // -----------------------------------------------------------------------------
@@ -174,7 +176,9 @@ mod tests {
         assert_ne!(call_block, latest);
 
         // The in-flight call (pinned to the first block) reads the slot.
-        let (slot, _) = storage.read_slot(address, index, ExecutionKind::CallLatest(call_block)).expect("read slot");
+        let (slot, _) = storage
+            .read_slot(address, index, ExecutionContext::call(StateView::Latest(Some(call_block))))
+            .expect("read slot");
 
         // Must reflect the first block (100), not the freshly mined latest (200).
         assert_eq!(slot.value, SlotValue::from([100u64, 0, 0, 0]));
@@ -201,7 +205,9 @@ mod tests {
         let latest = storage.mine_block_with_mock_execution(changes2);
         assert_ne!(call_block, latest);
 
-        let (account, _) = storage.read_account(address, ExecutionKind::CallLatest(call_block)).expect("read account");
+        let (account, _) = storage
+            .read_account(address, ExecutionContext::call(StateView::Latest(Some(call_block))))
+            .expect("read account");
 
         // Must reflect the first block (100), not the freshly mined latest (200).
         assert_eq!(account.balance, Wei::from(100u64));

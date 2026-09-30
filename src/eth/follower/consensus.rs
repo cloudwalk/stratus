@@ -7,7 +7,7 @@ use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::Executor;
 use crate::eth::follower::importer::BlockchainClient;
 use crate::eth::types::Bytes;
-use crate::eth::types::ExecutionKind;
+use crate::eth::types::ExecutionContext;
 use crate::eth::types::Hash;
 use crate::eth::types::StratusError;
 use crate::eth::types::TransactionInput;
@@ -69,7 +69,7 @@ pub trait Consensus: Send + Sync {
     fn prepare_forward_access_list(&self, tx: TransactionInput) -> Result<Option<AccessListOutput>, StratusError> {
         if self.forward_access_list() {
             self.get_executor()
-                .execute_local_call::<AccessListOutput>(tx.into(), ExecutionKind::AccessList)
+                .execute_local_call::<AccessListOutput>(tx.into(), ExecutionContext::access_list())
                 .map(Some)
         } else {
             Ok(None)

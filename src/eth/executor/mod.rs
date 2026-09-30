@@ -16,8 +16,8 @@ use anyhow::bail;
 pub use config::ExecutorConfig;
 pub use evm::types::AccessListOutput;
 pub use evm::types::CallExecutionOutput;
-pub use evm::types::EvmKind;
 pub use evm::types::ExecutionMetrics;
+pub use evm::types::Lane;
 pub use evm::types::TransactionExecutionInput;
 pub use evm::types::TransactionExecutionOutput;
 pub use evm::types::TransactionExecutionResult;
@@ -41,7 +41,7 @@ use crate::eth::executor::evm_worker_pool::EvmWorkerPool;
 use crate::eth::executor::transaction_worker::TransactionWorker;
 use crate::eth::executor::types::EvmRoute;
 use crate::eth::miner::Miner;
-use crate::eth::storage::ExecutionKind;
+use crate::eth::storage::ExecutionContext;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::Address;
@@ -52,7 +52,8 @@ use crate::eth::types::ExternalReceipt;
 use crate::eth::types::ExternalReceipts;
 use crate::eth::types::ExternalTransaction;
 use crate::eth::types::Hash;
-use crate::eth::types::PointInTime;
+pub use crate::eth::types::Job;
+use crate::eth::types::StateView;
 use crate::eth::types::StratusError;
 use crate::eth::types::TransactionInput;
 #[cfg(feature = "metrics")]
@@ -194,7 +195,7 @@ impl Executor {
             //
             // failed external transaction, re-create from receipt without re-executing
             false => {
-                let (sender, _) = storage.read_account(receipt.from.into(), ExecutionKind::Transaction)?;
+                let (sender, _) = storage.read_account(receipt.from.into(), ExecutionContext::transaction())?;
                 if tx_input.execution_info.nonce != sender.nonce {
                     bail!(
                         "reverted external transaction should have the correct nonce. address: {:?}, input: {:?}, sender: {:?}",
@@ -224,9 +225,9 @@ impl Executor {
     // Local transactions
     // -------------------------------------------------------------------------
 
-    /// Validates that the target account is a contract, reading it from storage at the given point in time.
-    pub fn validate_to_is_contract(&self, to_address: Address, kind: ExecutionKind) -> Result<(), StratusError> {
-        let (account, _) = self.storage.read_account(to_address, kind)?;
+    /// Validates that the target account is a contract, reading it from storage at the given execution context.
+    pub fn validate_to_is_contract(&self, to_address: Address, context: ExecutionContext) -> Result<(), StratusError> {
+        let (account, _) = self.storage.read_account(to_address, context)?;
         if account.bytecode.is_none() {
             if self.reject_not_contract {
                 return Err(ExecutorError::AccountNotContract { address: to_address }.into());
@@ -269,10 +270,10 @@ impl Executor {
         success = result.is_ok(),
         contract = |call_input| codegen::contract_name(&call_input.to),
         function = |call_input| codegen::function_sig(&call_input.data),
-        kind = |kind| kind.as_ref()
+        kind = |context| context.metrics_label()
         )
     )]
-    pub fn execute_local_call<Output>(&self, call_input: CallInput, kind: ExecutionKind) -> Result<Output, StratusError>
+    pub fn execute_local_call<Output>(&self, call_input: CallInput, context: ExecutionContext) -> Result<Output, StratusError>
     where
         Output: TryFrom<RevmResultAndState, Error = StratusError>,
     {
@@ -281,8 +282,8 @@ impl Executor {
             s.rec_opt("to", &call_input.to);
         });
 
-        let filter = kind.into();
-        let block_info_opt = if matches!(kind, ExecutionKind::AccessList) {
+        let filter = context.into();
+        let block_info_opt = if matches!(context.job, Job::AccessList) {
             Some(self.storage.read_latest_block_info_relaxed())
         } else {
             self.storage.read_block_info(filter)?
@@ -291,11 +292,11 @@ impl Executor {
             return Err(StorageError::BlockNotFound { filter }.into());
         };
 
-        let evm_input = CallExecutionInput::create(call_input, block_info, kind);
+        let evm_input = CallExecutionInput::create(call_input, block_info, context);
 
-        let evm_route = match kind.point_in_time() {
-            PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input),
-            PointInTime::Past(_) => EvmRoute::CallPast(evm_input),
+        let evm_route = match context.at {
+            StateView::Pending | StateView::Latest(_) => EvmRoute::CallPresent(evm_input),
+            StateView::Past(_) => EvmRoute::CallPast(evm_input),
         };
 
         self.evms.execute::<Output>(evm_route).map(|(output, _metrics)| output)

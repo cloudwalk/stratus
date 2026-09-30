@@ -283,7 +283,7 @@ mod tests {
     use crate::eth::follower::importer::importers::replication::ReplicationWorker;
     use crate::eth::miner::Miner;
     use crate::eth::miner::MinerMode;
-    use crate::eth::storage::ExecutionKind;
+    use crate::eth::storage::ExecutionContext;
     use crate::eth::storage::StratusStorage;
     use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
     use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
@@ -388,7 +388,7 @@ mod tests {
         // Block 3 did not change B.balance, so the committed value must equal block 3's pre-state
         // (block 2 = 200). Completing at import time (perm caught up) yields 200; completing at
         // post-process time (perm behind) would yield the stale 100.
-        let (account, _) = storage.read_account(address, ExecutionKind::RPC(PointInTime::Latest)).expect("read account");
+        let (account, _) = storage.read_account(address, ExecutionContext::RPC(PointInTime::Latest)).expect("read account");
         assert_eq!(
             account.balance,
             Wei::from(200u64),

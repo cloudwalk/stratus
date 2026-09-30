@@ -12,7 +12,7 @@ use revm::state::AccountInfo;
 use crate::alias::RevmAddress;
 use crate::alias::RevmBytecode;
 use crate::eth::executor::evm::types::StorageMetrics;
-use crate::eth::storage::ExecutionKind;
+use crate::eth::storage::ExecutionContext;
 use crate::eth::storage::FoundAt;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
@@ -25,8 +25,8 @@ pub struct RevmSession {
     /// Service to communicate with the storage.
     pub storage: Arc<StratusStorage>,
 
-    /// Input passed to EVM to execute the transaction.
-    pub kind: ExecutionKind,
+    /// Execution context that determines how storage reads resolve during EVM execution.
+    pub context: ExecutionContext,
 
     /// Metrics collected during EVM execution.
     pub metrics: StorageMetrics,
@@ -37,14 +37,14 @@ impl RevmSession {
     pub fn new(storage: Arc<StratusStorage>) -> Self {
         Self {
             storage,
-            kind: ExecutionKind::default(),
+            context: ExecutionContext::default(),
             metrics: StorageMetrics::default(),
         }
     }
 
     /// Resets the session to be used with a new transaction.
-    pub fn reset(&mut self, kind: ExecutionKind) {
-        self.kind = kind;
+    pub fn reset(&mut self, context: ExecutionContext) {
+        self.context = context;
         self.metrics = StorageMetrics::default();
     }
 }
@@ -103,7 +103,7 @@ impl RevmSession {
             return Ok((None, FoundAt::Temp));
         }
 
-        let (account, found_at) = self.storage.read_account(address, self.kind)?;
+        let (account, found_at) = self.storage.read_account(address, self.context)?;
         Ok((Some(account.into()), found_at))
     }
 
@@ -117,7 +117,7 @@ impl RevmSession {
         let index: SlotIndex = index.into();
 
         // load slot from storage
-        let (slot, found_at) = self.storage.read_slot(address, index, self.kind)?;
+        let (slot, found_at) = self.storage.read_slot(address, index, self.context)?;
 
         Ok((slot.value.into(), found_at))
     }

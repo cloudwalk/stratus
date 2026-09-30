@@ -7,7 +7,7 @@ use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::ExecutionMetricsContext;
 use crate::eth::executor::evm::types::GAS_MAX_LIMIT;
 use crate::eth::executor::evm::types::GeneralRevm;
-use crate::eth::storage::ExecutionKind;
+use crate::eth::storage::ExecutionContext;
 use crate::eth::types::Address;
 use crate::eth::types::BlockInfo;
 use crate::eth::types::BlockNumber;
@@ -56,11 +56,11 @@ pub struct CallExecutionInput {
     /// Timestamp of the block where the transaction will be or was included.
     pub block_timestamp: UnixTime,
 
-    pub kind: ExecutionKind,
+    pub context: ExecutionContext,
 }
 
 impl CallExecutionInput {
-    pub fn create(input: CallInput, block_info: BlockInfo, kind: ExecutionKind) -> Self {
+    pub fn create(input: CallInput, block_info: BlockInfo, context: ExecutionContext) -> Self {
         Self {
             from: input.from.unwrap_or(Address::ZERO),
             to: input.to.map_into(),
@@ -68,7 +68,7 @@ impl CallExecutionInput {
             data: input.data,
             block_number: block_info.number,
             block_timestamp: *block_info.timestamp,
-            kind,
+            context,
         }
     }
 }
@@ -95,11 +95,11 @@ impl EvmInput for CallExecutionInput {
         evm.tx.gas_priority_fee = None;
     }
 
-    fn kind(&self) -> ExecutionKind {
-        self.kind
+    fn context(&self) -> ExecutionContext {
+        self.context
     }
 
     fn metrics_context(&self) -> ExecutionMetricsContext {
-        ExecutionMetricsContext::new(self.kind, &self.to, &self.data)
+        ExecutionMetricsContext::new(self.context, &self.to, &self.data)
     }
 }
