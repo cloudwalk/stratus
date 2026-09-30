@@ -22,7 +22,6 @@ use crate::eth::executor::EvmKind;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::GeneralRevm;
-use crate::eth::executor::evm::types::GAS_MAX_LIMIT;
 use crate::eth::types::Address;
 use crate::ext::OptionExt;
 
@@ -76,28 +75,28 @@ fn enhance_call_frame_errors(frame: &mut CallFrame) {
 }
 
 pub trait TxEnvExt {
-    fn fill_env(&mut self, input: TransactionExecutionInput);
+    fn fill_env(&mut self, input: TransactionExecutionInput, gas_limit: u64);
 }
 
 pub trait EvmExt {
-    fn fill_env(&mut self, input: TransactionExecutionInput);
+    fn fill_env(&mut self, input: TransactionExecutionInput, gas_limit: u64);
 }
 
 impl<DB: Database, I> EvmExt for GeneralRevm<DB, I> {
-    fn fill_env(&mut self, input: TransactionExecutionInput) {
+    fn fill_env(&mut self, input: TransactionExecutionInput, gas_limit: u64) {
         self.block.fill_env(&input);
-        self.tx.fill_env(input);
+        self.tx.fill_env(input, gas_limit);
     }
 }
 
 impl TxEnvExt for TxEnv {
-    fn fill_env(&mut self, input: TransactionExecutionInput) {
+    fn fill_env(&mut self, input: TransactionExecutionInput, gas_limit: u64) {
         self.caller = input.from.into();
         self.kind = match input.to {
             Some(contract) => TransactTo::Call(contract.into()),
             None => TransactTo::Create,
         };
-        self.gas_limit = GAS_MAX_LIMIT;
+        self.gas_limit = gas_limit;
         self.gas_price = 0;
         self.chain_id = input.chain_id.map_into();
         self.nonce = input.nonce.into();

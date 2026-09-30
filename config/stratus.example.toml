@@ -73,8 +73,14 @@ chain_id = 2008
 # inspector_evms = 50
 # Should reject contract transactions and calls to accounts that are not contracts?
 # reject_not_contract = true
+
+[executor.evm]
 # EVM hardfork spec, e.g. Prague, Cancun, Shanghai.
-# evm_spec = "Prague"
+# spec = "Prague"
+# Maximum gas limit applied when executing a transaction.
+# transaction_max_gas_limit = 100000000
+# Maximum gas limit applied when executing a call (eth_call and eth_estimateGas).
+# call_max_gas_limit = 100000000
 
 [miner]
 # Target block time: `automine`, `external`, or a duration like `1s`.
