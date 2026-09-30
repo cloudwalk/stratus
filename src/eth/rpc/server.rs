@@ -50,7 +50,6 @@ use tracing::info_span;
 
 use crate::GlobalState;
 use crate::NodeMode;
-use crate::alias::AlloyReceipt;
 use crate::alias::JsonValue;
 use crate::config::StratusConfig;
 use crate::eth::codegen;
@@ -82,7 +81,6 @@ use crate::eth::rpc::middleware::decode_input_arguments;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::pagination;
-use crate::eth::rpc::pagination::ResponseFormat;
 use crate::eth::rpc::parser::RpcExtensionsExt;
 use crate::eth::rpc::parser::parse_rpc_rlp;
 use crate::eth::rpc::subscriptions::RpcSubscriptionsHandles;
@@ -980,10 +978,8 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     let (sequence, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
     let pagination = pagination::parse_request(sequence)?;
 
-    let response_format = pagination.as_ref().and_then(|params| params.format).unwrap_or_default();
-
     // track
-    tracing::info!(%filter, %response_format, "reading block and receipts");
+    tracing::info!(%filter, "reading block and receipts");
 
     let Some(block) = ctx.server.storage.read_block(filter)? else {
         tracing::info!(%filter, "block not found");
@@ -992,17 +988,7 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
 
     tracing::info!(%filter, "block with transactions found");
 
-    // serialize in the requested format
-    let value = match response_format {
-        ResponseFormat::Stratus => to_json_value(BlockRocksdb::from(block)),
-        ResponseFormat::Alloy => {
-            let receipts = block.transactions.iter().cloned().map(AlloyReceipt::from).collect::<Vec<_>>();
-            json!({
-                "block": block.to_json_rpc_with_full_transactions(),
-                "receipts": receipts,
-            })
-        }
-    };
+    let value = to_json_value(BlockRocksdb::from(block));
 
     pagination::respond(value, pagination, ctx.server.rpc_config.rpc_max_response_size_bytes)
 }
