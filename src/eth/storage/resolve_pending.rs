@@ -1,12 +1,11 @@
 use stratus_metrics::MetricLabelValue;
 
-use crate::eth::storage::ExecutionKind;
+use crate::eth::storage::StateView;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::types::entity::EntityRead;
 use crate::eth::storage::types::state_lock::LatestStateReadGuard;
 use crate::eth::types::Account;
 use crate::eth::types::BlockNumber;
-use crate::eth::types::PointInTime;
 use crate::eth::types::Slot;
 
 /// Prevents construction of [`MinedPointInTime`] outside this module.
@@ -59,13 +58,13 @@ pub(super) enum Resolved<'a, T> {
 
 /// Pending-state resolution, generic over the entity being read.
 pub(super) trait Resolve: EntityRead {
-    fn resolve(s: &StratusStorage, key: Self::Key, kind: ExecutionKind) -> Resolved<'_, Self> {
-        if kind.point_in_time() == PointInTime::Pending
+    fn resolve(s: &StratusStorage, key: Self::Key, view: StateView) -> Resolved<'_, Self> {
+        if view == StateView::Pending
             && let Some(value) = Self::read_temp(s, key)
         {
             return Resolved::Temp(value);
         }
-        Resolved::Miss(s.resolve_mined_point(kind))
+        Resolved::Miss(s.resolve_mined_point(view))
     }
 }
 
@@ -84,11 +83,11 @@ impl StratusStorage {
     }
 
     /// Determines the mined point-in-time for a read.
-    fn resolve_mined_point(&self, kind: ExecutionKind) -> MinedPointInTime<'_> {
-        match kind {
-            ExecutionKind::RPC(PointInTime::Past(number)) | ExecutionKind::CallPast(number) => MinedPointInTime::past(number),
-            ExecutionKind::CallLatest(block_number) => self.resolve_call_point(block_number),
-            ExecutionKind::Transaction | ExecutionKind::RPC(_) | ExecutionKind::AccessList => MinedPointInTime::latest(None),
+    fn resolve_mined_point(&self, view: StateView) -> MinedPointInTime<'_> {
+        match view {
+            StateView::Past(number) => MinedPointInTime::past(number),
+            StateView::Latest(Some(block_number)) => self.resolve_call_point(block_number),
+            StateView::Pending | StateView::Latest(None) => MinedPointInTime::latest(None),
         }
     }
 }
@@ -98,7 +97,7 @@ mod tests {
     use super::super::StratusStorage;
     use super::Resolve;
     use crate::eth::executor::State;
-    use crate::eth::storage::ExecutionKind;
+    use crate::eth::storage::ExecutionContext;
     use crate::eth::types::Address;
     use crate::eth::types::BlockNumber;
     use crate::eth::types::Slot;
@@ -114,9 +113,9 @@ mod tests {
         // Mined Full call: block_number = 5, mined = 5 → valid (b >= mined).
         let call_block = BlockNumber::from(5u64);
 
-        let kind = ExecutionKind::CallLatest(call_block);
+        let context = ExecutionContext::call(crate::eth::types::StateView::Latest(Some(call_block)));
 
-        let resolved = Slot::resolve(&storage, (address, index), kind);
+        let resolved = Slot::resolve(&storage, (address, index), context.at);
         match resolved {
             super::Resolved::Miss(point) => {
                 assert!(
@@ -134,7 +133,7 @@ mod tests {
         storage.mine_block_with_mock_execution(State::default());
 
         // Stale: b=5 < mined=6. Full → MinedPast(5), NOT MinedPast(4).
-        let resolved = Slot::resolve(&storage, (address, index), kind);
+        let resolved = Slot::resolve(&storage, (address, index), context.at);
         match resolved {
             super::Resolved::Miss(point) => {
                 assert!(!matches!(point, super::MinedPointInTime::Latest(_, _)), "stale call should not read latest");

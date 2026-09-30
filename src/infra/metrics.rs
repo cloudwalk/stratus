@@ -3,25 +3,25 @@ use stratus_metrics::ToMetricLabelValue;
 use stratus_metrics::dec_executor_workers_busy;
 use stratus_metrics::inc_executor_workers_busy;
 
-use crate::eth::executor::EvmKind;
+use crate::eth::executor::Lane;
 
 // -----------------------------------------------------------------------------
-// EvmKind metric labels
+// Lane metric labels
 // -----------------------------------------------------------------------------
 
-impl ToMetricLabelValue for EvmKind {
+impl ToMetricLabelValue for Lane {
     fn to_metric_label_value(&self) -> MetricLabelValue {
         (*self).into()
     }
 }
 
-impl From<EvmKind> for MetricLabelValue {
-    fn from(value: EvmKind) -> Self {
+impl From<Lane> for MetricLabelValue {
+    fn from(value: Lane) -> Self {
         let label = match value {
-            EvmKind::Transaction => "transaction",
-            EvmKind::CallPresent => "call_present",
-            EvmKind::CallPast => "call_past",
-            EvmKind::Inspect => "inspector",
+            Lane::Transaction => "transaction",
+            Lane::CallPresent => "call_present",
+            Lane::CallPast => "call_past",
+            Lane::Inspector => "inspector",
         };
         Self::Some(label.to_owned())
     }
@@ -31,7 +31,7 @@ impl From<EvmKind> for MetricLabelValue {
 // Executor pool busy workers gauge
 // -----------------------------------------------------------------------------
 
-impl EvmKind {
+impl Lane {
     /// Marks a worker in the given executor pool as busy by atomically incrementing the `executor_workers_busy` gauge.
     /// Returns a guard that atomically decrements the gauge when dropped.
     pub fn mark_executor_pool_busy(&self) -> BusyGuard {
@@ -45,7 +45,7 @@ impl EvmKind {
     }
 }
 
-pub struct BusyGuard(EvmKind);
+pub struct BusyGuard(Lane);
 
 impl Drop for BusyGuard {
     fn drop(&mut self) {

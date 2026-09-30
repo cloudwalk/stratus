@@ -7,8 +7,9 @@ use crate::GlobalState;
 use crate::eth::executor::ExecutionMetrics;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::ExecutorError;
+use crate::eth::executor::Job;
 use crate::eth::executor::evm::Evm;
-use crate::eth::executor::evm::EvmKind;
+use crate::eth::executor::evm::Lane;
 use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::executor::evm::types::CallExecutionInput;
 use crate::eth::executor::evm::types::InspectorInput;
@@ -44,9 +45,10 @@ impl EvmWorkerPool {
             storage: Arc<StratusStorage>,
             config: ExecutorConfig,
             task_rx: crossbeam_channel::Receiver<EvmTask<T>>,
-            kind: EvmKind,
+            lane: Lane,
+            job: Job,
         ) {
-            let mut evm = Evm::new(Arc::clone(&storage), &config, kind);
+            let mut evm = Evm::new(Arc::clone(&storage), &config, job);
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
@@ -54,10 +56,10 @@ impl EvmWorkerPool {
                     return;
                 }
 
-                let _guard = kind.mark_executor_pool_busy();
+                let _guard = lane.mark_executor_pool_busy();
                 if let Err(StratusError::Executor(ExecutorError::Panic { err: panic_err })) = task.execute(&mut evm) {
                     tracing::error!(?panic_err, "executor panicked; recreating EVM");
-                    evm = Evm::new(Arc::clone(&storage), &config, kind);
+                    evm = Evm::new(Arc::clone(&storage), &config, job);
                 }
             }
             warn_task_tx_closed(task_name);
@@ -67,7 +69,8 @@ impl EvmWorkerPool {
         fn spawn_evms<T: Task + Send + 'static>(
             task_name: &str,
             num_evms: usize,
-            kind: EvmKind,
+            lane: Lane,
+            job: Job,
             storage: &Arc<StratusStorage>,
             config: &ExecutorConfig,
         ) -> crossbeam_channel::Sender<EvmTask<T>> {
@@ -80,16 +83,16 @@ impl EvmWorkerPool {
                 let evm_rx = evm_rx.clone();
                 let thread_name = evm_task_name.clone();
                 spawn_thread(&thread_name, move || {
-                    worker(&evm_task_name, evm_storage, evm_config, evm_rx, kind);
+                    worker(&evm_task_name, evm_storage, evm_config, evm_rx, lane, job);
                 });
             }
-            metrics::set_executor_workers_busy(0, kind);
+            metrics::set_executor_workers_busy(0, lane);
             evm_tx
         }
 
-        let call_present = spawn_evms("evm-call-present", config.call_present_evms, EvmKind::CallPresent, &storage, config);
-        let call_past = spawn_evms("evm-call-past", config.call_past_evms, EvmKind::CallPast, &storage, config);
-        let inspector = spawn_evms("inspector", config.inspector_evms, EvmKind::Inspect, &storage, config);
+        let call_present = spawn_evms("evm-call-present", config.call_present_evms, Lane::CallPresent, Job::Call, &storage, config);
+        let call_past = spawn_evms("evm-call-past", config.call_past_evms, Lane::CallPast, Job::Call, &storage, config);
+        let inspector = spawn_evms("inspector", config.inspector_evms, Lane::Inspector, Job::Call, &storage, config);
 
         EvmWorkerPool {
             call_present,

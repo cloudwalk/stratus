@@ -24,8 +24,8 @@ use revm_inspectors::tracing::TracingInspector;
 use revm_inspectors::tracing::TracingInspectorConfig;
 use revm_inspectors::tracing::js::JsInspector;
 use session::RevmSession;
-pub use types::EvmKind;
 pub use types::GeneralRevm;
+pub use types::Lane;
 use util::default_trace;
 use util::enhance_trace_with_decoded_errors;
 
@@ -39,10 +39,12 @@ use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm::util::EvmExt;
 use crate::eth::executor::evm::util::create_evm;
 use crate::eth::rpc::BlockFilter;
-use crate::eth::storage::ExecutionKind;
+use crate::eth::storage::ExecutionContext;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
+use crate::eth::types::Job;
 use crate::eth::types::MinedData;
+use crate::eth::types::StateView;
 use crate::eth::types::StratusError;
 
 pub type RevmResultAndState = ExecResultAndState<RevmExecResult>;
@@ -50,21 +52,21 @@ pub type RevmResultAndState = ExecResultAndState<RevmExecResult>;
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Evm<Input: EvmInput> {
     evm: GeneralRevm<RevmSession>,
-    kind: EvmKind,
+    job: Job,
     _input_type: PhantomData<Input>,
 }
 
 impl<Input: EvmInput> Evm<Input> {
     /// Creates a new instance of the Evm.
-    pub fn new(storage: Arc<StratusStorage>, config: &ExecutorConfig, kind: EvmKind) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, config: &ExecutorConfig, job: Job) -> Self {
         tracing::info!(?config, "creating revm");
 
         // configure revm
         let chain_id = config.executor_chain_id;
 
         Self {
-            evm: create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage), kind),
-            kind,
+            evm: create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage), job),
+            job,
             _input_type: PhantomData,
         }
     }
@@ -74,7 +76,7 @@ impl<Input: EvmInput> Evm<Input> {
         let metrics_context = input.metrics_context();
 
         // configure session
-        self.evm.journaled_state.database.reset(input.kind());
+        self.evm.journaled_state.database.reset(input.context());
         input.fill_env(&mut self.evm);
 
         let tx = std::mem::take(&mut self.evm.tx);
@@ -144,12 +146,12 @@ impl Evm<TransactionExecutionInput> {
         };
         let inspect_input: TransactionExecutionInput = tx.input;
         let target = inspect_input.block_number.prev().unwrap_or_default();
-        self.evm.journaled_state.database.reset(ExecutionKind::CallPast(target));
+        self.evm.journaled_state.database.reset(ExecutionContext::call(StateView::Past(target)));
 
         let spec = self.evm.cfg.spec;
 
         let mut cache_db = CacheDB::new(&self.evm.journaled_state.database);
-        let mut evm = create_evm(inspect_input.chain_id.unwrap_or_default().into(), spec, &mut cache_db, self.kind);
+        let mut evm = create_evm(inspect_input.chain_id.unwrap_or_default().into(), spec, &mut cache_db, self.job);
 
         // Execute all transactions before target tx_hash
         for tx in block.transactions.into_iter() {

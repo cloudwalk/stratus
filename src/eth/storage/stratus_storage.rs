@@ -12,8 +12,9 @@ use crate::eth::executor::types::state::Complete;
 use crate::eth::genesis::GenesisConfig;
 use crate::eth::rpc::BlockFilter;
 use crate::eth::rpc::LogFilter;
-use crate::eth::storage::ExecutionKind;
+use crate::eth::storage::ExecutionContext;
 use crate::eth::storage::InMemoryTemporaryStorage;
+use crate::eth::storage::Job;
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StorageCache;
 use crate::eth::storage::StorageError;
@@ -165,9 +166,9 @@ impl StratusStorage {
     }
 
     /// Generic read algorithm shared by [`read_account`] and [`read_slot`].
-    fn read<E: resolve_pending::Resolve>(&self, key: E::Key, kind: ExecutionKind) -> Result<(E, FoundAt), StorageError> {
+    fn read<E: resolve_pending::Resolve>(&self, key: E::Key, context: ExecutionContext) -> Result<(E, FoundAt), StorageError> {
         let (value, found_at) = 'query: {
-            match E::resolve(self, key, kind) {
+            match E::resolve(self, key, context.at) {
                 resolve_pending::Resolved::Temp(value) => break 'query (value, FoundAt::Temp),
                 resolve_pending::Resolved::Miss(mined_point) => {
                     let found_at = match &mined_point {
@@ -199,28 +200,22 @@ impl StratusStorage {
         // This bug exists for any flow that updates the cache without holding the latest-state lock. We could consider
         // adding the latest block State<Final/Complete> to the cache too. Would requiring some locking but if we're smart
         // about it we can make it so this lock is more relaxed than the latest_state_lock.
-        if matches!(
-            (kind, found_at),
-            (
-                ExecutionKind::CallLatest(_) | ExecutionKind::CallPast(_) | ExecutionKind::AccessList,
-                FoundAt::PermLatest
-            )
-        ) {
+        if matches!((context.job, found_at), (Job::Call | Job::AccessList, FoundAt::PermLatest)) {
             E::cache_latest_if_missing(self, key, value.clone());
         }
         Ok((value, found_at))
     }
 
-    pub fn read_account(&self, address: Address, kind: ExecutionKind) -> Result<(Account, FoundAt), StorageError> {
+    pub fn read_account(&self, address: Address, context: ExecutionContext) -> Result<(Account, FoundAt), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_account", %address).entered();
-        self.read::<Account>(address, kind)
+        self.read::<Account>(address, context)
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, kind: ExecutionKind) -> Result<(Slot, FoundAt), StorageError> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, context: ExecutionContext) -> Result<(Slot, FoundAt), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_slot", %address, %index).entered();
-        self.read::<Slot>((address, index), kind)
+        self.read::<Slot>((address, index), context)
     }
 
     // -------------------------------------------------------------------------

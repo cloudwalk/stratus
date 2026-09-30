@@ -7,7 +7,7 @@ use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::ExecutionMetricsContext;
 use crate::eth::executor::evm::types::GAS_MAX_LIMIT;
 use crate::eth::executor::evm::types::GeneralRevm;
-use crate::eth::storage::ExecutionKind;
+use crate::eth::storage::ExecutionContext;
 use crate::eth::types::Address;
 use crate::eth::types::BlockInfo;
 use crate::eth::types::BlockNumber;
@@ -77,7 +77,7 @@ pub struct TransactionExecutionInput {
     /// If not specified, it will not be validated.
     pub chain_id: Option<ChainId>,
 
-    pub kind: ExecutionKind,
+    pub context: ExecutionContext,
 }
 
 impl TransactionExecutionInput {
@@ -94,7 +94,7 @@ impl TransactionExecutionInput {
             block_number: block_info.number,
             block_timestamp: *block_info.timestamp,
             chain_id: input.execution_info.chain_id,
-            kind: ExecutionKind::Transaction,
+            context: ExecutionContext::transaction(),
         }
     }
 }
@@ -127,11 +127,11 @@ impl EvmInput for TransactionExecutionInput {
         evm.tx.gas_priority_fee = None;
     }
 
-    fn kind(&self) -> ExecutionKind {
-        self.kind
+    fn context(&self) -> ExecutionContext {
+        self.context
     }
 
     fn metrics_context(&self) -> ExecutionMetricsContext {
-        ExecutionMetricsContext::new(self.kind, &self.to, &self.data)
+        ExecutionMetricsContext::new(self.context, &self.to, &self.data)
     }
 }

@@ -18,12 +18,12 @@ use revm::handler::instructions::EthInstructions;
 use revm::primitives::hardfork::SpecId;
 
 use crate::eth::codegen;
-use crate::eth::executor::EvmKind;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::GeneralRevm;
 use crate::eth::executor::evm::types::GAS_MAX_LIMIT;
 use crate::eth::types::Address;
+use crate::eth::types::Job;
 use crate::ext::OptionExt;
 
 pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionExecution) -> GethTrace {
@@ -119,18 +119,18 @@ impl BlockEnvExt for BlockEnv {
     }
 }
 
-pub fn create_evm<DB: Database>(chain_id: u64, spec: SpecId, db: DB, kind: EvmKind) -> GeneralRevm<DB> {
+pub fn create_evm<DB: Database>(chain_id: u64, spec: SpecId, db: DB, job: Job) -> GeneralRevm<DB> {
     let ctx = Context::new(db, spec)
         .modify_cfg_chained(|cfg_env| {
             cfg_env.chain_id = chain_id;
             cfg_env.spec = spec;
-            cfg_env.tx_chain_id_check = kind.is_transaction();
+            cfg_env.tx_chain_id_check = job.is_transaction();
             cfg_env.limit_contract_initcode_size = None;
-            cfg_env.disable_nonce_check = kind.is_call();
+            cfg_env.disable_nonce_check = !job.is_transaction();
             cfg_env.max_blobs_per_tx = None;
             cfg_env.tx_gas_limit_cap = None;
             cfg_env.blob_base_fee_update_fraction = None;
-            cfg_env.disable_eip3607 = kind.is_call();
+            cfg_env.disable_eip3607 = !job.is_transaction();
             cfg_env.limit_contract_code_size = Some(usize::MAX);
             cfg_env.memory_limit = (1 << 32) - 1;
             cfg_env.disable_balance_check = false;

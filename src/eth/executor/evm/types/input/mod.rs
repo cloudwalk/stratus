@@ -2,14 +2,14 @@ use revm::Database;
 
 use crate::eth::executor::evm::GeneralRevm;
 use crate::eth::executor::evm::types::ExecutionMetricsContext;
-use crate::eth::types::ExecutionKind;
+use crate::eth::types::ExecutionContext;
 
 pub mod call_execution;
 pub mod inspector;
 pub mod transaction_execution;
 
 pub trait EvmInput: Default + Clone {
-    fn kind(&self) -> ExecutionKind;
+    fn context(&self) -> ExecutionContext;
 
     fn metrics_context(&self) -> ExecutionMetricsContext;
 
