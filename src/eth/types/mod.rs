@@ -60,7 +60,6 @@ mod tests {
     use crate::eth::rpc::LogFilter;
     use crate::eth::rpc::LogFilterInput;
     use crate::eth::rpc::LogFilterInputTopic;
-    use crate::gen_test_json;
     use crate::gen_test_serde;
 
     // TODO: Test internal structs that do no implement faker::Dummy
