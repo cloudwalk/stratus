@@ -379,7 +379,11 @@ mod tests {
             call_past_evms = 2
             inspector_evms = 3
             reject_not_contract = false
-            evm_spec = "Cancun"
+
+            [executor.evm]
+            spec = "Cancun"
+            transaction_max_gas_limit = 100000000
+            call_max_gas_limit = 100000000
 
             [miner]
             block_mode = "1s"
@@ -576,7 +580,11 @@ mod tests {
             call_past_evms = 2
             inspector_evms = 3
             reject_not_contract = false
-            evm_spec = "Cancun"
+
+            [executor.evm]
+            spec = "Cancun"
+            transaction_max_gas_limit = 100000000
+            call_max_gas_limit = 100000000
 
             [miner]
             block_mode = "1s"
@@ -673,7 +681,7 @@ mod tests {
         assert_eq!(config.rpc_server.rpc_address.to_string(), "0.0.0.0:3001");
         assert_eq!(config.rpc_server.rpc_max_response_size_bytes, 20971520);
         assert_eq!(config.executor.executor_chain_id, 100);
-        assert_eq!(config.executor.executor_evm_spec.to_string(), "Cancun");
+        assert_eq!(config.executor.evm.spec.to_string(), "Cancun");
         assert_eq!(config.miner.block_mode, MinerMode::Interval(std::time::Duration::from_secs(1)));
         assert_eq!(config.exporter.async_threads, 2);
         assert_eq!(config.exporter.blocking_threads, 32);
