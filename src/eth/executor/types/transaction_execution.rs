@@ -4,6 +4,7 @@ use alloy_consensus::ReceiptEnvelope;
 use alloy_consensus::ReceiptWithBloom;
 use display_json::DebugAsJson;
 
+use crate::alias::AlloyAddress;
 use crate::alias::AlloyLog;
 use crate::alias::AlloyLogData;
 use crate::alias::AlloyLogPrimitive;
@@ -99,8 +100,13 @@ impl TransactionExecution {
             blob_gas_price: None,
             from: self.input.from.into(),
             to: self.input.to.map_into(),
-            contract_address: self.output.deployed_contract_address.map_into(),
+            contract_address: self.receipt_contract_address(),
         }
+    }
+
+    fn receipt_contract_address(&self) -> Option<AlloyAddress> {
+        let is_successful_deployment = self.input.to.is_none() && self.output.result.is_success();
+        is_successful_deployment.then(|| AlloyAddress::from(self.input.from).create(self.input.nonce.as_u64()))
     }
 }
 
@@ -125,5 +131,51 @@ impl From<TransactionExecution> for AlloyReceipt {
     fn from(value: TransactionExecution) -> Self {
         let alloy_logs = value.create_alloy_logs();
         value.to_alloy_receipt(alloy_logs, None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fake::Fake;
+    use fake::Faker;
+    use hex_literal::hex;
+
+    use super::*;
+    use crate::eth::executor::ExecutionResult;
+    use crate::eth::types::Address;
+    use crate::eth::types::Nonce;
+
+    const SENDER: Address = Address(alloy_primitives::FixedBytes(hex!("6ac7ea33f8831ea9dcc53393aaa88b25a785dbf0")));
+    const SENDER_NONCE_0_CREATE_ADDRESS: AlloyAddress = AlloyAddress::new(hex!("cd234a471b72ba2f1ccf0a70fcaba648a5eecd8d"));
+
+    fn execution(to: Option<Address>, result: ExecutionResult) -> TransactionExecution {
+        let mut execution: TransactionExecution = Faker.fake();
+        execution.input.from = SENDER;
+        execution.input.nonce = Nonce::ZERO;
+        execution.input.to = to;
+        execution.output.result = result;
+        execution.output.deployed_contract_address = Some(Faker.fake());
+        execution
+    }
+
+    #[test]
+    fn test_receipt_contract_address_of_deployment_is_derived_from_sender_and_nonce() {
+        let receipt = AlloyReceipt::from(execution(None, ExecutionResult::Success));
+        assert_eq!(receipt.contract_address, Some(SENDER_NONCE_0_CREATE_ADDRESS));
+    }
+
+    #[test]
+    fn test_receipt_contract_address_of_call_to_factory_is_none() {
+        let receipt = AlloyReceipt::from(execution(Some(Faker.fake()), ExecutionResult::Success));
+        assert_eq!(receipt.contract_address, None);
+    }
+
+    #[test]
+    fn test_receipt_contract_address_of_failed_deployment_is_none() {
+        let reverted = ExecutionResult::Reverted { reason: Faker.fake() };
+        assert_eq!(AlloyReceipt::from(execution(None, reverted)).contract_address, None);
+
+        let halted = ExecutionResult::Halted { reason: Faker.fake() };
+        assert_eq!(AlloyReceipt::from(execution(None, halted)).contract_address, None);
     }
 }
