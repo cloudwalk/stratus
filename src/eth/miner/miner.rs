@@ -273,6 +273,38 @@ impl Miner {
         }
     }
 
+    /// Mines an imported stratus block and its reexecuted transactions.
+    ///
+    /// Local transactions are not allowed to be part of the block.
+    pub fn mine_imported(&self, imported_block: Block) -> anyhow::Result<(Block, State<Complete>)> {
+        // track
+        #[cfg(feature = "tracing")]
+        let _span = info_span!("miner::mine_imported", block_number = field::Empty).entered();
+
+        // lock
+        let _mine_lock = self.locks.mine.lock();
+
+        // mine block
+        let (pending_block, changes) = self.storage.finish_pending_block();
+        let mut block: Block = pending_block.into();
+
+        Span::with(|s| s.rec_str("block_number", &block.header.number));
+        block.apply_imported(&imported_block);
+
+        match block.number() == imported_block.number() && block.header.timestamp == imported_block.header.timestamp && block.hash() == imported_block.hash() {
+            true => Ok((block, changes)),
+            false => Err(anyhow!(
+                "mismatching block info:\n\tlocal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}\n\timported:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}",
+                block.number(),
+                block.header.timestamp,
+                block.hash(),
+                imported_block.number(),
+                imported_block.header.timestamp,
+                imported_block.hash()
+            )),
+        }
+    }
+
     /// Same as [`Self::mine_local`], but automatically commits the block instead of returning it.
     /// mainly used when is_automine is enabled.
     pub fn mine_local_and_commit(&self) -> anyhow::Result<(), StorageError> {

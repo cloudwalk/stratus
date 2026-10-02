@@ -331,7 +331,7 @@ impl TransactionInput {
     }
 
     /// Recovers the signer address from the transaction fields already stored in this input.
-    fn recover_signer_address(&self) -> anyhow::Result<Address> {
+    pub(crate) fn recover_signer_address(&self) -> anyhow::Result<Address> {
         let prehash = self.signature_hash();
         let signature: AlloySignature = self.signature.into();
         let signer = signature
