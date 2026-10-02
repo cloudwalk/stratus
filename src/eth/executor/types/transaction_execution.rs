@@ -105,8 +105,10 @@ impl TransactionExecution {
     }
 
     fn receipt_contract_address(&self) -> Option<AlloyAddress> {
-        let is_successful_deployment = self.input.to.is_none() && self.output.result.is_success();
-        is_successful_deployment.then(|| AlloyAddress::from(self.input.from).create(self.input.nonce.as_u64()))
+        self.input
+            .to
+            .is_none()
+            .then(|| AlloyAddress::from(self.input.from).create(self.input.nonce.as_u64()))
     }
 }
 
@@ -171,11 +173,17 @@ mod tests {
     }
 
     #[test]
-    fn test_receipt_contract_address_of_failed_deployment_is_none() {
+    fn test_receipt_contract_address_of_failed_deployment_is_derived_from_sender_and_nonce() {
         let reverted = ExecutionResult::Reverted { reason: Faker.fake() };
-        assert_eq!(AlloyReceipt::from(execution(None, reverted)).contract_address, None);
+        assert_eq!(
+            AlloyReceipt::from(execution(None, reverted)).contract_address,
+            Some(SENDER_NONCE_0_CREATE_ADDRESS)
+        );
 
         let halted = ExecutionResult::Halted { reason: Faker.fake() };
-        assert_eq!(AlloyReceipt::from(execution(None, halted)).contract_address, None);
+        assert_eq!(
+            AlloyReceipt::from(execution(None, halted)).contract_address,
+            Some(SENDER_NONCE_0_CREATE_ADDRESS)
+        );
     }
 }
