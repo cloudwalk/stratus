@@ -14,6 +14,7 @@ use crate::eth::miner::Miner;
 use crate::eth::miner::miner::interval_miner::commit_retry;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::StratusError;
+use crate::eth::types::TransactionInput;
 
 pub struct FakeLeaderWorker {
     pub executor: Arc<Executor>,
@@ -23,7 +24,7 @@ pub struct FakeLeaderWorker {
 
 impl ImportData for <FakeLeaderWorker as ImporterWorker>::DataType {
     fn block_number(&self) -> crate::eth::types::BlockNumber {
-        self.0.block_number()
+        self.0.number()
     }
 }
 
@@ -31,12 +32,21 @@ impl ImporterWorker for FakeLeaderWorker {
     type DataType = <FakeLeaderFetcher as DataFetcher>::PostProcessType;
 
     #[timed(import_online_mined_block)]
-    async fn import(&self, ((block, _), (expected_block, expected_changes)): Self::DataType) -> anyhow::Result<usize> {
+    async fn import(&self, (mut block, (expected_block, expected_changes)): Self::DataType) -> anyhow::Result<usize> {
         let block_tx_len = block.transactions.len();
-        self.storage.set_pending_from_external(&block);
-        for tx in block.0.transactions.into_transactions() {
+        self.storage.set_pending_header(block.number(), block.timestamp());
+        let transactions = std::mem::take(&mut block.transactions)
+            .into_iter()
+            .map(|tx| -> anyhow::Result<TransactionInput> {
+                let tx_input = tx.execution.transaction_input();
+                tx_input.recover_signer_address()?;
+                Ok(tx_input)
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        for tx in transactions {
             tracing::info!(?tx, "executing tx as fake miner");
-            if let Err(e) = self.executor.execute_local_transaction(tx.try_into()?, None) {
+            if let Err(e) = self.executor.execute_local_transaction(tx, None) {
                 match e {
                     StratusError::Executor(ExecutorError::Nonce { transaction: _, account: _ }) => {
                         tracing::warn!(reason = ?e, "transaction failed, was this node restarted?");

@@ -9,9 +9,7 @@ use crate::eth::follower::importer::importers::ImporterWorker;
 use crate::eth::follower::importer::send_block_to_kafka;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::CommitItem;
-use crate::eth::types::ExternalBlock;
-use crate::eth::types::ExternalReceipt;
-use crate::eth::types::ExternalReceipts;
+use crate::eth::types::Block;
 use crate::infra::kafka::KafkaConnector;
 use crate::log_and_err;
 
@@ -23,31 +21,31 @@ pub struct ReexecutionWorker {
 
 impl ImportData for <ReexecutionWorker as ImporterWorker>::DataType {
     fn block_number(&self) -> crate::eth::types::BlockNumber {
-        self.0.number()
+        self.number()
     }
 }
 
 impl ImporterWorker for ReexecutionWorker {
-    type DataType = (ExternalBlock, Vec<ExternalReceipt>);
+    type DataType = Block;
 
     #[timed(import_online_mined_block)]
-    async fn import(&self, (block, receipts): Self::DataType) -> anyhow::Result<usize> {
+    async fn import(&self, block: Self::DataType) -> anyhow::Result<usize> {
         const TASK_NAME: &str = "block-executor";
 
-        let receipts_len = receipts.len();
+        let receipts_len = block.transactions.len();
 
-        if let Err(e) = self.executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts)) {
-            let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
+        if let Err(e) = self.executor.execute_imported_block(block.clone()) {
+            let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute imported block");
             return log_and_err!(reason = e, message);
         };
 
-        let (mined_block, changes) = match self.miner.mine_external(block) {
+        let (mined_block, changes) = match self.miner.mine_imported(block) {
             Ok((mined_block, changes)) => {
-                tracing::info!(number = %mined_block.number(), "mined external block");
+                tracing::info!(number = %mined_block.number(), "mined imported block");
                 (mined_block, changes)
             }
             Err(e) => {
-                let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
+                let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine imported block");
                 return log_and_err!(reason = e, message);
             }
         };
@@ -56,10 +54,10 @@ impl ImporterWorker for ReexecutionWorker {
 
         match self.miner.commit(CommitItem::Block(mined_block), changes) {
             Ok(_) => {
-                tracing::info!("committed external block");
+                tracing::info!("committed imported block");
             }
             Err(e) => {
-                let message = GlobalState::shutdown_from(TASK_NAME, "failed to commit external block");
+                let message = GlobalState::shutdown_from(TASK_NAME, "failed to commit imported block");
                 return log_and_err!(reason = e, message);
             }
         }

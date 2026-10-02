@@ -35,6 +35,13 @@ import {
     toPaddedHex,
 } from "../helpers/rpc";
 
+// The block DTO serializes hashes as byte arrays; convert them to hex for assertions.
+const bytesToHex = (bytes: number[]) => "0x" + Buffer.from(bytes).toString("hex");
+
+// The block DTO serializes block numbers as byte-order-swapped u32; swap them back for assertions.
+const swapU32 = (value: number) =>
+    ((value & 0xff) << 24) | ((value & 0xff00) << 8) | ((value >>> 8) & 0xff00) | (value >>> 24);
+
 describe("JSON-RPC", () => {
     before(() => {
         expect(currentBlockMode()).eq(BlockMode.External, "Wrong block mining mode is used");
@@ -165,24 +172,18 @@ describe("JSON-RPC", () => {
                 const block = await send("eth_getBlockByNumber", [blockNumber, true]);
                 const blockHash = block.hash;
 
-                // Get individual block and receipt
-                const individualBlock = await send("eth_getBlockByHash", [blockHash, true]);
-                const individualReceipt = await send("eth_getTransactionReceipt", [txHash, true]);
-
                 // Get block and receipts using stratus endpoint
                 const response = await send("stratus_getBlockAndReceipts", [blockHash]);
 
-                // Validate block
-                expect(response.block).to.not.be.null;
-                expect(response.block).to.deep.equal(individualBlock);
-
-                // Validate receipt
-                expect(response.receipts).to.have.length(1);
-                const combinedReceipt = response.receipts[0];
-                const safeIndividualReceipt = individualReceipt!;
-
-                // Compare receipt fields
-                expect(combinedReceipt).to.deep.equal(safeIndividualReceipt);
+                // The response is the stratus block DTO, with receipts embedded in each transaction
+                expect(response.block).to.equal(undefined);
+                expect(response.receipts).to.equal(undefined);
+                expect(bytesToHex(response.header.hash)).to.equal(blockHash);
+                expect(swapU32(response.header.number)).to.equal(parseInt(blockNumber, 16));
+                expect(response.transactions).to.have.length(1);
+                expect(bytesToHex(response.transactions[0].input.hash)).to.equal(txHash);
+                expect(response.transactions[0].execution).to.not.equal(undefined);
+                expect(response.transactions[0].logs).to.be.an("array");
             });
         });
         describe("stratus_getBlockByTimestamp", () => {

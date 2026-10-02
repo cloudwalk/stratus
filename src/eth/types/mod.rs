@@ -1,7 +1,6 @@
 pub mod block;
 mod error;
 pub mod execution_kind;
-pub mod external;
 pub mod primitives;
 pub mod transaction;
 pub use block::Block;
@@ -14,11 +13,6 @@ pub use error::StateError;
 pub use error::StratusError;
 pub use error::UnexpectedError;
 pub use execution_kind::ExecutionKind;
-pub use external::ExternalBlock;
-pub use external::ExternalBlockWithReceipts;
-pub use external::ExternalReceipt;
-pub use external::ExternalReceipts;
-pub use external::ExternalTransaction;
 pub use primitives::Account;
 pub use primitives::Address;
 pub use primitives::BlockNumber;
@@ -66,26 +60,14 @@ mod tests {
     use crate::eth::rpc::LogFilter;
     use crate::eth::rpc::LogFilterInput;
     use crate::eth::rpc::LogFilterInputTopic;
-    use crate::gen_test_json;
     use crate::gen_test_serde;
 
-    // TODO: Test external structs and internal structs that contain external strtucts that do no implement faker::Dummy
+    // TODO: Test internal structs that do no implement faker::Dummy
     // gen_test_serde!(ExecutionConflicts);
     // gen_test_serde!(ExecutionConflictsBuilder);
-    // gen_test_serde!(ExternalBlock);
-    // gen_test_serde!(ExternalReceipt);
-    // gen_test_serde!(ExternalReceipts);
-    // gen_test_serde!(ExternalTransaction);
-    // gen_test_serde!(ExternalTransactionExecution);
     // gen_test_serde!(PendingBlock);
     // gen_test_serde!(TransactionExecution);
     // gen_test_serde!(TransactionStage);
-
-    gen_test_json!(ExternalBlock);
-    gen_test_json!(ExternalBlockWithReceipts);
-    gen_test_json!(ExternalReceipt);
-    gen_test_json!(ExternalReceipts);
-    gen_test_json!(ExternalTransaction);
 
     gen_test_serde!(Account);
     gen_test_serde!(Address);

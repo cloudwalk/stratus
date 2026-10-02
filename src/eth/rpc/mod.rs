@@ -49,10 +49,26 @@ mod tests {
     use super::pagination::is_envelope;
     use super::pagination::parse_envelope;
     use super::pagination::parse_request;
+    use super::pagination::request_params;
     use super::pagination::respond;
     use super::types::RpcError;
     use crate::eth::types::StratusError;
     use crate::ext::InfallibleExt;
+
+    #[test]
+    fn parse_request_decodes_offset() {
+        let params = jsonrpsee::types::Params::new(Some(r#"["0x1", {"offset": 5}]"#));
+        let mut sequence = params.sequence();
+        sequence.optional_next::<String>().expect("parse first").expect("present");
+        let pagination = parse_request(sequence).expect("parse request").expect("present");
+        assert_eq!(pagination.offset, 5);
+    }
+
+    #[test]
+    fn request_params_wire_format() {
+        // the wire parameter is unchanged, so old leaders see the same bytes
+        assert_eq!(request_params(5), json!({"offset": 5}));
+    }
 
     #[test]
     fn respond_without_pagination_is_byte_identical() {
@@ -284,10 +300,11 @@ mod wire_tests {
     use super::types::BlockFilter;
     use crate::alias::JsonValue;
     use crate::eth::follower::importer::BlockchainClient;
+    use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
+    use crate::eth::types::Block;
     use crate::eth::types::BlockNumber;
-    use crate::eth::types::ExternalBlockWithReceipts;
-    use crate::eth::types::ExternalReceipt;
     use crate::eth::types::StratusError;
+    use crate::eth::types::TransactionMined;
     use crate::ext::to_json_value;
     use crate::utils::test_utils::fake_first;
     use crate::utils::test_utils::fake_list;
@@ -295,17 +312,18 @@ mod wire_tests {
     /// Response limit for both leader and follower sides in the tests below.
     const MAX_RESPONSE_BYTES: u32 = 2048;
 
-    /// Builds an importer response well above the response limits.
-    fn big_block_with_receipts() -> ExternalBlockWithReceipts {
-        let mut block = fake_first::<ExternalBlockWithReceipts>();
-        block.receipts = fake_list::<ExternalReceipt>(200);
+    /// Builds an importer block well above the response limits, in the stratus-native format.
+    fn big_block() -> Block {
+        let mut block = fake_first::<Block>();
+        block.header.number = BlockNumber::from(1u32);
+        block.transactions = fake_list::<TransactionMined>(200);
         block
     }
 
     /// Asserts the serialized form of the test value cannot fit in the response limits.
     #[test]
     fn test_value_is_oversized() {
-        let value = to_json_value(big_block_with_receipts());
+        let value = to_json_value(BlockRocksdb::from(big_block()));
         let serialized = serde_json::to_string(&value).expect("serialize");
         assert!(
             serialized.len() > MAX_RESPONSE_BYTES as usize,
@@ -316,8 +334,9 @@ mod wire_tests {
 
     #[tokio::test]
     async fn oversized_importer_response_is_paginated_over_the_wire() {
-        let expected = big_block_with_receipts();
-        let storage = Arc::new(RwLock::new(to_json_value(expected.clone())));
+        let expected_rocks = BlockRocksdb::from(big_block());
+        let expected: Block = expected_rocks.clone().into();
+        let storage = Arc::new(RwLock::new(to_json_value(expected_rocks)));
 
         // leader with a tiny response limit, using the same handler shape as the real one
         let server_config = jsonrpsee::server::ServerConfig::builder().max_response_body_size(MAX_RESPONSE_BYTES).build();
@@ -342,13 +361,17 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        let fetched = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect("fetch block");
-        assert_eq!(fetched.expect("block present"), expected);
+        let fetched_block = client
+            .fetch_block_and_receipts(BlockNumber::from(1))
+            .await
+            .expect("fetch block")
+            .expect("block present");
+        assert_eq!(fetched_block, expected);
     }
 
     #[tokio::test]
     async fn old_leader_without_pagination_still_fails_as_before() {
-        let storage = Arc::new(RwLock::new(to_json_value(big_block_with_receipts())));
+        let storage = Arc::new(RwLock::new(to_json_value(BlockRocksdb::from(big_block()))));
 
         // old leader: ignores the extra pagination parameter, returns the full response
         let server_config = jsonrpsee::server::ServerConfig::builder().max_response_body_size(MAX_RESPONSE_BYTES).build();
@@ -373,6 +396,38 @@ mod wire_tests {
 
         let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
         assert!(error.to_string().contains("failed to fetch block with receipts"));
+    }
+
+    #[tokio::test]
+    async fn legacy_alloy_shape_fails_to_deserialize() {
+        // a leader still answering the pre-cleanup alloy shape now fails fast at deserialization
+        let alloy_response = serde_json::json!({
+            "block": { "number": "0x1" },
+            "receipts": [],
+        });
+        let storage = Arc::new(RwLock::new(alloy_response));
+
+        let server_config = jsonrpsee::server::ServerConfig::builder().max_response_body_size(MAX_RESPONSE_BYTES).build();
+        let server = Server::builder().set_config(server_config).build("127.0.0.1:0").await.expect("build server");
+        let addr = server.local_addr().expect("server addr");
+
+        let mut module = RpcModule::new(Arc::clone(&storage));
+        module
+            .register_method("net_listening", |_, _, _| Ok::<_, StratusError>(true))
+            .expect("register net_listening");
+        module
+            .register_method("stratus_getBlockAndReceipts", |_, storage, _| {
+                let value = storage.read().expect("read storage").clone();
+                Ok(value) as Result<JsonValue, StratusError>
+            })
+            .expect("register stratus_getBlockAndReceipts");
+        let _server_handle = server.start(module);
+
+        let url = format!("http://{addr}");
+        let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
+
+        let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
+        assert!(format!("{error:#}").contains("failed to deserialize importer data"));
     }
 
     #[tokio::test]
@@ -467,5 +522,43 @@ mod wire_tests {
 
         let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
         assert!(format!("{error:?}").contains("expected paginated chunk but got normal response"));
+    }
+
+    #[tokio::test]
+    async fn stratus_native_response_round_trips_through_paginated_fetch() {
+        // a big block in the stratus-native format, above the response limits
+        let expected_rocks = BlockRocksdb::from(big_block());
+        let expected: Block = expected_rocks.clone().into();
+        let storage = Arc::new(RwLock::new(to_json_value(expected_rocks)));
+
+        // leader with a tiny response limit, using the same handler shape as the real stratus branch
+        let server_config = jsonrpsee::server::ServerConfig::builder().max_response_body_size(MAX_RESPONSE_BYTES).build();
+        let server = Server::builder().set_config(server_config).build("127.0.0.1:0").await.expect("build server");
+        let addr = server.local_addr().expect("server addr");
+
+        let mut module = RpcModule::new(Arc::clone(&storage));
+        module
+            .register_method("net_listening", |_, _, _| Ok::<_, StratusError>(true))
+            .expect("register net_listening");
+        module
+            .register_method("stratus_getBlockAndReceipts", |params, storage, _| {
+                let (sequence, _filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+                let pagination = parse_request(sequence)?;
+                let value = storage.read().expect("read storage").clone();
+                respond(value, pagination, MAX_RESPONSE_BYTES)
+            })
+            .expect("register stratus_getBlockAndReceipts");
+        let _server_handle = server.start(module);
+
+        // follower with a tiny response limit, like the importer uses
+        let url = format!("http://{addr}");
+        let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
+
+        let fetched_block = client
+            .fetch_block_and_receipts(BlockNumber::from(1))
+            .await
+            .expect("fetch block")
+            .expect("block present");
+        assert_eq!(fetched_block, expected);
     }
 }

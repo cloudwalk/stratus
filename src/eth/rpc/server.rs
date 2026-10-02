@@ -50,7 +50,6 @@ use tracing::info_span;
 
 use crate::GlobalState;
 use crate::NodeMode;
-use crate::alias::AlloyReceipt;
 use crate::alias::JsonValue;
 use crate::config::StratusConfig;
 use crate::eth::codegen;
@@ -88,6 +87,7 @@ use crate::eth::rpc::subscriptions::RpcSubscriptionsHandles;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
+use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::types::Address;
 use crate::eth::types::Bytes;
 use crate::eth::types::CallInput;
@@ -987,12 +987,8 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     };
 
     tracing::info!(%filter, "block with transactions found");
-    let receipts = block.transactions.iter().cloned().map(AlloyReceipt::from).collect::<Vec<_>>();
 
-    let value = json!({
-        "block": block.to_json_rpc_with_full_transactions(),
-        "receipts": receipts,
-    });
+    let value = to_json_value(BlockRocksdb::from(block));
 
     pagination::respond(value, pagination, ctx.server.rpc_config.rpc_max_response_size_bytes)
 }

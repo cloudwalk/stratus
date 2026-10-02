@@ -77,7 +77,7 @@ pub fn metrics(input: TokenStream) -> TokenStream {
 ///
 /// ```ignore
 /// #[timed(
-///     executor_external_transaction,
+///     executor_imported_transaction,
 ///     labels(
 ///         contract = |input| contract_name(&input.execution_info.to),
 ///         function = |input| function_sig(&input.execution_info.input),

@@ -7,8 +7,6 @@ pub mod types;
 use std::mem;
 use std::sync::Arc;
 
-#[cfg(feature = "metrics")]
-use alloy_consensus::Transaction;
 use alloy_rpc_types_trace::geth::GethDebugTracerType;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
@@ -40,23 +38,21 @@ use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm_worker_pool::EvmWorkerPool;
 use crate::eth::executor::transaction_worker::TransactionWorker;
 use crate::eth::executor::types::EvmRoute;
+use crate::eth::executor::types::state::Complete;
 use crate::eth::miner::Miner;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::Address;
+use crate::eth::types::Block;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::CallInput;
-use crate::eth::types::ExternalBlock;
-use crate::eth::types::ExternalReceipt;
-use crate::eth::types::ExternalReceipts;
-use crate::eth::types::ExternalTransaction;
 use crate::eth::types::Hash;
 use crate::eth::types::PointInTime;
 use crate::eth::types::StratusError;
 use crate::eth::types::TransactionInput;
-#[cfg(feature = "metrics")]
-use crate::ext::OptionExt;
+use crate::eth::types::TransactionMined;
+use crate::eth::types::Wei;
 use crate::ext::to_json_string;
 use crate::infra::tracing::SpanExt;
 use crate::utils::Semaphore;
@@ -97,127 +93,146 @@ impl Executor {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // External transactions
-    // -------------------------------------------------------------------------
-
-    /// Reexecutes an external block locally and imports it to the temporary storage.
-    ///
-    /// Returns the remaining receipts that were not consumed by the execution.
-    #[timed(executor_external_block)]
-    pub fn execute_external_block(&self, mut block: ExternalBlock, mut receipts: ExternalReceipts) -> anyhow::Result<()> {
+    /// Reexecutes an imported stratus block locally and imports it to the temporary storage.
+    #[timed(executor_imported_block)]
+    pub fn execute_imported_block(&self, mut block: Block) -> anyhow::Result<()> {
         #[cfg(feature = "tracing")]
-        let _span = info_span!("executor::external_block", block_number = %block.number()).entered();
-        tracing::info!(block_number = %block.number(), "reexecuting external block");
-
-        self.storage.set_pending_from_external(&block);
+        let _span = info_span!("executor::imported_block", block_number = %block.number()).entered();
+        tracing::info!(block_number = %block.number(), "reexecuting imported block");
 
         // track pending block
+        self.storage.set_pending_header(block.number(), block.timestamp());
         let block_number = block.number();
         let block_transactions = mem::take(&mut block.transactions);
 
         // determine how to execute each transaction
-        for tx in block_transactions.into_transactions() {
-            let receipt = receipts.try_remove(tx.hash())?;
-            self.execute_external_transaction(tx, receipt, block_number)?;
+        for tx in block_transactions {
+            self.execute_imported_transaction(tx, block_number)?;
         }
 
         Ok(())
     }
 
-    /// Reexecutes an external transaction locally ensuring it produces the same output.
-    ///
-    /// This function wraps `reexecute_external_tx_inner` and returns back the payload
-    /// to facilitate re-execution of parallel transactions that failed
-    #[timed(executor_external_transaction, labels(
-        contract = |tx| codegen::contract_name(&tx.0.to().map_into()),
-        function = |tx| codegen::function_sig(tx.inner.input())
+    /// Reexecutes an imported stratus transaction locally ensuring it produces the same output.
+    #[timed(executor_imported_transaction, labels(
+        contract = |tx| codegen::contract_name(&tx.execution.input.to),
+        function = |tx| codegen::function_sig(tx.execution.input.data.as_ref())
         )
     )]
-    fn execute_external_transaction(&self, tx: ExternalTransaction, receipt: ExternalReceipt, block_number: BlockNumber) -> anyhow::Result<()> {
+    fn execute_imported_transaction(&self, tx: TransactionMined, block_number: BlockNumber) -> anyhow::Result<()> {
         #[cfg(feature = "tracing")]
-        let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash()).entered();
-        tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
+        let _span = info_span!("executor::imported_transaction", tx_hash = %tx.execution.info.hash).entered();
+        tracing::info!(%block_number, tx_hash = %tx.execution.info.hash, "reexecuting imported transaction");
 
-        self.transaction_worker.execute_external_transaction(tx, receipt, block_number)
+        self.transaction_worker.execute_imported_transaction(tx, block_number)
     }
 
-    fn execute_external_transaction_inner(
+    fn execute_imported_transaction_inner(
         storage: &StratusStorage,
         miner: &Miner,
         evm: &mut Evm<TransactionExecutionInput>,
-        tx: ExternalTransaction,
-        receipt: ExternalReceipt,
+        tx: TransactionMined,
         block_number: BlockNumber,
     ) -> anyhow::Result<()> {
-        let tx_input: TransactionInput = tx.try_into()?;
-        let pending_header = storage.read_pending_block_header();
-        let mut evm_input = TransactionExecutionInput::create(&tx_input, pending_header);
+        let tx_input = tx.execution.transaction_input();
+        let TransactionExecution {
+            input: stored_input,
+            output: stored_output,
+            ..
+        } = tx.execution;
 
-        // when transaction externally failed, create fake transaction instead of reexecuting
-        let (tx_execution, state) = match receipt.is_success() {
-            // successful external transaction, re-execute locally
-            true => {
-                // re-execute transaction
-                let evm_execution = evm
-                    .execute(evm_input.clone())
-                    .and_then(|(result, metrics)| Ok((TransactionExecutionOutput::try_from(result)?, metrics)));
+        let recovered = tx_input.recover_signer_address()?;
 
-                // handle re-execution result
-                let (mut evm_result, _evm_metrics) = match evm_execution {
-                    Ok((evm_result, evm_metrics)) => (evm_result, evm_metrics),
-                    Err(e) => {
-                        let json_tx = to_json_string(&tx_input);
-                        let json_receipt = to_json_string(&receipt);
-                        tracing::error!(reason = ?e, %block_number, tx_hash = %tx_input.transaction_info.hash, %json_tx, %json_receipt, "failed to reexecute external transaction");
-                        return Err(e.into());
-                    }
-                };
+        let mut evm_input = stored_input;
+        evm_input.from = recovered;
+        let gas_price = Wei::from(evm_input.gas_price);
 
-                // update execution with receipt
-                evm_result.apply_receipt(&receipt)?;
-
-                // ensure it matches receipt before saving
-                if let Err(e) = evm_result.compare_with_receipt(&receipt) {
-                    let json_tx = to_json_string(&tx_input);
-                    let json_receipt = to_json_string(&receipt);
-                    let json_execution_logs = to_json_string(&evm_result.logs);
-                    tracing::error!(reason = ?e, %block_number, tx_hash = %tx_input.transaction_info.hash, %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
-                    return Err(e);
-                };
-
-                (
-                    TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result.outcome),
-                    evm_result.state,
-                )
-            }
-            //
-            // failed external transaction, re-create from receipt without re-executing
-            false => {
-                let (sender, _) = storage.read_account(receipt.from.into(), ExecutionKind::Transaction)?;
-                if tx_input.execution_info.nonce != sender.nonce {
-                    bail!(
-                        "reverted external transaction should have the correct nonce. address: {:?}, input: {:?}, sender: {:?}",
-                        tx_input.signer(),
-                        tx_input.execution_info.nonce,
-                        sender.nonce
-                    );
-                }
-                let evm_result = TransactionExecutionOutput::from_failed_external_transaction(sender, &receipt)?;
-
-                evm_input.gas_limit = tx_input.execution_info.gas_limit;
-                evm_input.gas_price = tx_input.execution_info.gas_price;
-
-                (
-                    TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result.outcome),
-                    evm_result.state,
-                )
-            }
+        let (tx_execution, state) = match stored_output.result.is_success() {
+            // successful imported transaction, re-execute locally
+            true => Self::reexecute_imported_transaction(evm, &tx_input, evm_input, &stored_output, gas_price, recovered, block_number)?,
+            // failed imported transaction, re-create from the stored execution without re-executing
+            false => Self::recreate_failed_imported_transaction(storage, &tx_input, evm_input, &stored_output, gas_price, recovered)?,
         };
 
         // persist state
         miner.save_execution(tx_execution, state)?;
         Ok(())
+    }
+
+    /// Reexecutes a successful imported transaction and validates it against the stored execution.
+    fn reexecute_imported_transaction(
+        evm: &mut Evm<TransactionExecutionInput>,
+        tx_input: &TransactionInput,
+        evm_input: TransactionExecutionInput,
+        stored_output: &TransactionExecutionResult,
+        gas_price: Wei,
+        recovered: Address,
+        block_number: BlockNumber,
+    ) -> anyhow::Result<(TransactionExecution, State<Complete>)> {
+        let tx_hash = tx_input.transaction_info.hash;
+
+        // re-execute transaction
+        let evm_execution = evm
+            .execute(evm_input.clone())
+            .and_then(|(result, metrics)| Ok((TransactionExecutionOutput::try_from(result)?, metrics)));
+
+        // handle re-execution result
+        let (mut evm_result, _evm_metrics) = match evm_execution {
+            Ok((evm_result, evm_metrics)) => (evm_result, evm_metrics),
+            Err(e) => {
+                let json_tx = to_json_string(tx_input);
+                let json_stored = to_json_string(stored_output);
+                tracing::error!(reason = ?e, %block_number, tx_hash = %tx_hash, %json_tx, %json_stored, "failed to reexecute imported transaction");
+                return Err(e.into());
+            }
+        };
+
+        // update execution with the stored execution
+        evm_result.apply_imported(stored_output, gas_price, recovered)?;
+
+        // ensure it matches the stored execution before saving
+        if let Err(e) = evm_result.compare_with_imported(tx_hash, stored_output) {
+            let json_tx = to_json_string(tx_input);
+            let json_stored = to_json_string(stored_output);
+            let json_execution_logs = to_json_string(&evm_result.logs);
+            tracing::error!(reason = ?e, %block_number, tx_hash = %tx_hash, %json_tx, %json_stored, %json_execution_logs, "failed to reexecute imported transaction");
+            return Err(e);
+        };
+
+        Ok((
+            TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result.outcome),
+            evm_result.state,
+        ))
+    }
+
+    /// Re-creates a failed imported transaction from the stored execution without re-executing.
+    fn recreate_failed_imported_transaction(
+        storage: &StratusStorage,
+        tx_input: &TransactionInput,
+        mut evm_input: TransactionExecutionInput,
+        stored_output: &TransactionExecutionResult,
+        gas_price: Wei,
+        recovered: Address,
+    ) -> anyhow::Result<(TransactionExecution, State<Complete>)> {
+        let (sender, _) = storage.read_account(recovered, ExecutionKind::Transaction)?;
+        if tx_input.execution_info.nonce != sender.nonce {
+            bail!(
+                "reverted imported transaction should have the correct nonce. address: {:?}, input: {:?}, sender: {:?}",
+                tx_input.signer(),
+                tx_input.execution_info.nonce,
+                sender.nonce
+            );
+        }
+
+        let evm_result = TransactionExecutionOutput::from_failed_imported_transaction(sender, gas_price, stored_output)?;
+
+        evm_input.gas_limit = tx_input.execution_info.gas_limit;
+        evm_input.gas_price = tx_input.execution_info.gas_price;
+
+        Ok((
+            TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result.outcome),
+            evm_result.state,
+        ))
     }
 
     // -------------------------------------------------------------------------

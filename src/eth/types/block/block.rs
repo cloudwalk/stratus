@@ -11,7 +11,6 @@ use crate::alias::JsonValue;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::types::BlockHeader;
 use crate::eth::types::BlockNumber;
-use crate::eth::types::ExternalBlock;
 use crate::eth::types::Hash;
 use crate::eth::types::Index;
 use crate::eth::types::LogMessage;
@@ -92,12 +91,12 @@ impl Block {
         }
     }
 
-    pub fn apply_external(&mut self, external_block: &ExternalBlock) {
-        self.header.hash = external_block.hash();
-        assert!(*self.header.timestamp == external_block.header.timestamp);
+    pub fn apply_imported(&mut self, imported_block: &Block) {
+        self.header.hash = imported_block.hash();
+        assert!(*self.header.timestamp == *imported_block.header.timestamp);
         for transaction in self.transactions.iter_mut() {
             assert!(transaction.input.block_timestamp == self.header.timestamp);
-            transaction.mined_data.block_hash = external_block.hash();
+            transaction.mined_data.block_hash = imported_block.hash();
         }
     }
 }

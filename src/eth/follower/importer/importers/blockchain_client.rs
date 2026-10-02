@@ -18,7 +18,7 @@ use tokio::sync::RwLockReadGuard;
 
 use crate::GlobalState;
 use crate::alias::AlloyBytes;
-use crate::alias::AlloyTransaction;
+use crate::alias::AlloyHeader;
 use crate::alias::JsonValue;
 use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::ExecutorError;
@@ -26,10 +26,8 @@ use crate::eth::rpc::pagination;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::types::Address;
+use crate::eth::types::Block;
 use crate::eth::types::BlockNumber;
-use crate::eth::types::ExternalBlock;
-use crate::eth::types::ExternalBlockWithReceipts;
-use crate::eth::types::ExternalReceipt;
 use crate::eth::types::Hash;
 use crate::eth::types::StratusError;
 use crate::eth::types::Wei;
@@ -196,7 +194,7 @@ impl BlockchainClient {
         let Some(full) = self.fetch_serialized_response(method, block_number).await? else {
             return Ok(None); // block not available yet
         };
-        let value = serde_json::from_str(full.get()).with_context(|| format!("failed to deserialize importer data from {method}"))?;
+        let value = serde_json::from_str::<T>(full.get()).with_context(|| format!("failed to deserialize importer data from {method}"))?;
         Ok(Some(value))
     }
 
@@ -263,11 +261,13 @@ impl BlockchainClient {
     }
 
     /// Fetches a block by number with receipts.
-    pub async fn fetch_block_and_receipts(&self, block_number: BlockNumber) -> anyhow::Result<Option<ExternalBlockWithReceipts>> {
+    pub async fn fetch_block_and_receipts(&self, block_number: BlockNumber) -> anyhow::Result<Option<Block>> {
         tracing::debug!(%block_number, "fetching block");
 
-        match self.request_importer_data("stratus_getBlockAndReceipts", block_number).await {
-            Ok(block) => Ok(block),
+        const METHOD: &str = "stratus_getBlockAndReceipts";
+
+        match self.request_importer_data::<BlockRocksdb>(METHOD, block_number).await {
+            Ok(block) => Ok(block.map(|block| block.into())),
             Err(e) => log_and_err!(reason = e, "failed to fetch block with receipts"),
         }
     }
@@ -279,48 +279,6 @@ impl BlockchainClient {
         match self.request_importer_data("stratus_getBlockWithChanges", block_number).await {
             Ok(block) => Ok(block),
             Err(e) => log_and_err!(reason = e, "failed to fetch block with changes"),
-        }
-    }
-
-    /// Fetches a block by number.
-    pub async fn fetch_block(&self, block_number: BlockNumber) -> anyhow::Result<Option<ExternalBlock>> {
-        tracing::debug!(%block_number, "fetching block");
-
-        let number = to_json_value(block_number);
-        let result = self
-            .http
-            .request::<Option<ExternalBlock>, _>("eth_getBlockByNumber", [number, JsonValue::Bool(true)])
-            .await;
-
-        match result {
-            Ok(block) => Ok(block),
-            Err(e) => log_and_err!(reason = e, "failed to fetch block by number"),
-        }
-    }
-
-    /// Fetches a transaction by hash.
-    pub async fn fetch_transaction(&self, tx_hash: Hash) -> anyhow::Result<Option<AlloyTransaction>> {
-        tracing::debug!(%tx_hash, "fetching transaction");
-
-        let hash = to_json_value(tx_hash);
-        let result = self.http.request::<Option<AlloyTransaction>, _>("eth_getTransactionByHash", [hash]).await;
-
-        match result {
-            Ok(tx) => Ok(tx),
-            Err(e) => log_and_err!(reason = e, "failed to fetch transaction by hash"),
-        }
-    }
-
-    /// Fetches a receipt by hash.
-    pub async fn fetch_receipt(&self, tx_hash: Hash) -> anyhow::Result<Option<ExternalReceipt>> {
-        tracing::debug!(%tx_hash, "fetching transaction receipt");
-
-        let hash = to_json_value(tx_hash);
-        let result = self.http.request::<Option<ExternalReceipt>, _>("eth_getTransactionReceipt", [hash]).await;
-
-        match result {
-            Ok(receipt) => Ok(receipt),
-            Err(e) => log_and_err!(reason = e, "failed to fetch transaction receipt by hash"),
         }
     }
 
@@ -365,7 +323,7 @@ impl BlockchainClient {
     // RPC subscriptions
     // -------------------------------------------------------------------------
 
-    pub async fn subscribe_new_heads(&self) -> anyhow::Result<Subscription<ExternalBlock>> {
+    pub async fn subscribe_new_heads(&self) -> anyhow::Result<Subscription<AlloyHeader>> {
         const TASK_NAME: &str = "blockchain::subscribe_new_heads";
         tracing::debug!("subscribing to newHeads event");
 
@@ -377,7 +335,7 @@ impl BlockchainClient {
 
             let ws_read = self.require_ws().await?;
             let result = ws_read
-                .subscribe::<ExternalBlock, _>("eth_subscribe", [JsonValue::String("newHeads".to_owned())], "eth_unsubscribe")
+                .subscribe::<AlloyHeader, _>("eth_subscribe", [JsonValue::String("newHeads".to_owned())], "eth_unsubscribe")
                 .await;
 
             match result {
