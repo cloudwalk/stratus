@@ -1,7 +1,9 @@
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 
+use anyhow::bail;
 use anyhow::ensure;
+use serde_json::Value;
 
 use crate::alias::RevmBytecode;
 use crate::eth::executor::types::state::AccountChanges;
@@ -13,8 +15,89 @@ use crate::eth::executor::types::state::Final;
 use crate::eth::executor::types::state::State;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
+use crate::eth::types::Block;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::SlotValue;
+
+/// Reports the first differing header or transaction field while preserving block equality.
+pub(super) fn compare_blocks(actual: &Block, expected: &Block) -> anyhow::Result<()> {
+    if actual.header != expected.header {
+        return report_difference("header", &actual.header, &expected.header);
+    }
+    ensure!(
+        actual.transactions.len() == expected.transactions.len(),
+        "transactions.length mismatch: actual={}, expected={}",
+        actual.transactions.len(),
+        expected.transactions.len()
+    );
+    for (index, (actual, expected)) in actual.transactions.iter().zip(&expected.transactions).enumerate() {
+        if actual != expected {
+            ensure!(
+                actual.execution.input.gas_price == expected.execution.input.gas_price,
+                "transactions[{index}].execution.input.gas_price mismatch: actual={}, expected={}",
+                actual.execution.input.gas_price,
+                expected.execution.input.gas_price
+            );
+            return report_difference(&format!("transactions[{index}]"), actual, expected);
+        }
+    }
+    Ok(())
+}
+
+fn report_difference(path: &str, actual: &impl serde::Serialize, expected: &impl serde::Serialize) -> anyhow::Result<()> {
+    let actual = serde_json::from_str(&serde_json::to_string(actual)?)?;
+    let expected = serde_json::from_str(&serde_json::to_string(expected)?)?;
+    if let Some(difference) = first_difference(path, &actual, &expected) {
+        bail!(difference);
+    }
+    bail!("{path} differs in its internal representation")
+}
+
+fn first_difference(path: &str, actual: &Value, expected: &Value) -> Option<String> {
+    if actual == expected {
+        return None;
+    }
+    match (actual, expected) {
+        (Value::Object(actual), Value::Object(expected)) =>
+            for key in actual.keys().chain(expected.keys()).collect::<BTreeSet<_>>() {
+                let field = format!("{path}.{key}");
+                match (actual.get(key), expected.get(key)) {
+                    (Some(actual), Some(expected)) =>
+                        if let Some(difference) = first_difference(&field, actual, expected) {
+                            return Some(difference);
+                        },
+                    (actual, expected) => {
+                        return Some(format!(
+                            "{field} presence mismatch: actual={}, expected={}",
+                            actual.is_some(),
+                            expected.is_some()
+                        ));
+                    }
+                }
+            },
+        (Value::Array(actual), Value::Array(expected)) => {
+            if actual.len() != expected.len() {
+                return Some(format!("{path}.length mismatch: actual={}, expected={}", actual.len(), expected.len()));
+            }
+            for (index, (actual, expected)) in actual.iter().zip(expected).enumerate() {
+                if let Some(difference) = first_difference(&format!("{path}[{index}]"), actual, expected) {
+                    return Some(difference);
+                }
+            }
+        }
+        _ => return Some(format!("{path} mismatch: actual={}, expected={}", summarize(actual), summarize(expected))),
+    }
+    None
+}
+
+fn summarize(value: &Value) -> String {
+    match value {
+        Value::String(value) => format!("{:?} ({} bytes)", value.chars().take(96).collect::<String>(), value.len()),
+        Value::Array(value) => format!("array ({} elements)", value.len()),
+        Value::Object(value) => format!("object ({} fields)", value.len()),
+        value => value.to_string(),
+    }
+}
 
 /// Shared permanent-state baseline for completion and replay comparison.
 pub(super) struct ReplayPrestate {
@@ -132,4 +215,85 @@ pub(super) fn compare_state_changes(
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use fake::Fake;
+    use fake::Faker;
+    use serde_json::json;
+
+    use super::compare_blocks;
+    use super::first_difference;
+    use crate::eth::types::Block;
+    use crate::eth::types::Gas;
+    use crate::eth::types::Index;
+    use crate::eth::types::TransactionMined;
+
+    #[test]
+    fn accepts_equal_blocks() {
+        let block = Block::genesis();
+        compare_blocks(&block, &block).unwrap();
+    }
+
+    #[test]
+    fn reports_header_field() {
+        let expected = Block::genesis();
+        let mut actual = expected.clone();
+        actual.header.gas_used = Gas::from(42u64);
+        let error = compare_blocks(&actual, &expected).unwrap_err().to_string();
+        assert!(error.contains("header.gas_used"));
+        assert!(error.contains("0x2a"));
+    }
+
+    #[test]
+    fn reports_transaction_count_and_mined_metadata() {
+        let mut expected = Block::genesis();
+        let mut transaction: TransactionMined = Faker.fake();
+        transaction.execution.output.logs.clear();
+        transaction.mined_data.first_log_index = Index::ZERO;
+        expected.transactions.push(transaction);
+        let mut actual = expected.clone();
+        actual.transactions[0].mined_data.first_log_index = Index(5);
+        let error = compare_blocks(&actual, &expected).unwrap_err().to_string();
+        assert!(error.contains("transactions[0].mined_data.first_log_index"), "{error}");
+        actual.transactions.clear();
+        assert!(compare_blocks(&actual, &expected).unwrap_err().to_string().contains("transactions.length"));
+    }
+
+    #[test]
+    fn reports_execution_result_difference() {
+        let mut expected = Block::genesis();
+        let mut transaction: TransactionMined = Faker.fake();
+        transaction.execution.output.gas_used = Gas::from(1u64);
+        expected.transactions.push(transaction);
+        let mut actual = expected.clone();
+        actual.transactions[0].execution.output.gas_used = Gas::from(2u64);
+        let error = compare_blocks(&actual, &expected).unwrap_err().to_string();
+        assert!(error.contains("transactions[0].execution.output.gas_used"), "{error}");
+    }
+
+    #[test]
+    fn reports_large_gas_prices_exactly() {
+        let mut expected = Block::genesis();
+        let mut transaction: TransactionMined = Faker.fake();
+        transaction.execution.input.gas_price = u128::MAX;
+        expected.transactions.push(transaction);
+        let mut actual = expected.clone();
+        actual.transactions[0].execution.input.gas_price -= 1;
+        let error = compare_blocks(&actual, &expected).unwrap_err().to_string();
+        assert!(error.contains("transactions[0].execution.input.gas_price"));
+        assert!(error.contains(&u128::MAX.to_string()));
+        assert!(error.contains(&(u128::MAX - 1).to_string()));
+    }
+
+    #[test]
+    fn bounds_nested_values_and_reports_array_positions() {
+        let actual = json!({"logs": [{"data": "a".repeat(100_000)}]});
+        let expected = json!({"logs": [{"data": "b".repeat(100_000)}]});
+        let difference = first_difference("output", &actual, &expected).unwrap();
+        assert!(difference.starts_with("output.logs[0].data mismatch"));
+        assert!(difference.len() < 400);
+        assert!(difference.contains("100000 bytes"));
+    }
 }
