@@ -16,10 +16,11 @@ use crate::eth::executor::types::state::State;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::Block;
+use crate::eth::types::Index;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::SlotValue;
 
-/// Reports the first differing header or transaction field while preserving block equality.
+/// Compares block fields with canonical first-log indexes for transactions with empty logs.
 pub(super) fn compare_blocks(actual: &Block, expected: &Block) -> anyhow::Result<()> {
     if actual.header != expected.header {
         return report_difference("header", &actual.header, &expected.header);
@@ -31,14 +32,24 @@ pub(super) fn compare_blocks(actual: &Block, expected: &Block) -> anyhow::Result
         expected.transactions.len()
     );
     for (index, (actual, expected)) in actual.transactions.iter().zip(&expected.transactions).enumerate() {
-        if actual != expected {
+        if actual.execution != expected.execution {
             ensure!(
                 actual.execution.input.gas_price == expected.execution.input.gas_price,
                 "transactions[{index}].execution.input.gas_price mismatch: actual={}, expected={}",
                 actual.execution.input.gas_price,
                 expected.execution.input.gas_price
             );
-            return report_difference(&format!("transactions[{index}]"), actual, expected);
+            return report_difference(&format!("transactions[{index}].execution"), &actual.execution, &expected.execution);
+        }
+        let mut actual_mined = actual.mined_data;
+        let mut expected_mined = expected.mined_data;
+        if actual.execution.output.logs.is_empty() && expected.execution.output.logs.is_empty() {
+            // RocksDB reconstructs the first-log index as zero for an empty log list.
+            actual_mined.first_log_index = Index::ZERO;
+            expected_mined.first_log_index = Index::ZERO;
+        }
+        if actual_mined != expected_mined {
+            return report_difference(&format!("transactions[{index}].mined_data"), &actual_mined, &expected_mined);
         }
     }
     Ok(())
@@ -250,7 +261,7 @@ mod tests {
     fn reports_transaction_count_and_mined_metadata() {
         let mut expected = Block::genesis();
         let mut transaction: TransactionMined = Faker.fake();
-        transaction.execution.output.logs.clear();
+        transaction.execution.output.logs = vec![Faker.fake()];
         transaction.mined_data.first_log_index = Index::ZERO;
         expected.transactions.push(transaction);
         let mut actual = expected.clone();
@@ -259,6 +270,42 @@ mod tests {
         assert!(error.contains("transactions[0].mined_data.first_log_index"), "{error}");
         actual.transactions.clear();
         assert!(compare_blocks(&actual, &expected).unwrap_err().to_string().contains("transactions.length"));
+    }
+
+    #[test]
+    fn canonicalizes_empty_log_index_and_preserves_other_fields() {
+        let mut expected = Block::genesis();
+        let mut transaction: TransactionMined = Faker.fake();
+        transaction.execution.output.logs.clear();
+        transaction.mined_data.first_log_index = Index::ZERO;
+        transaction.mined_data.index = Index::ZERO;
+        transaction.execution.output.gas_used = Gas::from(1u64);
+        expected.transactions.push(transaction);
+        let mut actual = expected.clone();
+        actual.transactions[0].mined_data.first_log_index = Index(254);
+        compare_blocks(&actual, &expected).unwrap();
+        compare_blocks(&expected, &actual).unwrap();
+        assert_eq!(actual.transactions[0].mined_data.first_log_index, Index(254));
+        assert_eq!(expected.transactions[0].mined_data.first_log_index, Index::ZERO);
+
+        actual.transactions[0].mined_data.index = Index(1);
+        assert!(compare_blocks(&actual, &expected).unwrap_err().to_string().contains("mined_data.index"));
+        actual.transactions[0].mined_data.index = Index::ZERO;
+        actual.transactions[0].execution.output.gas_used = Gas::from(2u64);
+        assert!(
+            compare_blocks(&actual, &expected)
+                .unwrap_err()
+                .to_string()
+                .contains("execution.output.gas_used")
+        );
+        actual.transactions[0].execution.output.gas_used = Gas::from(1u64);
+        actual.transactions[0].execution.output.logs.push(Faker.fake());
+        assert!(
+            compare_blocks(&actual, &expected)
+                .unwrap_err()
+                .to_string()
+                .contains("execution.output.logs.length")
+        );
     }
 
     #[test]
