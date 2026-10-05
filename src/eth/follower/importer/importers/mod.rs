@@ -13,6 +13,7 @@ use crate::infra::tracing::warn_task_tx_closed;
 pub mod blockchain_client;
 pub mod execution;
 pub mod fake_leader;
+mod fake_leader_comparison;
 pub mod replication;
 
 pub use blockchain_client::BlockchainClient;

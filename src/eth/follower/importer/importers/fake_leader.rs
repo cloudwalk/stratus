@@ -1,6 +1,8 @@
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use anyhow::bail;
+use anyhow::ensure;
 use stratus_metrics::timed;
 
 use crate::GlobalState;
@@ -10,6 +12,9 @@ use crate::eth::follower::importer::fetchers::DataFetcher;
 use crate::eth::follower::importer::fetchers::fake_leader::FakeLeaderFetcher;
 use crate::eth::follower::importer::importers::ImportData;
 use crate::eth::follower::importer::importers::ImporterWorker;
+use crate::eth::follower::importer::importers::fake_leader_comparison::ReplayPrestate;
+use crate::eth::follower::importer::importers::fake_leader_comparison::compare_state_changes;
+use crate::eth::follower::importer::importers::fake_leader_comparison::validate_original_values;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::interval_miner::commit_retry;
 use crate::eth::storage::StratusStorage;
@@ -52,16 +57,35 @@ impl ImporterWorker for FakeLeaderWorker {
 
         let miner_guard = self.miner.locks.mine_and_commit.lock();
         let (mined_block, changes) = self.miner.mine_local();
+        ensure!(
+            mined_block.number().prev() == Some(self.storage.read_mined_block_number()),
+            "fake leader comparison requires the preceding block as permanent state for block {}",
+            mined_block.number()
+        );
 
-        let final_expected_changes = expected_changes.complete(self.storage.as_ref())?.finalize();
+        let addresses = changes
+            .accounts
+            .keys()
+            .chain(expected_changes.accounts.keys())
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let slot_keys = changes.slots.keys().chain(expected_changes.slots.keys()).copied().collect::<BTreeSet<_>>();
+        let prestate = ReplayPrestate {
+            accounts: self.storage.perm.read_accounts(addresses.into_iter().collect())?.into_iter().collect(),
+            slots: self.storage.perm.read_slots(slot_keys.into_iter().collect())?.into_iter().collect(),
+        };
+        let read_account = |address| Ok(prestate.account(address));
+        let read_slot = |address, index| Ok(prestate.slot(address, index));
+        let final_expected_changes = expected_changes.complete(&prestate)?.finalize();
         let final_changes = changes.clone().finalize();
-        if final_changes != final_expected_changes {
-            tracing::error!(?mined_block, "execution changes result mismatch between leader and fake leader");
-            bail!("execution changes mismatch between leader and fake leader")
-        }
+        validate_original_values(&changes, &read_account, &read_slot)
+            .and_then(|()| compare_state_changes(&final_changes, &final_expected_changes, read_account, read_slot))
+            .inspect_err(|error| {
+                tracing::error!(block_number = %mined_block.number(), reason = %error, "execution changes result mismatch between leader and fake leader");
+            })?;
 
         if mined_block != expected_block {
-            tracing::error!(?mined_block, ?expected_block, "block mismatch between leader and fake leader");
+            tracing::error!(block_number = %mined_block.number(), block_hash = %mined_block.hash(), expected_hash = %expected_block.hash(), "block mismatch between leader and fake leader");
             bail!("block mismatch between leader and fake leader")
         }
 
