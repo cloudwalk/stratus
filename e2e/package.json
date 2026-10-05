@@ -4,7 +4,7 @@
         "@nomicfoundation/hardhat-toolbox": "4.0.0",
         "@openzeppelin/hardhat-upgrades": "3.9.1",
         "@trivago/prettier-plugin-sort-imports": "4.3.0",
-        "axios": "1.15.2",
+        "axios": "1.20.0",
         "ethers": "6.15.0",
         "hardhat": "2.26.3",
         "prettier": "3.6.2",
