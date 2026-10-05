@@ -275,7 +275,11 @@ e2e-stratus block-mode="automine" test="":
     fi
 
     just _log "Starting Stratus"
-    just stratus-test -a 0.0.0.0:3000 --block-mode {{block-mode}}
+    if [[ {{block-mode}} =~ ^[0-9]+(ms|s)$ ]]; then
+        just stratus-test -a 0.0.0.0:3000 --block-mode {{block-mode}} --executor-transaction-max-gas-limit 1000000000 --executor-call-max-gas-limit 1000000000
+    else
+        just stratus-test -a 0.0.0.0:3000 --block-mode {{block-mode}}
+    fi
 
     just _log "Running E2E tests"
     if [[ {{block-mode}} =~ ^[0-9]+(ms|s)$ ]]; then
