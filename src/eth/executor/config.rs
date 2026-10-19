@@ -38,9 +38,27 @@ pub struct ExecutorConfig {
     #[serde(rename = "reject_not_contract")]
     pub executor_reject_not_contract: bool,
 
-    #[arg(id = "executor.evm_spec", long = "executor-evm-spec", default_value = "Prague", value_parser = parse_evm_spec)]
-    #[serde(rename = "evm_spec", with = "spec_id_serde")]
-    pub executor_evm_spec: SpecId,
+    #[clap(flatten)]
+    pub evm: EvmConfig,
+}
+
+#[derive(Parser, DebugAsJson, Clone, Copy, serde::Serialize)]
+pub struct EvmConfig {
+    #[arg(id = "executor.evm.spec", long = "executor-evm-spec", default_value = "Prague", value_parser = parse_spec)]
+    #[serde(with = "spec_id_serde")]
+    pub spec: SpecId,
+
+    /// Maximum gas limit applied when executing a transaction.
+    #[arg(
+        id = "executor.evm.transaction_max_gas_limit",
+        long = "executor-transaction-max-gas-limit",
+        default_value = "100000000"
+    )]
+    pub transaction_max_gas_limit: u64,
+
+    /// Maximum gas limit applied when executing a call (eth_call and eth_estimateGas).
+    #[arg(id = "executor.evm.call_max_gas_limit", long = "executor-call-max-gas-limit", default_value = "100000000")]
+    pub call_max_gas_limit: u64,
 }
 
 #[cfg(test)]
@@ -52,7 +70,11 @@ impl Default for ExecutorConfig {
             call_past_evms: 50,
             inspector_evms: 50,
             executor_reject_not_contract: true,
-            executor_evm_spec: SpecId::PRAGUE,
+            evm: EvmConfig {
+                spec: SpecId::PRAGUE,
+                transaction_max_gas_limit: 100_000_000,
+                call_max_gas_limit: 100_000_000,
+            },
         }
     }
 }
@@ -76,7 +98,7 @@ fn parse_chain_id(input: &str) -> anyhow::Result<u64> {
     Ok(chain_id)
 }
 
-fn parse_evm_spec(input: &str) -> anyhow::Result<SpecId> {
+fn parse_spec(input: &str) -> anyhow::Result<SpecId> {
     SpecId::from_str(input).map_err(|err| anyhow::anyhow!("unknown hard fork: {err:?}"))
 }
 

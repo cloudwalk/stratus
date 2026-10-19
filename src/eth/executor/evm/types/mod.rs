@@ -25,12 +25,6 @@ pub use output::call_execution::CallExecutionOutput;
 pub use output::transaction_execution::TransactionExecutionOutput;
 pub use output::transaction_execution::TransactionExecutionResult;
 
-/// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
-#[cfg(feature = "dev")]
-pub const GAS_MAX_LIMIT: u64 = 1_000_000_000;
-#[cfg(not(feature = "dev"))]
-pub const GAS_MAX_LIMIT: u64 = 100_000_000;
-
 pub type ContextWithDB<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB, Journal<DB>>;
 pub type GeneralRevm<DB, I = ()> = RevmEvm<ContextWithDB<DB>, I, EthInstructions<EthInterpreter, ContextWithDB<DB>>, EthPrecompiles, EthFrame>;
 

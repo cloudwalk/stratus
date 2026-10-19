@@ -5,7 +5,6 @@ use revm::context::TransactTo;
 
 use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::ExecutionMetricsContext;
-use crate::eth::executor::evm::types::GAS_MAX_LIMIT;
 use crate::eth::executor::evm::types::GeneralRevm;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::types::Address;
@@ -80,13 +79,13 @@ impl EvmInput for CallExecutionInput {
         evm.block.basefee = 0;
     }
 
-    fn fill_tx_env<DB: Database, I>(self, evm: &mut GeneralRevm<DB, I>) {
+    fn fill_tx_env<DB: Database, I>(self, evm: &mut GeneralRevm<DB, I>, gas_limit: u64) {
         evm.tx.caller = self.from.into();
         evm.tx.kind = match self.to {
             Some(contract) => TransactTo::Call(contract.into()),
             None => TransactTo::Create,
         };
-        evm.tx.gas_limit = GAS_MAX_LIMIT;
+        evm.tx.gas_limit = gas_limit;
         evm.tx.gas_price = 0;
         evm.tx.chain_id = None;
         evm.tx.nonce = 0;
