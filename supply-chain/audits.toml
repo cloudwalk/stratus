@@ -661,6 +661,12 @@ criteria = "safe-to-deploy"
 delta = "0.2.34 -> 0.2.35"
 notes = "Bumps arrayvec crate from 0.5.1 to 0.7.0 and includes the required changes."
 
+[[audits.const_format]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "0.2.35 -> 0.2.36"
+notes = "Bumps MSRV to 1.71 and replaces the union-transmute prefix-slice helpers in utils.rs and char_encoding.rs with const slice::split_at. as_str/as_bytes become const fns unconditionally, the str_split/str_split_pat macros export unconditionally (rust_1_64 always on), and konst 0.2 becomes a regular dependency. const_format_proc_macros stays pinned at =0.2.34."
+
 [[audits.cow-utils]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
@@ -757,6 +763,12 @@ criteria = "safe-to-deploy"
 delta = "1.13.0 -> 2.6.1"
 notes = "1.13.0 to 2.6.1 diff touches only four pure-Rust async-combinator source files (future/io/lib/stream). No unsafe, FFI, transmute, pointers, build.rs (explicitly build=false), process/net/fs/env access, or network/IPC/telemetry. Changes are additive combinators (map_while, drain, stop_after_future, fuse), Unpin-bound relaxations, edition/MSRV bumps, and dropping waker-fn from runtime deps. No attac"
 
+[[audits.glob]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "0.3.3 -> 0.3.4"
+notes = "Caches each directory entry's file name as an OsString alongside the PathWrapper during traversal, avoiding re-extraction in the sort/retain hot path (PR #181). GlobError::into_error is deprecated in favor of a From<GlobError> for io::Error impl (PR #179). Crate moves to edition 2021; matching semantics and MSRV 1.63 are unchanged."
+
 [[audits.hex-literal]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -849,6 +861,18 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "0.1.4 -> 0.1.8"
 notes = "Diff adds one constrained unsafe block in src/macros.rs digest() specialization reusing existing state.update/finalize APIs (same pattern as finalize_into at line 62): ptr+len derived from a live &[u8], MaybeUninit buffer written by finalize before assume_init, cited rust-lang#146056. No new FFI, transmute, asm, build.rs, fs/env/net/process, or telemetry; Cargo.toml only adds oid feature and bumps"
+
+[[audits.konst]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+version = "0.2.20"
+notes = "New no_std const-equivalents crate by the const_format author, now a regular dependency of const_format 0.2.36. The code paths reached from const_format's str_split macro are konst::slice::bytes_find/bytes_find_skip and konst::string::str_up_to/str_from — safe byte-search loops; the raw-slice and &str constructors guard with overflowing_sub bounds checks and is_char_boundary validation before from_utf8_unchecked."
+
+[[audits.konst_macro_rules]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+version = "0.2.19"
+notes = "macro_rules-only helper crate pulled in by konst 0.2.20 (resolved features rust_1_51..rust_1_64). Its union-based transmuters (PtrToRef, Transmuter, from_utf8_macro) mirror the const-eval workarounds used by konst and const_format, producing &str only through a complete UTF-8 validator; konst reaches them via the rust_1_55 function-form path."
 
 [[audits.log]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
@@ -1015,6 +1039,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 version = "3.0.1"
 notes = "Proc-macro error-reporting helper (compile-time only). Forbids unsafe_code crate-wide; no build.rs, FFI, transmute, raw pointers, env, network, or fs access. Deps limited to proc-macro2/quote/syn/proc-macro-error-attr3. No ambient capability surface."
+
+[[audits.proc-macro2]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "1.0.106 -> 1.0.107"
+notes = "Clippy-driven refactors between 1.0.106 and 1.0.107: map_or(false,..) becomes is_some_and in float_digits, a redundant else after a panicking branch is removed from invalidate_current_thread_spans, doc links update to syn 3, and the declared MSRV moves 1.68 -> 1.71 (stratus toolchain is 1.86). Versions up to 1.0.106 were already certified through existing project and imported audits."
 
 [[audits.prost]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -1432,6 +1462,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
 criteria = "safe-to-deploy"
 delta = "1.15.1 -> 1.16.1"
 notes = "Reviewed 1.15.1 -> 1.16.1 via cargo vet diff --mode local. src/ changes are a rustfmt pass (import grouping, brace style) plus one fix in the Drain iterator: needs_move now computes mem::size_of::<T::Item>() instead of the iterator type's size. Benches, tests, and debug metadata were dropped from the published crate along with their dev-dependencies; Cargo.toml gains an include list. Unsafe surface (MaybeUninit inline buffer in SmallVecData) is unchanged from the audited base."
+
+[[audits.smallvec]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "1.16.1 -> 1.16.2"
+notes = "Two upstream soundness fixes: SmallVec gains a PhantomData<A::Item> marker so dropck tracks element ownership when may_dangle is active (PR #594), and retain is rewritten around a PanicGuard that keeps the vector consistent when the predicate or an element Drop panics — unprocessed tail preserved, length corrected, double-drop eliminated (PR #596). Both carry new compile-fail and panic-path tests upstream."
 
 [[audits.syn]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
