@@ -52,7 +52,13 @@ pub struct TransactionExecutionResult {
     /// Consumed gas.
     pub gas_used: Gas,
 
-    /// The contract address if the executed transaction deploys a contract.
+    /// Address of some contract created during the execution, if any.
+    ///
+    /// It is NOT the contract deployed by the transaction: when the transaction creates more than one contract
+    /// (a constructor or a factory deploying others), it is an arbitrary one of them, and it is also set for calls (`to` set)
+    /// that deploy through a factory. Treat it as a flag telling whether the transaction created contracts.
+    ///
+    /// The receipt `contractAddress` is derived from the transaction sender and nonce instead.
     pub deployed_contract_address: Option<Address>,
 }
 
@@ -99,15 +105,6 @@ impl TransactionExecutionOutput {
     /// Checks if the current transaction was completed with a failure (reverted or halted).
     pub fn is_failure(&self) -> bool {
         not(self.is_success())
-    }
-
-    /// Returns the address of the deployed contract if the transaction is a deployment.
-    pub fn contract_address(&self) -> Option<Address> {
-        if let Some(contract_address) = &self.deployed_contract_address {
-            return Some(contract_address.to_owned());
-        }
-
-        None
     }
 
     /// Checks if current execution state matches the information present in the external receipt.
