@@ -63,6 +63,17 @@ impl From<TransactionDecodeError> for alloy_rlp::Error {
     }
 }
 
+/// Describes the allowed block range for the `BlockRangeInvalid` message.
+///
+/// A range can be rejected without a known maximum (e.g. `toBlock` before `fromBlock`), and the
+/// client should not see `Some(..)` or `None` in the error it receives.
+fn block_range_limits(max: &Option<u64>) -> String {
+    match max {
+        Some(max) => format!("the max allowed is {max} and min allowed is 1"),
+        None => "the min allowed is 1".to_owned(),
+    }
+}
+
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
 #[major_error_code = 1000]
 pub enum RpcError {
@@ -70,7 +81,7 @@ pub enum RpcError {
     #[error_code = 1]
     BlockFilterInvalid { filter: BlockFilter },
 
-    #[error("denied because will fetch data from {actual} blocks, but the max allowed is {max:?} and min allowed is 1.")]
+    #[error("denied because will fetch data from {actual} blocks, but {}.", block_range_limits(.max))]
     #[error_code = 2]
     BlockRangeInvalid { actual: i128, max: Option<u64> },
 
@@ -124,4 +135,24 @@ pub enum MulticallError {
     #[error("unsupported multicall function")]
     #[error_code = 2]
     UnsupportedMulticallFunction,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn block_range_invalid_message_shows_the_max_as_a_number() {
+        let error = RpcError::BlockRangeInvalid { actual: 6000, max: Some(5000) };
+        assert_eq!(
+            error.to_string(),
+            "denied because will fetch data from 6000 blocks, but the max allowed is 5000 and min allowed is 1."
+        );
+    }
+
+    #[test]
+    fn block_range_invalid_message_omits_an_unknown_max() {
+        let error = RpcError::BlockRangeInvalid { actual: -5, max: None };
+        assert_eq!(error.to_string(), "denied because will fetch data from -5 blocks, but the min allowed is 1.");
+    }
 }
