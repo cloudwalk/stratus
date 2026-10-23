@@ -17,6 +17,7 @@ use crate::eth::follower::importer::ImporterRuntimeConfig;
 use crate::eth::follower::importer::supervisor::ImporterConsensus;
 use crate::eth::miner::Miner;
 use crate::eth::rpc::RpcContext;
+use crate::eth::rpc::pagination::ResponseFormat;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::StateError;
@@ -79,6 +80,10 @@ pub struct ImporterConfig {
     /// Specify the block to stop importing. (useful for validating a follower db against a fake leader)
     #[arg(id = "importer.stop_at_block", long = "stop-at-block")]
     pub stop_at_block: Option<BlockNumber>,
+
+    /// Response format used by the block-and-receipts importer RPC (importer online).
+    #[arg(id = "importer.response_format", long = "response-format", default_value = "alloy")]
+    pub response_format: ResponseFormat,
 }
 
 impl ImporterConfig {
@@ -139,6 +144,7 @@ impl ImporterConfig {
         let importer_runtime = ImporterRuntime::start(ImporterRuntimeConfig {
             async_threads: self.async_threads,
             importer_mode,
+            response_format: self.response_format,
             external_rpc: external_rpc.to_string(),
             external_rpc_ws: self.external_rpc_ws.clone(),
             external_rpc_timeout: self.external_rpc_timeout,

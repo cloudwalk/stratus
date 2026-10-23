@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use anyhow::bail;
 pub use config::ImporterConfig;
+pub use fetchers::block_with_receipts::FetchedBlockWithReceipts;
 pub use importers::BlockchainClient;
 pub use runtime::ImporterRuntime;
 pub use runtime::ImporterRuntimeConfig;

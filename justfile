@@ -318,7 +318,7 @@ e2e-leader *extra-args="":
     unset ENABLE_BLOCK_CHANGES_REPLICATION
     RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s --rocks-path-prefix=temp_3000 {{extra-args}}
 
-e2e-follower test="brlc" use_block_changes_replication="false":
+e2e-follower test="brlc" use_block_changes_replication="false" *extra-args="":
     #!/bin/bash
     # the binary reads the replication mode from the CLI flag;
     # `_e2e-leader-follower-up-impl` still exports ENABLE_BLOCK_CHANGES_REPLICATION for the mocha tests
@@ -339,7 +339,7 @@ e2e-follower test="brlc" use_block_changes_replication="false":
         fi
         RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 $replication_flag --kafka-bootstrap-servers {{kafka_bootstrap_servers}} --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
     else
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 $replication_flag
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 $replication_flag {{extra-args}}
     fi
 
 
@@ -422,6 +422,26 @@ e2e-leader-follower-pagination:
     cd e2e
     if [ ! -d node_modules ]; then npm install; fi
     npx hardhat test test/follower/e2e-pagination.test.ts --network stratus --bail
+    exit_code=$?
+    cd ..
+
+    just e2e-leader-follower-down
+    exit $exit_code
+
+# E2E: Leader & Follower pagination, with the follower importing the stratus-native response format
+# (stratus_getBlockAndReceipts with `format: "stratus"`)
+e2e-leader-follower-pagination-stratus:
+    #!/bin/bash
+
+    # leader with a small response limit, forcing oversized importer responses to be paginated
+    just e2e-leader --max-response-size-bytes 8192
+
+    # follower importing through the stratus-native response format
+    just e2e-follower test/follower/e2e-pagination-stratus.test.ts false --response-format stratus
+
+    cd e2e
+    if [ ! -d node_modules ]; then npm install; fi
+    npx hardhat test test/follower/e2e-pagination-stratus.test.ts --network stratus --bail
     exit_code=$?
     cd ..
 

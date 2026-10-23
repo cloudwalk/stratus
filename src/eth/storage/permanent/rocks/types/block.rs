@@ -80,3 +80,63 @@ impl From<BlockRocksdb> for Block {
 }
 
 impl SerializeDeserializeWithContext for BlockRocksdb {}
+
+#[cfg(test)]
+mod tests {
+    use super::BlockRocksdb;
+    use crate::eth::types::Block;
+    use crate::eth::types::BlockNumber;
+    use crate::eth::types::Index;
+    use crate::eth::types::Log;
+    use crate::eth::types::TransactionMined;
+    use crate::ext::to_json_value;
+    use crate::utils::test_utils::fake_first;
+    use crate::utils::test_utils::fake_list;
+
+    /// Builds a block with a small number and transactions that have logs and small log indexes,
+    /// like a leader mines. Small values are required because the storage DTO narrows the block
+    /// number to `u32` and log indexes are derived from the log list.
+    fn sample_block() -> Block {
+        let mut block = fake_first::<Block>();
+        block.header.number = BlockNumber::from(1u32);
+        block.transactions = fake_list::<TransactionMined>(3);
+        // give every transaction exactly two logs at a small, stable first log index, like the
+        // leader does, so mined data round-trips without depending on random fixture values
+        for (transaction_index, transaction) in block.transactions.iter_mut().enumerate() {
+            let transaction_index = (transaction_index as u64) * 2;
+            let first_log_index = Index::from(transaction_index * 10);
+            transaction.mined_data.index = Index::from(transaction_index);
+            transaction.mined_data.first_log_index = first_log_index;
+            let log = fake_first::<Log>();
+            transaction.execution.output.logs = vec![log.clone(), log];
+        }
+        block
+    }
+
+    /// The stratus response format serializes a block through the storage DTO and JSON, exactly
+    /// like the leader serializes it and the follower deserializes it in `stratus_getBlockAndReceipts`.
+    #[test]
+    fn block_rocksdb_json_round_trip_is_lossless() {
+        let original = sample_block();
+
+        // first hop: the same serialization the leader performs in the RPC handler
+        let json = to_json_value(BlockRocksdb::from(original.clone()));
+        let first: Block = serde_json::from_value::<BlockRocksdb>(json).expect("deserialize from json").into();
+
+        // second hop must be a fixed point: nothing is canonicalized further
+        let second: Block = BlockRocksdb::from(first.clone()).into();
+        assert_eq!(first, second);
+
+        // the header is copied directly, field by field
+        assert_eq!(first.header, original.header);
+
+        // mined data is rebuilt from the DTO fields, preserving the leader invariants
+        for (original_transaction, rebuilt_transaction) in original.transactions.iter().zip(first.transactions.iter()) {
+            assert_eq!(rebuilt_transaction.mined_data.index, original_transaction.mined_data.index);
+            assert_eq!(rebuilt_transaction.mined_data.first_log_index, original_transaction.mined_data.first_log_index);
+            // the block hash is rebuilt from the header the block was read with, not the stale
+            // fixture value, mirroring what the leader guarantees in real blocks
+            assert_eq!(rebuilt_transaction.mined_data.block_hash, original.header.hash);
+        }
+    }
+}
