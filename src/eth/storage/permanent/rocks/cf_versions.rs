@@ -130,7 +130,7 @@ mod cf_names {
 ///
 /// 1. New variants need to be tested, go to the test below and cover it, but watch out for:
 ///   - You'll need an ENV VAR to create the new snapshot file.
-///   - When commiting the change, make sure you're just adding your new snapshot, and not editing others by accident.
+///   - When committing the change, make sure you're just adding your new snapshot, and not editing others by accident.
 /// 2. For renamed variants, because we use bincode, you just need to update the snapshot file.
 ///   - Rename it locally.
 /// 3. Previous variants can't be removed as they break our database, because they won't be able to read the older data.
