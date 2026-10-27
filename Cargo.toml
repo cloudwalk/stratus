@@ -108,7 +108,7 @@ bytes = "=1.11.1"
 # observability
 log = "=0.4.29"
 opentelemetry = "=0.32.0"
-opentelemetry_sdk = { version = "=0.32.1", features = ["rt-tokio"] }
+opentelemetry_sdk = { version = "=0.33.1", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "=0.32.0", features = [
     "http-proto",
     "http-json",
