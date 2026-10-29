@@ -3,6 +3,7 @@ use std::sync::Arc;
 use stratus_metrics::timed;
 use strum::AsRefStr;
 
+use crate::alias::AlloyReceipt;
 use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::Executor;
 use crate::eth::follower::importer::BlockchainClient;
@@ -81,9 +82,16 @@ pub trait Consensus: Send + Sync {
     /// The current machine name is sent as the `x-client` header by `BlockchainClient`, so the leader
     /// attributes the transaction to this node automatically.
     #[timed(consensus_forward)]
-    async fn forward_to_leader(&self, tx_hash: Hash, tx_data: Bytes, access_list: Option<AccessListOutput>) -> Result<Hash, StratusError> {
+    async fn forward(&self, tx_hash: Hash, tx_data: Bytes, access_list: Option<AccessListOutput>) -> Result<Hash, StratusError> {
         tracing::info!(%tx_hash, "forwarding transaction to leader");
         self.get_client().send_raw_transaction_to_leader(tx_data.into(), access_list).await
+    }
+
+    /// Sends a prepared transaction to the leader and returns its execution receipt.
+    #[timed(forward_and_get_receipt)]
+    async fn forward_and_get_receipt(&self, tx_hash: Hash, tx_data: Bytes, access_list: Option<AccessListOutput>) -> Result<AlloyReceipt, StratusError> {
+        tracing::info!(%tx_hash, "forwarding transaction to leader for execution receipt");
+        self.get_client().send_raw_transaction_and_get_receipt(tx_data.into(), access_list).await
     }
 
     fn get_client(&self) -> &Arc<BlockchainClient>;

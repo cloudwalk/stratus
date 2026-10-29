@@ -382,9 +382,7 @@ impl StratusStorage {
             }
         };
 
-        self.temp
-            .read_pending_execution(tx_hash)
-            .map_or_else(read_perm, |tx| Ok(Some(TransactionStage::Pending(tx))))
+        self.temp.read_transaction(tx_hash).map_or_else(read_perm, |tx| Ok(Some(tx)))
     }
 
     pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMessage>, StorageError> {

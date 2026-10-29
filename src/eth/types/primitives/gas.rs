@@ -24,7 +24,7 @@ use crate::ext::RuintExt;
     alloy_rlp::RlpEncodableWrapper,
 )]
 #[serde(transparent)]
-#[cfg_attr(test, derive(serde::Deserialize))]
+#[derive(serde::Deserialize)]
 pub struct Gas(U64);
 
 impl Gas {

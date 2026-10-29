@@ -258,8 +258,7 @@ impl Executor {
             self.storage.load_access_list(access_list);
         }
 
-        // The transaction worker serializes execution and persistence so that the next transaction
-        // cannot execute against state that the previous transaction has not saved yet.
+        // The transaction worker serializes execution and persistence.
         self.transaction_worker.execute_local_transaction(tx).map(|_| ())
     }
 
@@ -309,6 +308,7 @@ impl Executor {
             .map_or("missing", GethDebugTracerType::as_str)
         )
     )]
+
     pub fn trace_transaction(&self, tx_hash: Hash, opts: Option<GethDebugTracingOptions>, trace_unsuccessful_only: bool) -> Result<GethTrace, StratusError> {
         Span::with(|s| {
             s.rec_str("tx_hash", &tx_hash);

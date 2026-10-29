@@ -9,6 +9,7 @@ use crate::eth::storage::StorageError;
 use crate::eth::storage::permanent::RocksPermanentStorage;
 use crate::eth::storage::stratus_storage::label;
 use crate::eth::storage::temporary::compute_pending_block_number;
+use crate::eth::storage::temporary::inmemory::journal::TransactionJournal;
 use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTemporaryStorage;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
@@ -22,10 +23,12 @@ use crate::eth::types::Nonce;
 use crate::eth::types::PendingBlock;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
+use crate::eth::types::TransactionStage;
 use crate::eth::types::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
 
+pub mod journal;
 mod transaction;
 
 #[derive(Debug)]
@@ -74,8 +77,8 @@ impl InMemoryTemporaryStorage {
     }
 
     #[timed(storage_read_transaction, labels(storage = label::TEMP, hit = result.is_some(), success = true))]
-    pub fn read_pending_execution(&self, hash: Hash) -> Option<TransactionExecution> {
-        self.transaction_storage.read_pending_execution(hash)
+    pub fn read_transaction(&self, hash: Hash) -> Option<TransactionStage> {
+        self.transaction_storage.read_transaction(hash)
     }
 
     pub fn read_account(&self, address: Address) -> Option<Account> {
@@ -123,13 +126,21 @@ pub struct InMemoryTemporaryStorageState {
 
     /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
     pub state: State<Complete>,
+
+    pub journal: Option<TransactionJournal>,
 }
 
 impl InMemoryTemporaryStorageState {
     pub fn new(block_number: BlockNumber) -> Self {
+        let block = PendingBlock::new_at_now(block_number);
+        let journal = TransactionJournal::open(block.header)
+            .inspect_err(|err| tracing::error!(?err, "journal failed to open, temp state will be created without it"))
+            .ok();
+
         Self {
-            block: PendingBlock::new_at_now(block_number),
+            block,
             state: State::default(),
+            journal,
         }
     }
 

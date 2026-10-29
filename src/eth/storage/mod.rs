@@ -8,6 +8,7 @@ pub use permanent::RocksPermanentStorage;
 pub use stratus_storage::MinedPointInTime;
 pub use stratus_storage::StratusStorage;
 pub use temporary::InMemoryTemporaryStorage;
+pub use temporary::TransactionJournal;
 pub use types::FoundAt;
 mod cache;
 mod error;
@@ -104,8 +105,6 @@ mod tests {
         }
 
         pub fn new_test() -> Result<Self, StorageError> {
-            let temp = InMemoryTemporaryStorage::new(0.into());
-
             // Create a temporary directory for RocksDB
             let rocks_dir = tempdir().expect("Failed to create temporary directory for tests");
             let rocks_path_prefix = rocks_dir.path().to_str().unwrap().to_string();
@@ -119,6 +118,7 @@ mod tests {
                 1024,
             )
             .expect("Failed to create RocksPermanentStorage for tests");
+            let temp = InMemoryTemporaryStorage::from_perm_storage(&perm).expect("create temporary storage");
 
             let cache = CacheConfig {
                 account_history_cache_capacity: 20000,

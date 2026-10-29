@@ -396,6 +396,15 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("eth_getUncleByBlockHashAndIndex", eth_get_uncle_by_block_hash_and_index)?;
 
     // transactions
+    for method in ["eth_sendRawTransaction", "stratus_sendRawTransactionAndGetReceipt"] {
+        module.register_method(method, |_, _, _| {
+            Err::<JsonValue, _>(jsonrpsee::types::ErrorObjectOwned::owned(
+                -32603,
+                "transaction submissions are handled by RPC middleware",
+                None::<()>,
+            ))
+        })?;
+    }
     module.register_blocking_method("eth_getTransactionByHash", eth_get_transaction_by_hash)?;
     module.register_blocking_method("eth_getTransactionReceipt", eth_get_transaction_receipt)?;
     module.register_blocking_method("eth_estimateGas", eth_estimate_gas)?;
@@ -1399,6 +1408,7 @@ pub fn eth_send_raw_transaction<'a>(
     mut request: Request<'a>,
     ctx: Arc<RpcContext>,
     span: Span,
+    with_receipt: bool,
 ) -> Result<(BoxFuture<'a, MethodResponse>, Option<TransactionTracingIdentifiers>), StratusError> {
     let enter = span.enter();
     let params = request.params();
@@ -1421,7 +1431,7 @@ pub fn eth_send_raw_transaction<'a>(
     let ext_clone = ext.clone();
 
     let future = {
-        let prepared_handle = tokio::task::spawn_blocking(move || _prepare_eth_send_raw_transaction(input, data, access_list, ctx, ext));
+        let prepared_handle = tokio::task::spawn_blocking(move || _prepare_eth_send_raw_transaction(input, data, access_list, ctx, ext, with_receipt));
         async move {
             let prepared = prepared_handle.await;
 
@@ -1433,10 +1443,14 @@ pub fn eth_send_raw_transaction<'a>(
                     data,
                     access_list,
                 })) => {
-                    let result = importer.forward_to_leader(tx_hash, data, access_list).await.map(hex_data).into_response();
-                    MethodResponse::response(id, result, usize::MAX)
+                    let result = if with_receipt {
+                        importer.forward_and_get_receipt(tx_hash, data, access_list).await.map(to_json_value)
+                    } else {
+                        importer.forward(tx_hash, data, access_list).await.map(|hash| to_json_value(hex_data(hash)))
+                    };
+                    MethodResponse::response(id, result.into_response(), usize::MAX)
                 }
-                Ok(Err(err)) => MethodResponse::response(id, Err::<String, _>(err).into_response(), usize::MAX),
+                Ok(Err(err)) => MethodResponse::response(id, Err::<JsonValue, _>(err).into_response(), usize::MAX),
                 Err(err) => {
                     tracing::error!("Join error for blocking RPC method: {:?}", err);
                     MethodResponse::error(
@@ -1454,7 +1468,7 @@ pub fn eth_send_raw_transaction<'a>(
 }
 
 enum PreparedRawTransaction {
-    Complete(Result<String, StratusError>),
+    Complete(Result<JsonValue, StratusError>),
     Forward {
         importer: Arc<ImporterConsensus>,
         tx_hash: Hash,
@@ -1469,11 +1483,13 @@ fn _prepare_eth_send_raw_transaction(
     access_list: Option<AccessListOutput>,
     ctx: Arc<RpcContext>,
     ext: Extensions,
+    with_receipt: bool,
 ) -> Result<PreparedRawTransaction, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!(
         "rpc::eth_sendRawTransaction",
+        with_receipt,
         tx_hash = field::Empty,
         tx_from = field::Empty,
         tx_to = field::Empty,
@@ -1496,8 +1512,7 @@ fn _prepare_eth_send_raw_transaction(
         return Err(StateError::TransactionsDisabled.into());
     }
 
-    // validate that the target account is a contract before acquiring the executor lock or forwarding to the
-    // leader, so calls to non-contract accounts are rejected early
+    // Validate the target account before executing or forwarding the transaction.
     if let Some(to_address) = tx.execution_info.to
         && !tx.execution_info.input.is_empty()
     {
@@ -1507,13 +1522,27 @@ fn _prepare_eth_send_raw_transaction(
     // Execute locally, or prepare synchronous access-list work before forwarding asynchronously.
     match GlobalState::get_node_mode() {
         NodeMode::Leader | NodeMode::FakeLeader => {
-            let result = match ctx.server.executor.execute_local_transaction(tx, access_list) {
-                Ok(_) => Ok(hex_data(tx_hash)),
-                Err(e) => {
-                    tracing::warn!(reason = ?e, ?tx_hash, "failed to execute eth_sendRawTransaction");
-                    Err(e)
-                }
-            };
+            let result = if with_receipt {
+                ctx.server.executor.execute_local_transaction(tx, access_list).and_then(|()| {
+                    ctx.server
+                        .storage
+                        .read_transaction(tx_hash)?
+                        .map(AlloyReceipt::from)
+                        .map(to_json_value)
+                        .ok_or_else(|| {
+                            StorageError::Unexpected {
+                                msg: format!("executed transaction {tx_hash} must have a stored receipt"),
+                            }
+                            .into()
+                        })
+                })
+            } else {
+                ctx.server
+                    .executor
+                    .execute_local_transaction(tx, access_list)
+                    .map(|()| to_json_value(hex_data(tx_hash)))
+            }
+            .inspect_err(|e| tracing::warn!(reason = ?e, ?tx_hash, with_receipt, "failed to execute transaction submission"));
             Ok(PreparedRawTransaction::Complete(result))
         }
         NodeMode::Follower => match ctx.server.read_importer() {
