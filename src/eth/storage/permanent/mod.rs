@@ -4,8 +4,12 @@ pub use self::rocks::RocksStorageState;
 
 pub mod rocks;
 
+use std::path::Path;
+use std::path::PathBuf;
 use std::time::Duration;
 
+use anyhow::anyhow;
+use anyhow::bail;
 use clap::Parser;
 use display_json::DebugAsJson;
 
@@ -15,6 +19,7 @@ use crate::config::GenesisFileConfig;
 use crate::ext::duration_serde;
 use crate::ext::option_duration_serde;
 use crate::ext::parse_duration;
+use crate::globals::DATABASE_PATH;
 
 // -----------------------------------------------------------------------------
 // Config
@@ -103,12 +108,38 @@ impl PermanentStorageConfig {
 
 impl PermanentStorageConfig {
     const DEFAULT_FILE_DESCRIPTORS_LIMIT: &'static str = if cfg!(feature = "dev") { "65536" } else { "1048576" };
+
+    /// Resolves the filesystem path of the node database.
+    pub fn resolve_db_path(&self) -> anyhow::Result<String> {
+        let Some(prefix) = &self.rocks_path_prefix else {
+            tracing::info!("starting rocksdb storage - at default path: 'data/rocksdb'");
+            return Ok("data/rocksdb".to_string());
+        };
+
+        if prefix.is_empty() {
+            bail!("given prefix for RocksDB is empty, try not providing the flag");
+        }
+
+        if Path::new(prefix).is_dir() || Path::new(prefix).iter().count() > 1 {
+            tracing::warn!(?prefix, "given prefix for RocksDB might put it in another folder");
+        }
+
+        let path = format!("{prefix}-rocksdb");
+        tracing::info!("starting rocksdb storage - at custom path: '{:?}'", path);
+        Ok(path)
+    }
+
     /// Initializes permanent storage implementation.
     pub fn init(&self) -> anyhow::Result<RocksPermanentStorage> {
         tracing::info!(config = ?self, "creating permanent storage");
 
+        let db_path = self.resolve_db_path()?;
+        DATABASE_PATH
+            .set(PathBuf::from(db_path.clone()))
+            .map_err(|_| anyhow!("DATABASE_PATH is already set"))?;
+
         RocksPermanentStorage::new(
-            self.rocks_path_prefix.clone(),
+            db_path,
             self.rocks_shutdown_timeout,
             self.rocks_cf_cache.clone(),
             !self.rocks_disable_sync_write,

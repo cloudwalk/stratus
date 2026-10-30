@@ -46,4 +46,8 @@ pub enum StorageError {
     #[error("unexpected storage error: {msg}")]
     #[error_code = 9]
     Unexpected { msg: String },
+
+    #[error("transaction journal error: {err}")]
+    #[error_code = 10]
+    Journal { err: anyhow::Error },
 }
