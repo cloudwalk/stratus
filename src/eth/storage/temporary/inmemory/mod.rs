@@ -9,8 +9,8 @@ use crate::eth::storage::StorageError;
 use crate::eth::storage::permanent::RocksPermanentStorage;
 use crate::eth::storage::stratus_storage::label;
 use crate::eth::storage::temporary::compute_pending_block_number;
-use crate::eth::storage::temporary::inmemory::journal::TransactionJournal;
 use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTemporaryStorage;
+use crate::eth::storage::temporary::journal::TransactionJournal;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::BlockInfo;
@@ -28,7 +28,6 @@ use crate::eth::types::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
 
-pub mod journal;
 mod transaction;
 
 #[derive(Debug)]

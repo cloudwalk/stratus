@@ -147,7 +147,7 @@ mod tests {
     use std::fs::File;
     use std::fs::{self};
 
-    use crate::eth::storage::temporary::inmemory::journal::TransactionJournal;
+    use crate::eth::storage::temporary::journal::TransactionJournal;
     use crate::eth::types::BlockInfo;
     use crate::eth::types::TransactionInput;
     use crate::eth::types::UnixTimeNow;

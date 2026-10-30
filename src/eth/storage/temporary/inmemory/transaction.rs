@@ -13,7 +13,7 @@ use crate::eth::executor::types::state::Complete;
 use crate::eth::executor::types::state::CompleteValue;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
-use crate::eth::storage::temporary::inmemory::journal::TransactionJournal;
+use crate::eth::storage::temporary::journal::TransactionJournal;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::BlockInfo;
