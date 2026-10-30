@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
+use std::path::PathBuf;
 use std::sync::LazyLock;
+use std::sync::OnceLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering;
@@ -127,6 +129,9 @@ impl NodeMode {
 // -----------------------------------------------------------------------------
 
 pub static STRATUS_SHUTDOWN_SIGNAL: LazyLock<CancellationToken> = LazyLock::new(CancellationToken::new);
+
+/// Filesystem path of the node database, anchored once when the permanent storage opens.
+pub static DATABASE_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 /// Importer is running or being shut-down?
 static IMPORTER_SHUTDOWN: AtomicBool = AtomicBool::new(true);

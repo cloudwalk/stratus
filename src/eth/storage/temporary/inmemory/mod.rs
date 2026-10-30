@@ -54,11 +54,6 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.read_pending_block_header()
     }
 
-    #[cfg(feature = "dev")]
-    pub fn set_pending_block_header(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError> {
-        self.transaction_storage.set_pending_block_header(block_number)
-    }
-
     pub fn set_pending_header(&self, number: BlockNumber, timestamp: UnixTime) {
         self.transaction_storage.set_pending_header(number, timestamp);
     }
@@ -118,7 +113,7 @@ impl InMemoryTemporaryStorage {
 // Inner State
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct InMemoryTemporaryStorageState {
     /// Block that is being mined.
     pub block: PendingBlock,

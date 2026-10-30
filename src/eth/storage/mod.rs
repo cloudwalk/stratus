@@ -8,6 +8,7 @@ pub use permanent::RocksPermanentStorage;
 pub use stratus_storage::MinedPointInTime;
 pub use stratus_storage::StratusStorage;
 pub use temporary::InMemoryTemporaryStorage;
+pub use temporary::JournalBlock;
 pub use temporary::TransactionJournal;
 pub use types::FoundAt;
 mod cache;
@@ -109,8 +110,15 @@ mod tests {
             let rocks_dir = tempdir().expect("Failed to create temporary directory for tests");
             let rocks_path_prefix = rocks_dir.path().to_str().unwrap().to_string();
 
+            let rocks_config = super::permanent::PermanentStorageConfig {
+                rocks_path_prefix: Some(rocks_path_prefix),
+                ..Default::default()
+            };
+            let db_path = rocks_config.resolve_db_path().expect("resolve rocks path for tests");
+            let _ = crate::globals::DATABASE_PATH.set(std::path::PathBuf::from(db_path.clone()));
+
             let perm = RocksPermanentStorage::new(
-                Some(rocks_path_prefix.clone()),
+                db_path,
                 std::time::Duration::from_secs(240),
                 super::permanent::RocksCfCacheConfig::default(),
                 true,

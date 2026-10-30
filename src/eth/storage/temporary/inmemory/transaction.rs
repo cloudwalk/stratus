@@ -13,6 +13,7 @@ use crate::eth::executor::types::state::Complete;
 use crate::eth::executor::types::state::CompleteValue;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
+#[cfg(feature = "dev")]
 use crate::eth::storage::temporary::journal::TransactionJournal;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
@@ -97,11 +98,6 @@ impl InmemoryTransactionTemporaryStorage {
         self.pending_block.read().block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
     }
 
-    pub fn clone_pending_state(&self) -> InMemoryTemporaryStorageState {
-        let pending_block = self.pending_block.read();
-        (*pending_block).clone()
-    }
-
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {
         let pending_block = self.pending_block.upgradable_read();
 
@@ -121,7 +117,6 @@ impl InmemoryTransactionTemporaryStorage {
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
         let mut latest = self.latest_block.write();
-        let dropped_block_number = latest.as_ref().map(|state| state.block.header.number);
 
         *latest = Some(std::mem::replace(&mut *pending_block, next_state));
 
@@ -135,10 +130,6 @@ impl InmemoryTransactionTemporaryStorage {
             let latest_state = latest.as_ref().expect("latest should be Some after finishing the pending block");
             (latest_state.block.clone(), latest_state.state.clone())
         };
-
-        if let Some(number) = dropped_block_number {
-            let _ = TransactionJournal::retire(number).inspect_err(|err| tracing::error!(?err, "failed to retire journal"));
-        }
 
         (finished_block, state)
     }
@@ -279,7 +270,9 @@ impl InmemoryTransactionTemporaryStorage {
     pub fn reset(&self) {
         let mut pending = self.pending_block.write();
         pending.reset();
-        let header = pending.block.header;
+        pending.journal = TransactionJournal::open(pending.block.header)
+            .inspect_err(|err| tracing::error!(?err, "journal failed to open after reset"))
+            .ok();
         *self.latest_block.write() = None;
     }
 }
