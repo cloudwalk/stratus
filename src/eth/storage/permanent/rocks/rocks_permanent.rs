@@ -1,10 +1,8 @@
-use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use anyhow::bail;
 use stratus_metrics::timed;
 
 use super::rocks_cf_cache_config::RocksCfCacheConfig;
@@ -58,7 +56,7 @@ fn get_current_file_descriptor_limit() -> Result<libc::rlimit, StorageError> {
 
 impl RocksPermanentStorage {
     pub fn new(
-        db_path_prefix: Option<String>,
+        db_path: String,
         shutdown_timeout: Duration,
         cf_cache_config: RocksCfCacheConfig,
         enable_sync_write: bool,
@@ -70,25 +68,7 @@ impl RocksPermanentStorage {
         // Check file descriptor limit before proceeding with RocksDB initialization
         Self::check_file_descriptor_limit(file_descriptors_limit).map_err(|err| anyhow::anyhow!("{err}"))?;
 
-        let path = if let Some(prefix) = db_path_prefix {
-            // run some checks on the given prefix
-            if prefix.is_empty() {
-                bail!("given prefix for RocksDB is empty, try not providing the flag");
-            }
-
-            if Path::new(&prefix).is_dir() || Path::new(&prefix).iter().count() > 1 {
-                tracing::warn!(?prefix, "given prefix for RocksDB might put it in another folder");
-            }
-
-            let path = format!("{prefix}-rocksdb");
-            tracing::info!("starting rocksdb storage - at custom path: '{:?}'", path);
-            path
-        } else {
-            tracing::info!("starting rocksdb storage - at default path: 'data/rocksdb'");
-            "data/rocksdb".to_string()
-        };
-
-        let state = Arc::new(RocksStorageState::new(path, shutdown_timeout, cf_cache_config, enable_sync_write)?);
+        let state = Arc::new(RocksStorageState::new(db_path, shutdown_timeout, cf_cache_config, enable_sync_write)?);
 
         let block_number = state.preload_block_number()?;
 
