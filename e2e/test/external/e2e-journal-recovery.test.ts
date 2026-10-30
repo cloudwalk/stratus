@@ -28,7 +28,8 @@ describe("Journal recovery", () => {
         this.timeout(120_000);
 
         const root = resolve(__dirname, "../../..");
-        const binary = process.env.STRATUS_BINARY || join(root, "target/debug/stratus");
+        const profile = process.env.STRATUS_PROFILE || "debug";
+        const binary = process.env.STRATUS_BINARY || join(root, `target/${profile}/stratus`);
         const directory = mkdtempSync(join(tmpdir(), "stratus-journal-recovery-"));
         const prefix = join(directory, "node");
         const logPath = join(directory, "node.log");
