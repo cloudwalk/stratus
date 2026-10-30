@@ -22,6 +22,7 @@ use crate::eth::types::Nonce;
 use crate::eth::types::PendingBlock;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
+use crate::eth::types::TransactionStage;
 use crate::eth::types::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
@@ -74,8 +75,8 @@ impl InMemoryTemporaryStorage {
     }
 
     #[timed(storage_read_transaction, labels(storage = label::TEMP, hit = result.is_some(), success = true))]
-    pub fn read_pending_execution(&self, hash: Hash) -> Option<TransactionExecution> {
-        self.transaction_storage.read_pending_execution(hash)
+    pub fn read_transaction(&self, hash: Hash) -> Option<TransactionStage> {
+        self.transaction_storage.read_transaction(hash)
     }
 
     pub fn read_account(&self, address: Address) -> Option<Account> {

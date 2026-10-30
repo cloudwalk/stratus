@@ -26,6 +26,8 @@ use crate::eth::types::PendingBlock;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::TransactionInput;
+use crate::eth::types::TransactionMined;
+use crate::eth::types::TransactionStage;
 use crate::eth::types::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::types::UnixTimeNow;
@@ -142,9 +144,23 @@ impl InmemoryTransactionTemporaryStorage {
         (finished_block, state)
     }
 
-    pub fn read_pending_execution(&self, hash: Hash) -> Option<TransactionExecution> {
-        let pending_block = self.pending_block.read();
-        pending_block.block.transactions.get(&hash).cloned()
+    // i think this is used only for eth_transactionByHash and getTransactionReceipt so we dont really need to clone the entire execution
+    pub fn read_transaction(&self, hash: Hash) -> Option<TransactionStage> {
+        let pending = self.pending_block.read();
+        if let Some(execution) = pending.block.transactions.get(&hash) {
+            return Some(TransactionStage::Pending(execution.clone()));
+        }
+
+        let latest = self.latest_block.read();
+        let block = &latest.as_ref()?.block;
+        let (index, _, execution) = block.transactions.get_full(&hash)?;
+        let first_log_index: u64 = block.transactions.values().take(index).map(|tx| tx.logs().len() as u64).sum();
+        Some(TransactionStage::Mined(TransactionMined::from_execution(
+            execution.clone(),
+            block.header.number.hash(),
+            (index as u64).into(),
+            first_log_index.into(),
+        )))
     }
 
     // -------------------------------------------------------------------------

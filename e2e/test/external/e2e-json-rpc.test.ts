@@ -404,6 +404,59 @@ describe("JSON-RPC", () => {
             });
         });
 
+        describe("stratus_sendRawTransactionAndGetReceipt", () => {
+            before(function () {
+                if (!isStratus) this.skip();
+            });
+
+            for (const accessList of [undefined, null, { access_list: [] }]) {
+                it(`returns an execution receipt before mining with access list ${JSON.stringify(accessList)}`, async () => {
+                    const nonce = await sendGetNonce(ALICE);
+                    const signedTx = await ALICE.signWeiTransfer(BOB.address, 1, nonce);
+                    const blockNumber = await sendGetBlockNumber();
+                    const params = accessList === undefined ? [signedTx] : [signedTx, accessList];
+                    const receipt = await send("stratus_sendRawTransactionAndGetReceipt", params);
+
+                    expect(receipt.transactionHash).to.equal(keccak256(signedTx));
+                    expect(receipt.status).to.equal("0x1");
+                    expect(receipt.from).to.equal(ALICE.address);
+                    expect(receipt.to).to.equal(BOB.address);
+                    expect(receipt.gasUsed).to.equal("0x5208");
+                    expect(await sendGetBlockNumber()).to.equal(blockNumber);
+
+                    await sendEvmMine();
+                    const mined = await send("eth_getTransactionReceipt", [receipt.transactionHash]);
+                    expect(mined.status).to.equal(receipt.status);
+                    expect(mined.gasUsed).to.equal(receipt.gasUsed);
+                    expect(mined.logs).to.deep.equal(receipt.logs);
+                });
+            }
+
+            it("returns the reverted execution receipt before mining", async () => {
+                const contract = await deployTestContractBalances();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "sub",
+                    methodParameters: [ALICE.address, 1],
+                });
+                const blockNumber = await sendGetBlockNumber();
+                const receipt = await send("stratus_sendRawTransactionAndGetReceipt", [signedTx]);
+
+                expect(receipt.transactionHash).to.equal(keccak256(signedTx));
+                expect(receipt.status).to.equal("0x0");
+                expect(await sendGetBlockNumber()).to.equal(blockNumber);
+
+                await sendEvmMine();
+                const mined = await send("eth_getTransactionReceipt", [receipt.transactionHash]);
+                expect(mined.status).to.equal(receipt.status);
+                expect(mined.gasUsed).to.equal(receipt.gasUsed);
+                expect(mined.logs).to.deep.equal(receipt.logs);
+            });
+        });
+
         describe("eth_sendRawTransaction", () => {
             it("Returns an expected result when a contract transaction fails", async () => {
                 // deploy
