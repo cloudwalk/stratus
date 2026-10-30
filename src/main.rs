@@ -28,7 +28,7 @@ fn main() -> anyhow::Result<()> {
 fn recover_transaction_journal(executor: &Executor, miner: &Miner, storage: &StratusStorage) -> anyhow::Result<()> {
     let mined = storage.read_mined_block_number();
     for number in TransactionJournal::journaled_blocks()? {
-        // every listed journal already exists, so the fresh timestamp is only used if a file vanished
+        // every listed journal already exists, so the fresh timestamp is discarded
         let mut journal = TransactionJournal::open(BlockInfo::new_at_now(number))?;
         if mined >= number {
             journal.retire()?;

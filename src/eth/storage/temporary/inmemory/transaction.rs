@@ -68,8 +68,9 @@ impl InmemoryTransactionTemporaryStorage {
     // -------------------------------------------------------------------------
 
     pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
-        // Serialize persistence with block rotation while allowing pending-state reads during disk synchronization.
         let pending_block = self.pending_block.upgradable_read();
+
+        // check conflicts
         if tx.input != pending_block.block.header {
             let actual_input = tx.input.clone();
             let tx_input: TransactionInput = tx.into();
@@ -87,7 +88,6 @@ impl InmemoryTransactionTemporaryStorage {
         }
         pending_block.state.merge(state);
         pending_block.block.push_transaction(tx);
-        drop(pending_block);
 
         Ok(())
     }

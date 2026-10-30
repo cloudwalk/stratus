@@ -18,13 +18,13 @@ use crate::ext::RuintExt;
     PartialEq,
     Eq,
     serde::Serialize,
+    serde::Deserialize,
     derive_more::Add,
     derive_more::AddAssign,
     alloy_rlp::RlpDecodableWrapper,
     alloy_rlp::RlpEncodableWrapper,
 )]
 #[serde(transparent)]
-#[derive(serde::Deserialize)]
 pub struct Gas(U64);
 
 impl Gas {

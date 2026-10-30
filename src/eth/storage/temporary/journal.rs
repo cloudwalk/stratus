@@ -21,7 +21,7 @@ pub struct JournalBlock {
 const JOURNAL_DIRECTORY: &str = "transaction-journal";
 
 fn journal_directory() -> PathBuf {
-    // permanent storage anchors the database path during its init, so this only fails
+    // permanent storage sets the database path during its init, so this only fails
     // when a journal is opened before the permanent storage exists
     #[allow(clippy::expect_used)]
     DATABASE_PATH
@@ -30,7 +30,7 @@ fn journal_directory() -> PathBuf {
         .join(JOURNAL_DIRECTORY)
 }
 
-/// Persists ordered transactions until their block reaches durable permanent storage.
+/// Persists ordered transaction inputs until their block reaches durable permanent storage.
 #[derive(Debug)]
 pub struct TransactionJournal {
     file: Option<File>,

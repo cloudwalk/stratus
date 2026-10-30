@@ -176,7 +176,7 @@ impl Miner {
         *self.mode.read()
     }
 
-    pub(crate) fn set_mode(&self, new_mode: MinerMode) {
+    fn set_mode(&self, new_mode: MinerMode) {
         *self.mode.write() = new_mode;
     }
 
