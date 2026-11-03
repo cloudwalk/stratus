@@ -21,12 +21,12 @@ pub struct JournalBlock {
 const JOURNAL_DIRECTORY: &str = "transaction-journal";
 
 fn journal_directory() -> PathBuf {
-    // permanent storage sets the database path during its init, so this only fails
+    // permanent storage sets the database directory during its init, so this only fails
     // when a journal is opened before the permanent storage exists
     #[allow(clippy::expect_used)]
     DATABASE_PATH
         .get()
-        .expect("database path must be anchored by permanent storage init")
+        .expect("database directory must be anchored by permanent storage init")
         .join(JOURNAL_DIRECTORY)
 }
 

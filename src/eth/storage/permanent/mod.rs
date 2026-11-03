@@ -109,11 +109,11 @@ impl PermanentStorageConfig {
 impl PermanentStorageConfig {
     const DEFAULT_FILE_DESCRIPTORS_LIMIT: &'static str = if cfg!(feature = "dev") { "65536" } else { "1048576" };
 
-    /// Resolves the filesystem path of the node database.
-    pub fn resolve_db_path(&self) -> anyhow::Result<String> {
+    /// Resolves the directory that holds the node databases, shared by RocksDB and the transaction journal.
+    pub fn resolve_data_directory(&self) -> anyhow::Result<String> {
         let Some(prefix) = &self.rocks_path_prefix else {
-            tracing::info!("starting rocksdb storage - at default path: 'data/rocksdb'");
-            return Ok("data/rocksdb".to_string());
+            tracing::info!("starting rocksdb storage - at default data directory: 'data'");
+            return Ok("data".to_string());
         };
 
         if prefix.is_empty() {
@@ -124,19 +124,39 @@ impl PermanentStorageConfig {
             tracing::warn!(?prefix, "given prefix for RocksDB might put it in another folder");
         }
 
-        let path = format!("{prefix}-rocksdb");
-        tracing::info!("starting rocksdb storage - at custom path: '{:?}'", path);
-        Ok(path)
+        Ok(Path::new(prefix)
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."))
+            .to_string_lossy()
+            .into_owned())
+    }
+
+    /// Resolves the filesystem path of the RocksDB database inside the data directory.
+    pub fn resolve_db_path(&self, data_directory: &str) -> String {
+        let folder_name = match &self.rocks_path_prefix {
+            Some(prefix) => {
+                let name = Path::new(prefix)
+                    .file_name()
+                    .map_or_else(|| prefix.clone(), |name| name.to_string_lossy().into_owned());
+                format!("{name}-rocksdb")
+            }
+            None => "rocksdb".to_string(),
+        };
+        Path::new(data_directory).join(folder_name).to_string_lossy().into_owned()
     }
 
     /// Initializes permanent storage implementation.
     pub fn init(&self) -> anyhow::Result<RocksPermanentStorage> {
         tracing::info!(config = ?self, "creating permanent storage");
 
-        let db_path = self.resolve_db_path()?;
+        let data_directory = self.resolve_data_directory()?;
         DATABASE_PATH
-            .set(PathBuf::from(db_path.clone()))
+            .set(PathBuf::from(data_directory.clone()))
             .map_err(|_| anyhow!("DATABASE_PATH is already set"))?;
+
+        let db_path = self.resolve_db_path(&data_directory);
+        tracing::info!(?db_path, "starting rocksdb storage");
 
         RocksPermanentStorage::new(
             db_path,

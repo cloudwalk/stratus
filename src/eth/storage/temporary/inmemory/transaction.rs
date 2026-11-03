@@ -13,7 +13,6 @@ use crate::eth::executor::types::state::Complete;
 use crate::eth::executor::types::state::CompleteValue;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
-#[cfg(feature = "dev")]
 use crate::eth::storage::temporary::journal::TransactionJournal;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
@@ -94,6 +93,11 @@ impl InmemoryTransactionTemporaryStorage {
 
     pub fn read_pending_executions(&self) -> Vec<TransactionExecution> {
         self.pending_block.read().block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
+    }
+
+    /// Removes the journal handle from the pending block, leaving its file on disk.
+    pub fn take_pending_journal(&self) -> Option<TransactionJournal> {
+        self.pending_block.write().journal.take()
     }
 
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {

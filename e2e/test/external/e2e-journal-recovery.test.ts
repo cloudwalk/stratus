@@ -113,7 +113,7 @@ describe("Journal recovery", () => {
             }
             expect(await rpc("eth_blockNumber")).to.equal(latest);
             const journalPath = join(
-                `${prefix}-rocksdb`,
+                directory,
                 "transaction-journal",
                 `${BigInt(pendingNumber).toString().padStart(20, "0")}.journal`,
             );

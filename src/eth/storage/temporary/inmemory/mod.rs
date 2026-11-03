@@ -65,6 +65,11 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.read_pending_executions()
     }
 
+    /// Removes the journal handle from the pending block, leaving its file on disk.
+    pub fn take_pending_journal(&self) -> Option<TransactionJournal> {
+        self.transaction_storage.take_pending_journal()
+    }
+
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {
         self.transaction_storage.finish_pending_block()
     }

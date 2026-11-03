@@ -130,7 +130,7 @@ impl NodeMode {
 
 pub static STRATUS_SHUTDOWN_SIGNAL: LazyLock<CancellationToken> = LazyLock::new(CancellationToken::new);
 
-/// Filesystem path of the node database, anchored once when the permanent storage opens.
+/// Filesystem path of the directory holding the node databases, anchored once when the permanent storage opens.
 pub static DATABASE_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 /// Importer is running or being shut-down?
