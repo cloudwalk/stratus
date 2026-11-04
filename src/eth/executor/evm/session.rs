@@ -12,13 +12,13 @@ use revm::state::AccountInfo;
 use crate::alias::RevmAddress;
 use crate::alias::RevmBytecode;
 use crate::eth::executor::evm::types::StorageMetrics;
-use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::FoundAt;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::Address;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::StratusError;
+use crate::eth::types::TargetState;
 
 /// Contextual data that is read or set durint the execution of a transaction in the EVM.
 pub struct RevmSession {
@@ -26,7 +26,7 @@ pub struct RevmSession {
     pub storage: Arc<StratusStorage>,
 
     /// Input passed to EVM to execute the transaction.
-    pub kind: ExecutionKind,
+    pub target_state: TargetState,
 
     /// Metrics collected during EVM execution.
     pub metrics: StorageMetrics,
@@ -37,14 +37,14 @@ impl RevmSession {
     pub fn new(storage: Arc<StratusStorage>) -> Self {
         Self {
             storage,
-            kind: ExecutionKind::default(),
+            target_state: TargetState::default(),
             metrics: StorageMetrics::default(),
         }
     }
 
     /// Resets the session to be used with a new transaction.
-    pub fn reset(&mut self, kind: ExecutionKind) {
-        self.kind = kind;
+    pub fn reset(&mut self, target: TargetState) {
+        self.target_state = target;
         self.metrics = StorageMetrics::default();
     }
 }
@@ -103,7 +103,7 @@ impl RevmSession {
             return Ok((None, FoundAt::Temp));
         }
 
-        let (account, found_at) = self.storage.read_account(address, self.kind)?;
+        let (account, found_at) = self.storage.read_account(address, self.target_state)?;
         Ok((Some(account.into()), found_at))
     }
 
@@ -117,7 +117,7 @@ impl RevmSession {
         let index: SlotIndex = index.into();
 
         // load slot from storage
-        let (slot, found_at) = self.storage.read_slot(address, index, self.kind)?;
+        let (slot, found_at) = self.storage.read_slot(address, index, self.target_state)?;
 
         Ok((slot.value.into(), found_at))
     }
