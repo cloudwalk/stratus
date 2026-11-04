@@ -199,7 +199,10 @@ impl StratusStorage {
         // adding the latest block State<Final/Complete> to the cache too. Would requiring some locking but if we're smart
         // about it we can make it so this lock is more relaxed than the latest_state_lock.
         //
-        if matches!((target_state, found_at), (TargetState::Latest | TargetState::Past(_), FoundAt::PermLatest)) {
+        if matches!(
+            (target_state, found_at),
+            (TargetState::Latest | TargetState::Past(_) | TargetState::LatestPinned(_), FoundAt::PermLatest)
+        ) {
             E::cache_latest_if_missing(self, key, value.clone());
         }
         Ok((value, found_at))
