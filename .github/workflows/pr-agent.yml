@@ -53,7 +53,7 @@ jobs:
     steps:
       - name: Review
         id: pr_agent
-        uses: qodo-ai/pr-agent@1b0609a013f53694c36d457149bde70abf50c048 # v0.32
+        uses: The-PR-Agent/pr-agent@1b0609a013f53694c36d457149bde70abf50c048 # v0.32
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
