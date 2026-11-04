@@ -28,6 +28,7 @@ use crate::eth::types::ExternalReceipt;
 use crate::eth::types::ExternalTransaction;
 use crate::eth::types::StratusError;
 use crate::eth::types::TransactionInput;
+use crate::eth::types::TransactionMined;
 use crate::eth::types::UnexpectedError;
 use crate::ext::spawn_thread;
 use crate::infra::tracing::warn_task_tx_closed;
@@ -35,6 +36,7 @@ use crate::infra::tracing::warn_task_tx_closed;
 const TASK_NAME: &str = "evm-tx-1";
 
 type ExternalTransactionResult = anyhow::Result<()>;
+type ImportedTransactionResult = anyhow::Result<()>;
 type LocalTransactionResult = Result<ExecutionMetrics, StratusError>;
 type LocalTransactionResponse = (Duration, LocalTransactionResult);
 
@@ -72,6 +74,18 @@ impl TransactionWorker {
         let (response_tx, response_rx) = oneshot::channel();
         self.task_tx
             .send(TransactionTask::external(tx, receipt, block_number, response_tx))
+            .map_err(StratusError::from)?;
+        match response_rx.recv() {
+            Ok(result) => result,
+            Err(_) => Err(StratusError::from(UnexpectedError::ChannelClosed { channel: "evm" }).into()),
+        }
+    }
+
+    /// Reexecutes and persists an imported stratus transaction.
+    pub fn execute_imported_transaction(&self, tx: TransactionMined, block_number: BlockNumber) -> ImportedTransactionResult {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.task_tx
+            .send(TransactionTask::imported(tx, block_number, response_tx))
             .map_err(StratusError::from)?;
         match response_rx.recv() {
             Ok(result) => result,
@@ -172,6 +186,17 @@ impl TransactionTask {
         }
     }
 
+    fn imported(tx: TransactionMined, block_number: BlockNumber, response_tx: oneshot::Sender<ImportedTransactionResult>) -> Self {
+        Self {
+            span: Span::current(),
+            kind: TransactionTaskKind::Imported {
+                tx: Box::new(tx),
+                block_number,
+                response_tx,
+            },
+        }
+    }
+
     fn execute(self, storage: &StratusStorage, miner: &Miner, evm: &mut Evm<TransactionExecutionInput>) -> anyhow::Result<(), StratusError> {
         let Self { span, kind } = self;
         let _enter = span.enter();
@@ -196,6 +221,12 @@ impl TransactionTask {
                     tracing::error!(reason = ?e, "failed to send local transaction execution result");
                 }
             }
+            TransactionTaskKind::Imported { tx, block_number, response_tx } => {
+                let result = Executor::execute_imported_transaction_inner(storage, miner, evm, *tx, block_number);
+                if let Err(e) = response_tx.send(result) {
+                    tracing::error!(reason = ?e, "failed to send imported transaction execution result");
+                }
+            }
         }))
         .map_err(|err| ExecutorError::Panic { err: anyhow!("{err:?}") }.into())
     }
@@ -211,5 +242,10 @@ enum TransactionTaskKind {
     Local {
         tx_input: Box<TransactionInput>,
         response_tx: oneshot::Sender<LocalTransactionResponse>,
+    },
+    Imported {
+        tx: Box<TransactionMined>,
+        block_number: BlockNumber,
+        response_tx: oneshot::Sender<ImportedTransactionResult>,
     },
 }

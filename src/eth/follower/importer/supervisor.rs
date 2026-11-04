@@ -26,6 +26,7 @@ use crate::eth::follower::importer::importers::fake_leader::FakeLeaderWorker;
 use crate::eth::follower::importer::importers::replication::ReplicationWorker;
 use crate::eth::follower::importer::start_number_fetcher;
 use crate::eth::miner::Miner;
+use crate::eth::rpc::pagination::ResponseFormat;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::BlockNumber;
 use crate::ext::spawn;
@@ -46,25 +47,37 @@ where
 }
 
 impl ReexecutionFollower {
-    fn new(executor: Arc<Executor>, miner: Arc<Miner>, chain: Arc<BlockchainClient>, kafka_connector: Option<KafkaConnector>) -> Self {
+    fn new(
+        executor: Arc<Executor>,
+        miner: Arc<Miner>,
+        chain: Arc<BlockchainClient>,
+        kafka_connector: Option<KafkaConnector>,
+        response_format: ResponseFormat,
+    ) -> Self {
         let importer = ReexecutionWorker {
             executor,
             miner,
             kafka_connector,
         };
 
-        let fetcher = BlockWithReceiptsFetcher { chain: Arc::clone(&chain) };
+        let fetcher = BlockWithReceiptsFetcher {
+            chain: Arc::clone(&chain),
+            response_format,
+        };
 
         Self { fetcher, importer }
     }
 }
 
 impl FakeLeader {
-    fn new(executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>, chain: Arc<BlockchainClient>) -> Self {
+    fn new(executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>, chain: Arc<BlockchainClient>, response_format: ResponseFormat) -> Self {
         let importer = FakeLeaderWorker { executor, miner, storage };
 
         let fetcher = FakeLeaderFetcher {
-            block_with_receipts_fetcher: BlockWithReceiptsFetcher { chain: Arc::clone(&chain) },
+            block_with_receipts_fetcher: BlockWithReceiptsFetcher {
+                chain: Arc::clone(&chain),
+                response_format,
+            },
             block_with_changes_fetcher: BlockWithChangesFetcher { chain },
         };
 
@@ -120,6 +133,7 @@ where
 #[allow(clippy::too_many_arguments)]
 pub async fn start_importer(
     importer_mode: ImporterMode,
+    response_format: ResponseFormat,
     storage: Arc<StratusStorage>,
     executor: Arc<Executor>,
     miner: Arc<Miner>,
@@ -137,12 +151,12 @@ pub async fn start_importer(
                 .await?;
         }
         ImporterMode::ReexecutionFollower => {
-            ReexecutionFollower::new(executor, miner, Arc::clone(&chain), kafka_connector)
+            ReexecutionFollower::new(executor, miner, Arc::clone(&chain), kafka_connector, response_format)
                 .run(resume_from, sync_interval, chain, stop_at_block)
                 .await?;
         }
         ImporterMode::FakeLeader => {
-            FakeLeader::new(executor, miner, storage, Arc::clone(&chain))
+            FakeLeader::new(executor, miner, storage, Arc::clone(&chain), response_format)
                 .run(resume_from, sync_interval, chain, stop_at_block)
                 .await?;
         }
