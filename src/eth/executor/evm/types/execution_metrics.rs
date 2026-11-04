@@ -87,7 +87,7 @@ impl ExecutionMetricsContext {
         }
         #[cfg(not(feature = "metrics"))]
         {
-            let _ = (kind, to, input);
+            let _ = (target_state, to, input, execution_kind);
             Self {}
         }
     }

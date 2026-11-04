@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 #[cfg(feature = "metrics")]
 use alloy_consensus::Transaction;
+#[cfg(feature = "metrics")]
 use alloy_rpc_types_trace::geth::GethDebugTracerType;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;

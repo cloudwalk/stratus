@@ -115,6 +115,7 @@ mod tests {
                 std::time::Duration::from_secs(240),
                 super::permanent::RocksCfCacheConfig::default(),
                 true,
+                #[cfg(feature = "metrics")]
                 None,
                 1024,
             )
