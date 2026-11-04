@@ -39,11 +39,11 @@ use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm::util::EvmExt;
 use crate::eth::executor::evm::util::create_evm;
 use crate::eth::rpc::BlockFilter;
-use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::MinedData;
 use crate::eth::types::StratusError;
+use crate::eth::types::TargetState;
 
 pub type RevmResultAndState = ExecResultAndState<RevmExecResult>;
 
@@ -82,7 +82,7 @@ impl<Input: EvmInput> Evm<Input> {
         let metrics_context = input.metrics_context();
 
         // configure session
-        self.evm.journaled_state.database.reset(input.kind());
+        self.evm.journaled_state.database.reset(input.target_state());
         input.fill_env(&mut self.evm, self.max_gas_limit);
 
         let tx = std::mem::take(&mut self.evm.tx);
@@ -152,7 +152,7 @@ impl Evm<TransactionExecutionInput> {
         };
         let inspect_input: TransactionExecutionInput = tx.input;
         let target = inspect_input.block_number.prev().unwrap_or_default();
-        self.evm.journaled_state.database.reset(ExecutionKind::CallPast(target));
+        self.evm.journaled_state.database.reset(TargetState::Past(target));
 
         let spec = self.evm.cfg.spec;
 

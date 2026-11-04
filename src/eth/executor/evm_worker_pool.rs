@@ -11,14 +11,15 @@ use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::EvmKind;
 use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::executor::evm::types::CallExecutionInput;
+use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::InspectorInput;
-use crate::eth::executor::types::EvmRoute;
 use crate::eth::executor::types::EvmTask;
 use crate::eth::executor::types::ExecutionTask;
 use crate::eth::executor::types::InspectionTask;
 use crate::eth::executor::types::Task;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::StratusError;
+use crate::eth::types::TargetState;
 use crate::eth::types::UnexpectedError;
 use crate::ext::spawn_thread;
 use crate::infra::tracing::warn_task_tx_closed;
@@ -99,18 +100,18 @@ impl EvmWorkerPool {
     }
 
     /// Executes a transaction in the specified route.
-    pub fn execute<Output>(&self, route: EvmRoute) -> Result<(Output, ExecutionMetrics), StratusError>
+    pub fn execute<Output>(&self, input: CallExecutionInput) -> Result<(Output, ExecutionMetrics), StratusError>
     where
         Output: TryFrom<RevmResultAndState, Error = StratusError>,
     {
         let (execution_tx, execution_rx) = oneshot::channel::<Result<(RevmResultAndState, ExecutionMetrics), StratusError>>();
 
-        match route {
-            EvmRoute::CallPresent(input) => {
+        match input.target_state() {
+            TargetState::Pending | TargetState::Latest | TargetState::LatestPinned(_) => {
                 let task = ExecutionTask::new(input, execution_tx).into();
                 self.call_present.send(task)?;
             }
-            EvmRoute::CallPast(input) => {
+            TargetState::Past(_) => {
                 let task = ExecutionTask::new(input, execution_tx).into();
                 self.call_past.send(task)?;
             }

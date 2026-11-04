@@ -112,6 +112,7 @@ impl PermanentStorageConfig {
             self.rocks_shutdown_timeout,
             self.rocks_cf_cache.clone(),
             !self.rocks_disable_sync_write,
+            #[cfg(feature = "metrics")]
             self.rocks_cf_size_metrics_interval,
             self.rocks_file_descriptors_limit,
         )
