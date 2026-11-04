@@ -43,8 +43,8 @@ impl RevmSession {
     }
 
     /// Resets the session to be used with a new transaction.
-    pub fn reset(&mut self, target: TargetState) {
-        self.target_state = target;
+    pub fn reset(&mut self, target_state: TargetState) {
+        self.target_state = target_state;
         self.metrics = StorageMetrics::default();
     }
 }
