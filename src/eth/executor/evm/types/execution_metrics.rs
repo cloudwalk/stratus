@@ -14,8 +14,8 @@ use crate::eth::codegen::SoliditySignature;
 use crate::eth::storage::FoundAt;
 use crate::eth::types::Address;
 use crate::eth::types::Bytes;
-use crate::eth::types::ExecutionKind;
 use crate::eth::types::Gas;
+use crate::eth::types::TargetState;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ReadStats {
@@ -55,29 +55,39 @@ pub struct StorageMetrics {
     pub slot_reads: StorageStats,
 }
 
+#[derive(strum::AsRefStr, Debug, Clone, Copy)]
+#[strum(serialize_all = "snake_case")]
+pub enum ExecutionKindLabel {
+    Transaction,
+    Call,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ExecutionMetricsContext {
     #[cfg(feature = "metrics")]
-    kind: ExecutionKind,
+    target_state: TargetState,
     #[cfg(feature = "metrics")]
     contract: ContractName,
     #[cfg(feature = "metrics")]
     function: SoliditySignature,
+    #[cfg(feature = "metrics")]
+    execution_kind: ExecutionKindLabel,
 }
 
 impl ExecutionMetricsContext {
-    pub fn new(kind: ExecutionKind, to: &Option<Address>, input: &Bytes) -> Self {
+    pub fn new(target_state: TargetState, to: &Option<Address>, input: &Bytes, execution_kind: ExecutionKindLabel) -> Self {
         #[cfg(feature = "metrics")]
         {
             Self {
-                kind,
+                target_state,
                 contract: codegen::contract_name(to),
                 function: codegen::function_sig(input),
+                execution_kind,
             }
         }
         #[cfg(not(feature = "metrics"))]
         {
-            let _ = (kind, to, input);
+            let _ = (target_state, to, input, execution_kind);
             Self {}
         }
     }
@@ -104,7 +114,13 @@ impl ExecutionMetrics {
     fn publish(&self) {
         let context = &self.context;
         self.storage_metrics.publish(context);
-        metrics::inc_evm_execution_gas(self.gas_used.as_u64() as usize, context.kind.as_ref(), context.contract, context.function);
+        metrics::inc_evm_execution_gas(
+            self.gas_used.as_u64() as usize,
+            context.target_state.as_ref(),
+            context.contract,
+            context.function,
+            context.execution_kind.as_ref(),
+        );
     }
 }
 
@@ -118,28 +134,44 @@ impl Drop for ExecutionMetrics {
 impl StorageMetrics {
     #[cfg(feature = "metrics")]
     fn publish(&self, context: &ExecutionMetricsContext) {
-        let execution_kind = context.kind.as_ref();
+        let target_state = context.target_state.as_ref();
         for (found_at, stats) in self.account_reads.iter() {
             if stats.count > 0 {
-                metrics::inc_n_evm_execution_account_reads(stats.count as u64, execution_kind, found_at.as_str(), context.contract, context.function);
-                metrics::inc_n_evm_execution_account_read_time(
-                    stats.total_time.as_nanos() as u64,
-                    execution_kind,
+                metrics::inc_n_evm_execution_account_reads(
+                    stats.count as u64,
+                    target_state,
                     found_at.as_str(),
                     context.contract,
                     context.function,
+                    context.execution_kind.as_ref(),
+                );
+                metrics::inc_n_evm_execution_account_read_time(
+                    stats.total_time.as_nanos() as u64,
+                    target_state,
+                    found_at.as_str(),
+                    context.contract,
+                    context.function,
+                    context.execution_kind.as_ref(),
                 );
             }
         }
         for (found_at, stats) in self.slot_reads.iter() {
             if stats.count > 0 {
-                metrics::inc_n_evm_execution_slot_reads(stats.count as u64, execution_kind, found_at.as_str(), context.contract, context.function);
-                metrics::inc_n_evm_execution_slot_read_time(
-                    stats.total_time.as_nanos() as u64,
-                    execution_kind,
+                metrics::inc_n_evm_execution_slot_reads(
+                    stats.count as u64,
+                    target_state,
                     found_at.as_str(),
                     context.contract,
                     context.function,
+                    context.execution_kind.as_ref(),
+                );
+                metrics::inc_n_evm_execution_slot_read_time(
+                    stats.total_time.as_nanos() as u64,
+                    target_state,
+                    found_at.as_str(),
+                    context.contract,
+                    context.function,
+                    context.execution_kind.as_ref(),
                 );
             }
         }
