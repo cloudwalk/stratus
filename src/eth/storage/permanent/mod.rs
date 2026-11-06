@@ -4,12 +4,10 @@ pub use self::rocks::RocksStorageState;
 
 pub mod rocks;
 
-use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::anyhow;
-use anyhow::bail;
 use clap::Parser;
 use display_json::DebugAsJson;
 
@@ -28,10 +26,9 @@ use crate::globals::DATABASE_PATH;
 /// Permanent storage configuration.
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct PermanentStorageConfig {
-    /// RocksDB storage path prefix to execute multiple local Stratus instances.
-    #[arg(id = "storage.permanent.path_prefix", long = "rocks-path-prefix")]
-    #[serde(rename = "path_prefix")]
-    pub rocks_path_prefix: Option<String>,
+    /// Directory containing RocksDB and transaction journals.
+    #[arg(id = "storage.permanent.database_path", long = "database-path", default_value = "data")]
+    pub database_path: PathBuf,
 
     /// The maximum time to wait for the RocksDB `wait_for_compaction` shutdown call.
     #[arg(
@@ -85,7 +82,7 @@ pub struct PermanentStorageConfig {
 impl Default for PermanentStorageConfig {
     fn default() -> Self {
         Self {
-            rocks_path_prefix: None,
+            database_path: PathBuf::from("data"),
             rocks_shutdown_timeout: Duration::from_secs(4 * 60),
             rocks_cf_cache: RocksCfCacheConfig::default(),
             rocks_disable_sync_write: false,
@@ -109,53 +106,14 @@ impl PermanentStorageConfig {
 impl PermanentStorageConfig {
     const DEFAULT_FILE_DESCRIPTORS_LIMIT: &'static str = if cfg!(feature = "dev") { "65536" } else { "1048576" };
 
-    /// Resolves the directory that holds the node databases, shared by RocksDB and the transaction journal.
-    pub fn resolve_data_directory(&self) -> anyhow::Result<String> {
-        let Some(prefix) = &self.rocks_path_prefix else {
-            tracing::info!("starting rocksdb storage - at default data directory: 'data'");
-            return Ok("data".to_string());
-        };
-
-        if prefix.is_empty() {
-            bail!("given prefix for RocksDB is empty, try not providing the flag");
-        }
-
-        if Path::new(prefix).is_dir() || Path::new(prefix).iter().count() > 1 {
-            tracing::warn!(?prefix, "given prefix for RocksDB might put it in another folder");
-        }
-
-        Ok(Path::new(prefix)
-            .parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-            .unwrap_or_else(|| Path::new("."))
-            .to_string_lossy()
-            .into_owned())
-    }
-
-    /// Resolves the filesystem path of the RocksDB database inside the data directory.
-    pub fn resolve_db_path(&self, data_directory: &str) -> String {
-        let folder_name = match &self.rocks_path_prefix {
-            Some(prefix) => {
-                let name = Path::new(prefix)
-                    .file_name()
-                    .map_or_else(|| prefix.clone(), |name| name.to_string_lossy().into_owned());
-                format!("{name}-rocksdb")
-            }
-            None => "rocksdb".to_string(),
-        };
-        Path::new(data_directory).join(folder_name).to_string_lossy().into_owned()
-    }
-
     /// Initializes permanent storage implementation.
     pub fn init(&self) -> anyhow::Result<RocksPermanentStorage> {
         tracing::info!(config = ?self, "creating permanent storage");
 
-        let data_directory = self.resolve_data_directory()?;
-        DATABASE_PATH
-            .set(PathBuf::from(data_directory.clone()))
-            .map_err(|_| anyhow!("DATABASE_PATH is already set"))?;
+        let data_directory = self.database_path.clone();
+        DATABASE_PATH.set(data_directory.clone()).map_err(|_| anyhow!("DATABASE_PATH is already set"))?;
 
-        let db_path = self.resolve_db_path(&data_directory);
+        let db_path = data_directory.join("rocksdb").to_string_lossy().into_owned();
         tracing::info!(?db_path, "starting rocksdb storage");
 
         RocksPermanentStorage::new(

@@ -29,9 +29,8 @@ describe("Journal recovery", () => {
 
         const root = resolve(__dirname, "../../..");
         const profile = process.env.STRATUS_PROFILE || "debug";
-        const binary = process.env.STRATUS_BINARY || join(root, `target/${profile}/stratus`);
+        const binary = resolve(process.env.STRATUS_BINARY || join(root, `target/${profile}/stratus`));
         const directory = mkdtempSync(join(tmpdir(), "stratus-journal-recovery-"));
-        const prefix = join(directory, "node");
         const logPath = join(directory, "node.log");
         const port = await freePort();
         const url = `http://127.0.0.1:${port}`;
@@ -57,14 +56,12 @@ describe("Journal recovery", () => {
                         `127.0.0.1:${port}`,
                         "--metrics-exporter-address",
                         "127.0.0.1:0",
-                        "--rocks-path-prefix",
-                        prefix,
                         "--rocks-file-descriptors-limit",
                         "1024",
                         "--block-mode",
                         "external",
                     ],
-                    { cwd: root, stdio: ["ignore", log, log] },
+                    { cwd: directory, stdio: ["ignore", log, log] },
                 );
             } finally {
                 closeSync(log);
@@ -114,6 +111,7 @@ describe("Journal recovery", () => {
             expect(await rpc("eth_blockNumber")).to.equal(latest);
             const journalPath = join(
                 directory,
+                "data",
                 "transaction-journal",
                 `${BigInt(pendingNumber).toString().padStart(20, "0")}.journal`,
             );

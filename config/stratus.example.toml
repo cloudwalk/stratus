@@ -100,8 +100,8 @@ chain_id = 2008
 # slot_history_cache_capacity = 100000
 
 [storage.permanent]
-# RocksDB storage path prefix to execute multiple local Stratus instances.
-# path_prefix = ""
+# Directory containing rocksdb/ and transaction-journal/, relative to the node working directory.
+# database_path = "data"
 # Maximum time to wait for the RocksDB `wait_for_compaction` shutdown call.
 # shutdown_timeout = "4m"
 # Disables sync write for RocksDB (improves performance but reduces durability).

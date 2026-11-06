@@ -108,15 +108,8 @@ mod tests {
         pub fn new_test() -> Result<Self, StorageError> {
             // Create a temporary directory for RocksDB
             let rocks_dir = tempdir().expect("Failed to create temporary directory for tests").keep();
-            let rocks_path_prefix = rocks_dir.join("node").to_str().unwrap().to_string();
-
-            let rocks_config = super::permanent::PermanentStorageConfig {
-                rocks_path_prefix: Some(rocks_path_prefix.clone()),
-                ..Default::default()
-            };
-            let data_directory = rocks_config.resolve_data_directory().expect("resolve data directory for tests");
-            let _ = crate::globals::DATABASE_PATH.set(std::path::PathBuf::from(data_directory.clone()));
-            let db_path = rocks_config.resolve_db_path(&data_directory);
+            let _ = crate::globals::DATABASE_PATH.set(rocks_dir.clone());
+            let db_path = rocks_dir.join("rocksdb").to_string_lossy().into_owned();
 
             let perm = RocksPermanentStorage::new(
                 db_path,
@@ -142,7 +135,7 @@ mod tests {
                 cache,
                 #[cfg(feature = "dev")]
                 super::permanent::PermanentStorageConfig {
-                    rocks_path_prefix: Some(rocks_path_prefix),
+                    database_path: rocks_dir,
                     rocks_shutdown_timeout: std::time::Duration::from_secs(240),
                     rocks_cf_cache: super::permanent::RocksCfCacheConfig::default(),
                     rocks_disable_sync_write: false,
