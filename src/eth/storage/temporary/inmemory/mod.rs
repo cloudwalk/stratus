@@ -7,6 +7,7 @@ use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::types::state::Complete;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::permanent::RocksPermanentStorage;
+#[cfg(feature = "metrics")]
 use crate::eth::storage::stratus_storage::label;
 use crate::eth::storage::temporary::compute_pending_block_number;
 use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTemporaryStorage;
