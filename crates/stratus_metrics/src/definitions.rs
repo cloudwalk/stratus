@@ -18,7 +18,16 @@ metrics! {
         gauge rpc_subscriptions_active{subscription, client},
 
         "Number of times the RPC server was restarted due to unhealthy state."
-        counter rpc_server_restarts{}
+        counter rpc_server_restarts{},
+
+        "Number of HTTP requests identifying client application via HTTP header."
+        counter rpc_client_auth_header{client, header},
+
+        "Number of HTTP requests identifying client application via query parameter."
+        counter rpc_client_auth_query{client, query},
+
+        "Number of HTTP requests identifying client application via URL path."
+        counter rpc_client_auth_path{client, path, is_first_slug}
     },
 
     group: storage_read {
