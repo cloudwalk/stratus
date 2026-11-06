@@ -4,9 +4,9 @@ use crate::eth::storage::permanent::rocks::types::UnixTimeRocksdb;
 use crate::eth::types::UnixTime;
 
 /// [`UnixTime`] that automatically sets the current time when created.
-#[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, derive_more::Deref, serde::Serialize)]
-#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
-pub struct UnixTimeNow(#[deref] UnixTime);
+#[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, derive_more::Deref, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
+pub struct UnixTimeNow(#[deref] pub UnixTime);
 
 impl Default for UnixTimeNow {
     fn default() -> Self {

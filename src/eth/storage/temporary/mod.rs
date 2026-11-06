@@ -1,6 +1,9 @@
 pub use inmemory::InMemoryTemporaryStorage;
+pub use journal::JournalBlock;
+pub use journal::TransactionJournal;
 
 mod inmemory;
+mod journal;
 
 use super::RocksPermanentStorage;
 use crate::eth::types::BlockNumber;

@@ -106,13 +106,7 @@ stratus *args="":
 
 # Bin: Stratus main service as leader
 stratus-test *args="":
-    #!/bin/bash
-    source <(just coverage-env)
-    echo "leader features: dev"
-    cargo build {{profile_flag}} --features dev
-    just _wait_for_rocksdb_lock "$@" || exit 1
-    cargo run {{profile_flag}} --bin stratus --features dev -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
-    just _wait_for_stratus
+    just _start_test_node leader 3000 stratus.log config/stratus.local.toml {{args}}
 
 # Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
 # To produce a flamegraph of the memory usage use jeprof:
@@ -127,24 +121,11 @@ stratus-follower *args="":
 
 # Bin: Stratus main service as follower
 stratus-follower-test *args="":
-    #!/bin/bash
-    source <(just coverage-env)
-    echo "follower features: dev"
-    cargo build {{profile_flag}} --features dev
-    just _wait_for_rocksdb_lock "$@" || exit 1
-    cargo run {{profile_flag}} --bin stratus --features dev -- --config config/stratus-follower.toml --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
-    just _wait_for_stratus 3001
+    just _start_test_node follower 3001 stratus_follower.log config/stratus-follower.toml {{args}}
 
 # Bin: Stratus main service as fake leader (imports blocks like a follower, executes/mines locally like a leader)
 stratus-fake-leader-test *args="":
-    #!/bin/bash
-    source <(just coverage-env)
-    FEATURES="dev"
-    echo "fake-leader features: " $FEATURES
-    cargo build {{profile_flag}} --features $FEATURES
-    just _wait_for_rocksdb_lock "$@" || exit 1
-    cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --config config/stratus-follower.toml --fake-leader --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_fake_leader.log &
-    just _wait_for_stratus 3001
+    just _start_test_node fake-leader 3001 stratus_fake_leader.log config/stratus-follower.toml {{args}}
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -316,7 +297,7 @@ e2e-leader *extra-args="":
     echo "starting e2e-leader"
     # Leader doesn't need block changes flag, only follower does
     unset ENABLE_BLOCK_CHANGES_REPLICATION
-    RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s --rocks-path-prefix=temp_3000 {{extra-args}}
+    RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s {{extra-args}}
 
 e2e-follower test="brlc" use_block_changes_replication="false":
     #!/bin/bash
@@ -337,9 +318,9 @@ e2e-follower test="brlc" use_block_changes_replication="false":
             wait-service --tcp 0.0.0.0:29092 -- echo
             docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
         fi
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 $replication_flag --kafka-bootstrap-servers {{kafka_bootstrap_servers}} --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test $replication_flag --kafka-bootstrap-servers {{kafka_bootstrap_servers}} --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
     else
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 $replication_flag
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test $replication_flag
     fi
 
 
@@ -498,7 +479,9 @@ e2e-leader-follower-down:
     fi
 
     # Delete data contents
-    rm -rf ./temp_*
+    just _wait_for_stratus_finish 3000
+    just _wait_for_stratus_finish 3001
+    rm -rf ./test-nodes
 
     # Delete zeppelin directory
     rm -rf ./e2e/cloudwalk-contracts/integration/.openzeppelin
@@ -506,7 +489,7 @@ e2e-leader-follower-down:
 # E2E: Fake Leader (imports from leader, executes/mines locally)
 e2e-fake-leader test="fake-leader":
     #!/bin/bash
-    RUST_BACKTRACE=1 RUST_LOG=info just stratus-fake-leader-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
+    RUST_BACKTRACE=1 RUST_LOG=info just stratus-fake-leader-test -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
 
 _e2e-leader-fake-leader-up-impl test="fake-leader":
     #!/bin/bash

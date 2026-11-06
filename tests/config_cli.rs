@@ -19,6 +19,10 @@ const EXIT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Runs the stratus binary and returns its output once it exits within [`EXIT_TIMEOUT`].
 fn run(mut command: Command) -> Output {
+    let dir = TempDir::new().unwrap();
+    if command.get_current_dir().is_none() {
+        command.current_dir(dir.path());
+    }
     let mut child = command.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
     let deadline = Instant::now() + EXIT_TIMEOUT;
     while child.try_wait().unwrap().is_none() {
@@ -59,8 +63,9 @@ fn assert_config_error(args: &[&str], content: &str, expected: &str) {
 /// Runs the binary until its stdout contains the expected text, then kills it; for configurations
 /// that print what they have to assert and keep running.
 fn expect_stdout(args: &[&str], content: &str, expected: &str) {
+    let dir = TempDir::new().unwrap();
     let mut command = Command::new(env!("CARGO_BIN_EXE_stratus"));
-    command.args(args);
+    command.current_dir(dir.path()).args(args);
     let config = with_config(&mut command, content);
     let mut child = command.stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
     let stdout = child.stdout.take().unwrap();
@@ -163,115 +168,82 @@ fn test_missing_chain_id_fails() {
 fn test_leader_ignores_importer_config() {
     // #2567: a leader ignores `[importer]` with a warning instead of failing; the node keeps
     // running after the warning, so it is killed once the warning is seen
-    let storage = TempDir::new().unwrap();
-    let content = format!(
-        r#"
-            leader = true
+    let content = r#"
+        leader = true
 
-            [executor]
-            chain_id = 2008
+        [executor]
+        chain_id = 2008
 
-            [storage.permanent]
-            path_prefix = "{}"
-
-            [importer]
-            external_rpc = "http://127.0.0.1:3000/"
-        "#,
-        storage.path().display()
-    );
-    expect_stdout(&[], &content, "warning: ignoring [importer] config in leader mode");
+        [importer]
+        external_rpc = "http://127.0.0.1:3000/"
+    "#;
+    expect_stdout(&[], content, "warning: ignoring [importer] config in leader mode");
 }
 
 #[test]
 fn test_leader_ignores_kafka_config() {
     // #2567: a leader ignores `[kafka]` with a warning instead of failing; the section is
     // incomplete on purpose, as a leader must tolerate it even though a follower would not
-    let storage = TempDir::new().unwrap();
-    let content = format!(
-        r#"
-            leader = true
+    let content = r#"
+        leader = true
 
-            [executor]
-            chain_id = 2008
+        [executor]
+        chain_id = 2008
 
-            [storage.permanent]
-            path_prefix = "{}"
-
-            [kafka]
-            topic = "stratus-events"
-        "#,
-        storage.path().display()
-    );
-    expect_stdout(&[], &content, "warning: ignoring [kafka] config in leader mode");
+        [kafka]
+        topic = "stratus-events"
+    "#;
+    expect_stdout(&[], content, "warning: ignoring [kafka] config in leader mode");
 }
 
 #[test]
 fn test_incomplete_kafka_fails() {
     // the all-or-none rule is enforced when the connector is created, after the node boots its
     // storage, so the storage goes to a temporary directory
-    let storage = TempDir::new().unwrap();
-    let content = format!(
-        r#"
-            follower = true
+    let content = r#"
+        follower = true
 
-            [executor]
-            chain_id = 2008
+        [executor]
+        chain_id = 2008
 
-            [storage.permanent]
-            path_prefix = "{}"
-            file_descriptors_limit = 1024
+        [storage.permanent]
+        file_descriptors_limit = 1024
 
-            [importer]
-            external_rpc = "http://127.0.0.1:3000/"
+        [importer]
+        external_rpc = "http://127.0.0.1:3000/"
 
-            [kafka]
-            bootstrap_servers = "localhost:29092"
-            client_id = "stratus-producer"
-        "#,
-        storage.path().display()
-    );
-    assert_config_error(&[], &content, "incomplete `[kafka]` configuration");
+        [kafka]
+        bootstrap_servers = "localhost:29092"
+        client_id = "stratus-producer"
+    "#;
+    assert_config_error(&[], content, "incomplete `[kafka]` configuration");
 }
 
 #[test]
 fn test_empty_sentry_url_is_ignored() {
     // an empty sentry url disables the exporter with a warning instead of failing
-    let storage = TempDir::new().unwrap();
-    let content = format!(
-        r#"
-            leader = true
+    let content = r#"
+        leader = true
 
-            [executor]
-            chain_id = 2008
+        [executor]
+        chain_id = 2008
 
-            [storage.permanent]
-            path_prefix = "{}"
-
-            [common.sentry]
-            url = ""
-        "#,
-        storage.path().display()
-    );
-    expect_stdout(&[], &content, "warning: ignoring [common.sentry] config: url is empty");
+        [common.sentry]
+        url = ""
+    "#;
+    expect_stdout(&[], content, "warning: ignoring [common.sentry] config: url is empty");
 }
 
 #[test]
 fn test_cli_empty_sentry_url_is_ignored() {
     // the CLI-provided empty url disables the exporter the same way the file's does
-    let storage = TempDir::new().unwrap();
-    let content = format!(
-        r#"
-            leader = true
+    let content = r#"
+        leader = true
 
-            [executor]
-            chain_id = 2008
-
-            [storage.permanent]
-            path_prefix = "{}"
-        "#,
-        storage.path().display()
-    );
-    expect_stdout(&["--sentry-url", ""], &content, "warning: ignoring [common.sentry] config: url is empty");
+        [executor]
+        chain_id = 2008
+    "#;
+    expect_stdout(&["--sentry-url", ""], content, "warning: ignoring [common.sentry] config: url is empty");
 }
 
 #[test]
@@ -332,23 +304,16 @@ fn test_invalid_max_response_size_fails() {
 fn test_cli_leader_flag_overrides_file_follower_mode() {
     // #2567: the CLI mode is authoritative over the file's, so `--leader` wins without a conflict
     // and the file's follower-only `[importer]` is ignored
-    let storage = TempDir::new().unwrap();
-    let content = format!(
-        r#"
-            follower = true
+    let content = r#"
+        follower = true
 
-            [executor]
-            chain_id = 2008
+        [executor]
+        chain_id = 2008
 
-            [storage.permanent]
-            path_prefix = "{}"
-
-            [importer]
-            external_rpc = "http://127.0.0.1:3000/"
-        "#,
-        storage.path().display()
-    );
-    expect_stdout(&["--leader"], &content, "warning: ignoring [importer] config in leader mode");
+        [importer]
+        external_rpc = "http://127.0.0.1:3000/"
+    "#;
+    expect_stdout(&["--leader"], content, "warning: ignoring [importer] config in leader mode");
 }
 
 #[test]
@@ -442,22 +407,15 @@ fn assert_config_valid(args: &[&str], content: &str, expected: &[&str]) -> Strin
 
 #[test]
 fn test_validate_config_valid_leader() {
-    let storage = TempDir::new().unwrap();
-    let content = format!(
-        r#"
-            leader = true
+    let content = r#"
+        leader = true
 
-            [executor]
-            chain_id = 2008
-
-            [storage.permanent]
-            path_prefix = "{}"
-        "#,
-        storage.path().display()
-    );
+        [executor]
+        chain_id = 2008
+    "#;
     let stdout = assert_config_valid(
         &[],
-        &content,
+        content,
         &[
             "configuration is valid",
             "final configuration:",
@@ -475,25 +433,18 @@ fn test_validate_config_valid_leader() {
 
 #[test]
 fn test_validate_config_valid_follower() {
-    let storage = TempDir::new().unwrap();
-    let content = format!(
-        r#"
-            follower = true
+    let content = r#"
+        follower = true
 
-            [executor]
-            chain_id = 2008
+        [executor]
+        chain_id = 2008
 
-            [storage.permanent]
-            path_prefix = "{}"
-
-            [importer]
-            external_rpc = "http://127.0.0.1:3000/"
-        "#,
-        storage.path().display()
-    );
+        [importer]
+        external_rpc = "http://127.0.0.1:3000/"
+    "#;
     assert_config_valid(
         &[],
-        &content,
+        content,
         &[
             "configuration is valid",
             "follower = true",
@@ -506,25 +457,18 @@ fn test_validate_config_valid_follower() {
 
 #[test]
 fn test_validate_config_leader_ignores_importer() {
-    let storage = TempDir::new().unwrap();
-    let content = format!(
-        r#"
-            follower = true
+    let content = r#"
+        follower = true
 
-            [executor]
-            chain_id = 2008
+        [executor]
+        chain_id = 2008
 
-            [storage.permanent]
-            path_prefix = "{}"
-
-            [importer]
-            external_rpc = "http://127.0.0.1:3000/"
-        "#,
-        storage.path().display()
-    );
+        [importer]
+        external_rpc = "http://127.0.0.1:3000/"
+    "#;
     let stdout = assert_config_valid(
         &["--leader"],
-        &content,
+        content,
         &["warning: ignoring [importer] config in leader mode", "configuration is valid", "leader = true"],
     );
     assert!(
@@ -535,29 +479,22 @@ fn test_validate_config_leader_ignores_importer() {
 
 #[test]
 fn test_validate_config_incomplete_kafka_fails() {
-    let storage = TempDir::new().unwrap();
-    let content = format!(
-        r#"
-            follower = true
+    let content = r#"
+        follower = true
 
-            [executor]
-            chain_id = 2008
+        [executor]
+        chain_id = 2008
 
-            [storage.permanent]
-            path_prefix = "{}"
+        [importer]
+        external_rpc = "http://127.0.0.1:3000/"
 
-            [importer]
-            external_rpc = "http://127.0.0.1:3000/"
-
-            [kafka]
-            bootstrap_servers = "localhost:29092"
-            client_id = "stratus-producer"
-        "#,
-        storage.path().display()
-    );
+        [kafka]
+        bootstrap_servers = "localhost:29092"
+        client_id = "stratus-producer"
+    "#;
     let mut command = Command::new(env!("CARGO_BIN_EXE_stratus"));
     command.arg("--validate-config");
-    let config = with_config(&mut command, &content);
+    let config = with_config(&mut command, content);
     let output = run(command);
     drop(config);
     assert!(!output.status.success(), "expected the binary to fail, but it succeeded");
@@ -571,28 +508,21 @@ fn test_validate_config_incomplete_kafka_fails() {
 
 #[test]
 fn test_validate_config_follower_block_mode_warns() {
-    let storage = TempDir::new().unwrap();
-    let content = format!(
-        r#"
-            follower = true
+    let content = r#"
+        follower = true
 
-            [executor]
-            chain_id = 2008
+        [executor]
+        chain_id = 2008
 
-            [storage.permanent]
-            path_prefix = "{}"
+        [importer]
+        external_rpc = "http://127.0.0.1:3000/"
 
-            [importer]
-            external_rpc = "http://127.0.0.1:3000/"
-
-            [miner]
-            block_mode = "1s"
-        "#,
-        storage.path().display()
-    );
+        [miner]
+        block_mode = "1s"
+    "#;
     assert_config_valid(
         &[],
-        &content,
+        content,
         &[
             "warning: conflicting `miner.block_mode`: a follower's miner can only start as external",
             "configuration is valid",
@@ -602,23 +532,16 @@ fn test_validate_config_follower_block_mode_warns() {
 
 #[test]
 fn test_validate_config_unknown_field_warns() {
-    let storage = TempDir::new().unwrap();
-    let content = format!(
-        r#"
-            leader = true
-            misspelled_field = "typo"
+    let content = r#"
+        leader = true
+        misspelled_field = "typo"
 
-            [executor]
-            chain_id = 2008
-
-            [storage.permanent]
-            path_prefix = "{}"
-        "#,
-        storage.path().display()
-    );
+        [executor]
+        chain_id = 2008
+    "#;
     assert_config_valid(
         &[],
-        &content,
+        content,
         &[
             "warning: unknown field in config file, ignored | field=misspelled_field",
             "configuration is valid",

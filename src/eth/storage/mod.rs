@@ -8,6 +8,8 @@ pub use permanent::RocksPermanentStorage;
 pub use stratus_storage::MinedPointInTime;
 pub use stratus_storage::StratusStorage;
 pub use temporary::InMemoryTemporaryStorage;
+pub use temporary::JournalBlock;
+pub use temporary::TransactionJournal;
 pub use types::FoundAt;
 mod cache;
 mod error;
@@ -104,14 +106,13 @@ mod tests {
         }
 
         pub fn new_test() -> Result<Self, StorageError> {
-            let temp = InMemoryTemporaryStorage::new(0.into());
-
             // Create a temporary directory for RocksDB
-            let rocks_dir = tempdir().expect("Failed to create temporary directory for tests");
-            let rocks_path_prefix = rocks_dir.path().to_str().unwrap().to_string();
+            let rocks_dir = tempdir().expect("Failed to create temporary directory for tests").keep();
+            let _ = crate::globals::DATABASE_PATH.set(rocks_dir.clone());
+            let db_path = rocks_dir.join("rocksdb").to_string_lossy().into_owned();
 
             let perm = RocksPermanentStorage::new(
-                Some(rocks_path_prefix.clone()),
+                db_path,
                 std::time::Duration::from_secs(240),
                 super::permanent::RocksCfCacheConfig::default(),
                 true,
@@ -120,6 +121,7 @@ mod tests {
                 1024,
             )
             .expect("Failed to create RocksPermanentStorage for tests");
+            let temp = InMemoryTemporaryStorage::from_perm_storage(&perm).expect("create temporary storage");
 
             let cache = CacheConfig {
                 account_history_cache_capacity: 20000,
@@ -133,7 +135,7 @@ mod tests {
                 cache,
                 #[cfg(feature = "dev")]
                 super::permanent::PermanentStorageConfig {
-                    rocks_path_prefix: Some(rocks_path_prefix),
+                    database_path: rocks_dir,
                     rocks_shutdown_timeout: std::time::Duration::from_secs(240),
                     rocks_cf_cache: super::permanent::RocksCfCacheConfig::default(),
                     rocks_disable_sync_write: false,

@@ -129,6 +129,16 @@ impl From<TransactionExecution> for TransactionInput {
     }
 }
 
+impl From<&TransactionExecution> for TransactionInput {
+    fn from(value: &TransactionExecution) -> Self {
+        Self {
+            transaction_info: value.info,
+            execution_info: value.input.clone().into(),
+            signature: value.signature,
+        }
+    }
+}
+
 impl From<TransactionExecution> for AlloyReceipt {
     fn from(value: TransactionExecution) -> Self {
         let alloy_logs = value.create_alloy_logs();

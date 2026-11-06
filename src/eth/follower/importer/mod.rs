@@ -57,7 +57,7 @@ static LATEST_FETCHED_BLOCK_TIME: AtomicU64 = AtomicU64::new(0);
 /// Only sets the external RPC current block number if it is equals or greater than the current one.
 fn set_external_rpc_current_block(new_number: BlockNumber) {
     LATEST_FETCHED_BLOCK_TIME.store(chrono::Utc::now().timestamp() as u64, Ordering::Relaxed);
-    let _ = EXTERNAL_RPC_CURRENT_BLOCK.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current_number| {
+    let _ = EXTERNAL_RPC_CURRENT_BLOCK.try_update(Ordering::Relaxed, Ordering::Relaxed, |current_number| {
         Some(current_number.max(new_number.as_u64()))
     });
 }

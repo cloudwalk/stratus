@@ -4,18 +4,21 @@ use stratus_metrics::timed;
 use tracing::Span;
 
 use crate::eth::executor::AccessListOutput;
+use crate::eth::executor::Executor;
 use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::types::state::AccountOriginalsReader;
 use crate::eth::executor::types::state::Complete;
 #[cfg(feature = "dev")]
 use crate::eth::genesis::GenesisConfig;
+use crate::eth::miner::Miner;
 use crate::eth::rpc::BlockFilter;
 use crate::eth::rpc::LogFilter;
 use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StorageCache;
 use crate::eth::storage::StorageError;
+use crate::eth::storage::TransactionJournal;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::storage::resolve_pending;
@@ -138,6 +141,40 @@ impl StratusStorage {
 
     pub fn set_pending_header(&self, number: BlockNumber, timestamp: UnixTime) {
         self.temp.set_pending_header(number, timestamp);
+    }
+
+    /// Replays every journaled block left by a previous run, committing them to permanent storage.
+    pub fn recover_transaction_journal(&self, executor: &Executor, miner: &Miner) -> anyhow::Result<()> {
+        let mined = self.read_mined_block_number();
+        for number in TransactionJournal::journaled_blocks()? {
+            // every listed journal already exists, so the fresh timestamp is discarded
+            let mut journal = TransactionJournal::open(BlockInfo::new_at_now(number))?;
+            if mined >= number {
+                journal.retire()?;
+                continue;
+            }
+
+            let Some(journal_block) = journal.block()? else {
+                continue;
+            };
+
+            if journal_block.transactions.is_empty() && journal.is_live() {
+                // An empty live journal belongs to the pending block being built, so there is nothing to recover.
+                continue;
+            }
+
+            // Re-executing the transactions re-appends them to the journal file; removing the journal handle
+            // from the pending state keeps the file as-is.
+            let _pending_journal = self.temp.take_pending_journal();
+            self.set_pending_header(journal_block.header.number, *journal_block.header.timestamp);
+            for transaction in journal_block.transactions {
+                executor.execute_local_transaction(transaction, None)?;
+            }
+
+            miner.mine_local_and_commit()?;
+            journal.retire()?;
+        }
+        Ok(())
     }
 
     pub fn set_mined_block_number(&self, block_number: BlockNumber) {
