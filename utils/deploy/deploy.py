@@ -31,9 +31,11 @@ class Config:
     external_rpc_timeout: str = "2s"
     sync_interval: str = "100ms"
     external_rpc_max_request_size_bytes: str = "10485760"
-    total_check_attempts: int = 10
+    total_check_attempts: int = 30
     required_consecutive_checks: int = 3
     sleep_interval: float = 0.5
+    state_check_attempts: int = 30
+    state_check_interval: float = 1.0
 
 
 # Custom exception
@@ -137,25 +139,34 @@ def validate_health(address: str, role: NodeRole) -> None:
 
 
 # Function to validate node state
-def validate_state(address: str, expected_state: bool, role: NodeRole) -> None:
-    state = send_request(url=f"http://{address}", method="stratus_state", params=[])
-    log(message=f"Validating {role.name} state...", address=address)
-    if state.get("result", {}).get("is_leader") != expected_state:
+# Role changes are asynchronous, so retry until the node reports the expected state.
+def validate_state(
+    address: str,
+    expected_state: bool,
+    role: NodeRole,
+    total_attempts: int,
+    sleep_interval: float,
+) -> None:
+    for i in range(1, total_attempts + 1):
+        state = send_request(url=f"http://{address}", method="stratus_state", params=[])
+        log(message=f"Validating {role.name} state (Attempt {i})...", address=address)
+        if state.get("result", {}).get("is_leader") == expected_state:
+            log(
+                message=f"{role.name} node is correctly identified as expected (Attempt {i}).",
+                address=address,
+                response=state,
+            )
+            return
         log(
-            message=f"Error: {role.name} node is not identified as expected.",
+            message=f"Error: {role.name} node is not identified as expected (Attempt {i}).",
             address=address,
             response=state,
         )
-        raise DeploymentError(
-            f"{role.name} node is not identified as expected",
-            error_type="StateCheckError",
-        )
-    else:
-        log(
-            message=f"{role.name} node is correctly identified as expected.",
-            address=address,
-            response=state,
-        )
+        time.sleep(sleep_interval)
+    raise DeploymentError(
+        f"{role.name} node is not identified as expected",
+        error_type="StateCheckError",
+    )
 
 
 # Function to toggle transactions
@@ -394,11 +405,15 @@ def main() -> None:
                     address=config.leader_address,
                     expected_state=True,
                     role=NodeRole.LEADER,
+                    total_attempts=config.state_check_attempts,
+                    sleep_interval=config.state_check_interval,
                 )
                 validate_state(
                     address=config.follower_address,
                     expected_state=False,
                     role=NodeRole.FOLLOWER,
+                    total_attempts=config.state_check_attempts,
+                    sleep_interval=config.state_check_interval,
                 )
 
                 if not config.auto_approve:
@@ -518,6 +533,8 @@ def main() -> None:
                     address=config.leader_address,
                     expected_state=False,
                     role=NodeRole.FOLLOWER,
+                    total_attempts=config.state_check_attempts,
+                    sleep_interval=config.state_check_interval,
                 )
 
                 # Check if any leader or follower are leaders
@@ -548,6 +565,8 @@ def main() -> None:
                     address=config.follower_address,
                     expected_state=True,
                     role=NodeRole.LEADER,
+                    total_attempts=config.state_check_attempts,
+                    sleep_interval=config.state_check_interval,
                 )
 
                 # Enable transactions on new Leader and Follower

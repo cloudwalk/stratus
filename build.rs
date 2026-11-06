@@ -389,7 +389,7 @@ pub fn create_client_scope(name: &str) -> String {{
 {}
         _ => ("other", name),
     }};
-    format!("{{scope}}::{{name}}")
+    format!("{{scope}}::{{}}", name.trim_start_matches('-'))
 }}
 "#,
         match_arms.join("")

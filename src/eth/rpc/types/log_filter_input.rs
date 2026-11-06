@@ -15,8 +15,8 @@ use crate::eth::storage::StratusStorage;
 use crate::eth::types::Address;
 use crate::eth::types::Hash;
 use crate::eth::types::LogTopic;
-use crate::eth::types::PointInTime;
 use crate::eth::types::StratusError;
+use crate::eth::types::TargetState;
 
 /// JSON-RPC input used in methods like `eth_getLogs` and `eth_subscribe`.
 #[serde_as]
@@ -50,26 +50,26 @@ impl LogFilterInput {
         // parse point-in-time
         let (from, to) = match self.block_hash {
             Some(hash) => {
-                let from_to = storage.translate_to_point_in_time(BlockFilter::Hash(hash))?;
+                let from_to = storage.translate_to_target_state(BlockFilter::Hash(hash))?;
                 (from_to, from_to)
             }
             None => {
-                let from = storage.translate_to_point_in_time(self.from_block.unwrap_or(BlockFilter::Latest))?;
-                let to = storage.translate_to_point_in_time(self.to_block.unwrap_or(BlockFilter::Latest))?;
+                let from = storage.translate_to_target_state(self.from_block.unwrap_or(BlockFilter::Latest))?;
+                let to = storage.translate_to_target_state(self.to_block.unwrap_or(BlockFilter::Latest))?;
                 (from, to)
             }
         };
 
         // translate point-in-time to block according to context
         let from = match from {
-            PointInTime::Pending => storage.read_pending_block_header().number,
-            PointInTime::Latest => storage.read_mined_block_number(),
-            PointInTime::Past(number) => number,
+            TargetState::Pending => storage.read_pending_block_header().number,
+            TargetState::Latest => storage.read_mined_block_number(),
+            TargetState::Past(number) | TargetState::LatestPinned(number) => number,
         };
         let to = match to {
-            PointInTime::Pending => None,
-            PointInTime::Latest => None,
-            PointInTime::Past(number) => Some(number),
+            TargetState::Pending => None,
+            TargetState::Latest => None,
+            TargetState::Past(number) | TargetState::LatestPinned(number) => Some(number),
         };
 
         if let Some(to_block) = to

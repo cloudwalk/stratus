@@ -1,0 +1,15 @@
+# Local development configuration for the Stratus follower node.
+# Passed explicitly with `--config config/stratus-follower.toml` (see `just stratus-follower`).
+
+[rpc]
+address = "0.0.0.0:3001"
+
+[executor]
+chain_id = 2008
+
+[importer]
+external_rpc = "http://localhost:3000/"
+external_rpc_ws = "ws://localhost:3000/"
+
+[common.tracing]
+filter = "info,stratus::eth::rpc::rpc_subscriptions::rx=off,stratus::eth::consensus::rx=off,stratus::eth::consensus=off,jsonrpsee-server=debug"

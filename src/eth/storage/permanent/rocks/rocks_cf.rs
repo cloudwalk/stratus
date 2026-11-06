@@ -17,10 +17,10 @@ use rocksdb::IteratorMode;
 use rocksdb::ReadOptions;
 use rocksdb::WriteBatch;
 use serde::Serialize;
+#[cfg(feature = "rocks_metrics")]
+use stratus_metrics as metrics;
 
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
-#[cfg(feature = "rocks_metrics")]
-use crate::infra::metrics;
 
 /// A RocksDB Column Family (CF) reference.
 ///

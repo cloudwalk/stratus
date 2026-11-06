@@ -126,7 +126,7 @@ export class Account implements Addressable {
             nonce,
             type: 1,
             data: "0xdeadbeef",
-            accessList: ACCESS_LIST,
+            accessList: [],
         });
     }
 
@@ -145,7 +145,7 @@ export class Account implements Addressable {
             nonce,
             type: 2,
             data: "0xdeadbeef",
-            accessList: ACCESS_LIST,
+            accessList: [],
         });
     }
 
@@ -164,9 +164,9 @@ export class Account implements Addressable {
             nonce,
             type: 3,
             data: "0xdeadbeef",
-            accessList: ACCESS_LIST,
-            maxFeePerBlobGas: 1,
-            blobVersionedHashes: [BLOB_VERSIONED_HASH],
+            accessList: [],
+            maxFeePerBlobGas: 0,
+            blobVersionedHashes: [],
         });
     }
 
@@ -185,10 +185,81 @@ export class Account implements Addressable {
             nonce,
             type: 4,
             data: "0xdeadbeef",
-            accessList: ACCESS_LIST,
-            authorizationList: [createAuthorization(ALICE.privateKey, counterParty, 0)],
+            accessList: [],
+            authorizationList: [],
         });
     }
+}
+
+// -----------------------------------------------------------------------------
+// Transactions signed over unsupported fields: must be rejected by the RPC.
+// -----------------------------------------------------------------------------
+
+export async function signUnsupportedAccessList(
+    signer: Account,
+    counterParty: string,
+    nonce: number = 0,
+): Promise<string> {
+    return await signer.signer().signTransaction({
+        to: counterParty,
+        value: 0,
+        chainId: CHAIN_ID_DEC,
+        gasPrice: 2000000000,
+        gasLimit: 1_000_000,
+        nonce,
+        type: 1,
+        accessList: ACCESS_LIST,
+    });
+}
+
+export async function signUnsupportedPriorityFee(
+    signer: Account,
+    counterParty: string,
+    nonce: number = 0,
+): Promise<string> {
+    return await signer.signer().signTransaction({
+        to: counterParty,
+        value: 0,
+        chainId: CHAIN_ID_DEC,
+        maxFeePerGas: 2000000000,
+        maxPriorityFeePerGas: 1000000000, // differs from maxFeePerGas
+        gasLimit: 1_000_000,
+        nonce,
+        type: 2,
+    });
+}
+
+export async function signUnsupportedBlobTx(signer: Account, counterParty: string, nonce: number = 0): Promise<string> {
+    return await signer.signer().signTransaction({
+        to: counterParty,
+        value: 0,
+        chainId: CHAIN_ID_DEC,
+        maxFeePerGas: 2000000000,
+        maxPriorityFeePerGas: 2000000000,
+        gasLimit: 1_000_000,
+        nonce,
+        type: 3,
+        maxFeePerBlobGas: 1,
+        blobVersionedHashes: [BLOB_VERSIONED_HASH],
+    });
+}
+
+export async function signUnsupportedAuthorization(
+    signer: Account,
+    counterParty: string,
+    nonce: number = 0,
+): Promise<string> {
+    return await signer.signer().signTransaction({
+        to: counterParty,
+        value: 0,
+        chainId: CHAIN_ID_DEC,
+        maxFeePerGas: 2000000000,
+        maxPriorityFeePerGas: 2000000000,
+        gasLimit: 1_000_000,
+        nonce,
+        type: 4,
+        authorizationList: [createAuthorization(signer.privateKey, counterParty, 0)],
+    });
 }
 
 export const ALICE = new Account(

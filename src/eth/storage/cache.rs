@@ -26,12 +26,26 @@ pub struct StorageCache {
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct CacheConfig {
     /// Capacity of account history cache
-    #[arg(long = "account-history-cache-capacity", env = "ACCOUNT_HISTORY_CACHE_CAPACITY", default_value = "20000")]
+    #[arg(
+        id = "storage.cache.account_history_cache_capacity",
+        long = "account-history-cache-capacity",
+        default_value = "20000"
+    )]
     pub account_history_cache_capacity: usize,
 
     /// Capacity of slot history cache
-    #[arg(long = "slot-history-cache-capacity", env = "SLOT_HISTORY_CACHE_CAPACITY", default_value = "100000")]
+    #[arg(id = "storage.cache.slot_history_cache_capacity", long = "slot-history-cache-capacity", default_value = "100000")]
     pub slot_history_cache_capacity: usize,
+}
+
+#[cfg(test)]
+impl Default for CacheConfig {
+    fn default() -> Self {
+        Self {
+            account_history_cache_capacity: 20000,
+            slot_history_cache_capacity: 100000,
+        }
+    }
 }
 
 impl CacheConfig {

@@ -1,13 +1,14 @@
 //! Helper functions for parsing RPC requests and responses.
 
+use alloy_rlp::Decodable;
 use jsonrpsee::Extensions;
 use jsonrpsee::types::ParamsSequence;
-use rlp::Decodable;
 use tracing::Span;
 
 use super::middleware::Authentication;
 use crate::eth::rpc::RpcClientApp;
 use crate::eth::rpc::RpcError;
+use crate::eth::rpc::TransactionDecodeError;
 use crate::ext::type_basename;
 use crate::infra::tracing::EnteredWrap;
 
@@ -77,8 +78,11 @@ where
 ///
 /// https://ethereum.org/en/developers/docs/data-structures-and-encoding/rlp
 pub fn parse_rpc_rlp<T: Decodable>(value: &[u8]) -> Result<T, RpcError> {
-    match rlp::decode::<T>(value) {
+    let mut buf = value;
+    match T::decode(&mut buf) {
         Ok(trx) => Ok(trx),
-        Err(e) => Err(RpcError::TransactionInvalid { decode_error: e.to_string() }),
+        Err(e) => Err(RpcError::TransactionInvalid {
+            decode_error: TransactionDecodeError::Custom(e.to_string()),
+        }),
     }
 }

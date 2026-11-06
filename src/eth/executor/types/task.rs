@@ -8,7 +8,6 @@ use tracing::Span;
 use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::RevmResultAndState;
-use crate::eth::executor::evm::types::CallExecutionInput;
 use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::ExecutionMetrics;
 use crate::eth::executor::evm::types::InspectorInput;
@@ -30,18 +29,6 @@ pub struct ExecutionTask<Input: EvmInput> {
 pub struct InspectionTask {
     pub input: InspectorInput,
     pub response_tx: oneshot::Sender<Result<GethTrace, StratusError>>,
-}
-
-#[derive(Debug, Clone, strum::Display)]
-pub enum EvmRoute {
-    #[strum(to_string = "transaction")]
-    Transaction(TransactionExecutionInput),
-
-    #[strum(to_string = "call_present")]
-    CallPresent(CallExecutionInput),
-
-    #[strum(to_string = "call_past")]
-    CallPast(CallExecutionInput),
 }
 
 impl<T: Task + Send> From<T> for EvmTask<T> {

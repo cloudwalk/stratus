@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use stratus_macros::timed;
+use stratus_metrics::timed;
 
 use crate::GlobalState;
 use crate::eth::executor::Executor;

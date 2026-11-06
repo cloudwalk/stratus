@@ -2,7 +2,6 @@
 
 use clap::Parser;
 use display_json::DebugAsJson;
-use serde::Serialize;
 
 use crate::utils::GIGABYTE;
 
@@ -20,76 +19,68 @@ const DEFAULT_BLOCK_CHANGES_CACHE: usize = 2 * GIGABYTE;
 ///
 /// This replaces the previous cache_size_multiplier approach with
 /// individual cache size settings for each Column Family.
-#[derive(DebugAsJson, Clone, Parser, Serialize)]
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct RocksCfCacheConfig {
     /// Cache size in bytes for the 'accounts' column family.
-    #[arg(
-        long = "rocks-cf-cache-accounts",
-        env = "ROCKS_CF_CACHE_ACCOUNTS",
-        default_value_t = DEFAULT_ACCOUNTS_CACHE
-    )]
+    #[arg(id = "storage.permanent.cf_cache.accounts", long = "rocks-cf-cache-accounts", default_value_t = DEFAULT_ACCOUNTS_CACHE)]
     pub accounts: usize,
 
     /// Cache size in bytes for the 'accounts_history' column family.
     #[arg(
+        id = "storage.permanent.cf_cache.accounts_history",
         long = "rocks-cf-cache-accounts-history",
-        env = "ROCKS_CF_CACHE_ACCOUNTS_HISTORY",
         default_value_t = DEFAULT_ACCOUNTS_HISTORY_CACHE
     )]
     pub accounts_history: usize,
 
     /// Cache size in bytes for the 'account_slots' column family.
-    #[arg(
-        long = "rocks-cf-cache-account-slots",
-        env = "ROCKS_CF_CACHE_ACCOUNT_SLOTS",
-        default_value_t = DEFAULT_ACCOUNT_SLOTS_CACHE
-    )]
+    #[arg(id = "storage.permanent.cf_cache.account_slots", long = "rocks-cf-cache-account-slots", default_value_t = DEFAULT_ACCOUNT_SLOTS_CACHE)]
     pub account_slots: usize,
 
     /// Cache size in bytes for the 'account_slots_history' column family.
     #[arg(
+        id = "storage.permanent.cf_cache.account_slots_history",
         long = "rocks-cf-cache-account-slots-history",
-        env = "ROCKS_CF_CACHE_ACCOUNT_SLOTS_HISTORY",
         default_value_t = DEFAULT_ACCOUNT_SLOTS_HISTORY_CACHE
     )]
     pub account_slots_history: usize,
 
     /// Cache size in bytes for the 'transactions' column family.
     #[arg(
+        id = "storage.permanent.cf_cache.transactions",
         long = "rocks-cf-cache-transactions",
-        env = "ROCKS_CF_CACHE_TRANSACTIONS",
         default_value_t = DEFAULT_TRANSACTIONS_CACHE
     )]
     pub transactions: usize,
 
     /// Cache size in bytes for the 'blocks_by_number' column family.
     #[arg(
+        id = "storage.permanent.cf_cache.blocks_by_number",
         long = "rocks-cf-cache-blocks-by-number",
-        env = "ROCKS_CF_CACHE_BLOCKS_BY_NUMBER",
         default_value_t = DEFAULT_BLOCKS_BY_NUMBER_CACHE
     )]
     pub blocks_by_number: usize,
 
     /// Cache size in bytes for the 'blocks_by_hash' column family.
     #[arg(
+        id = "storage.permanent.cf_cache.blocks_by_hash",
         long = "rocks-cf-cache-blocks-by-hash",
-        env = "ROCKS_CF_CACHE_BLOCKS_BY_HASH",
         default_value_t = DEFAULT_BLOCKS_BY_HASH_CACHE
     )]
     pub blocks_by_hash: usize,
 
     /// Cache size in bytes for the 'blocks_by_timestamp' column family.
     #[arg(
+        id = "storage.permanent.cf_cache.blocks_by_timestamp",
         long = "rocks-cf-cache-blocks-by-timestamp",
-        env = "ROCKS_CF_CACHE_BLOCKS_BY_TIMESTAMP",
         default_value_t = DEFAULT_BLOCKS_BY_TIMESTAMP_CACHE
     )]
     pub blocks_by_timestamp: usize,
 
     /// Cache size in bytes for the 'block_changes' column family.
     #[arg(
+        id = "storage.permanent.cf_cache.block_changes",
         long = "rocks-cf-cache-block-changes",
-        env = "ROCKS_CF_CACHE_BLOCK_CHANGES",
         default_value_t = DEFAULT_BLOCK_CHANGES_CACHE
     )]
     pub block_changes: usize,

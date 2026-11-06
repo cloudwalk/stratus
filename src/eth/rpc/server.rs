@@ -36,6 +36,7 @@ use parking_lot::RwLock;
 use serde_json::json;
 use serde_json::value::RawValue;
 use serde_json::value::to_raw_value;
+use stratus_metrics as metrics;
 use tokio::runtime::Handle;
 use tokio::select;
 use tokio::sync::Semaphore;
@@ -63,6 +64,7 @@ use crate::eth::follower::ImporterError;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::follower::importer::ImporterConsensus;
+use crate::eth::follower::importer::ImporterRuntime;
 use crate::eth::follower::importer::send_block_to_kafka;
 use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
@@ -74,6 +76,7 @@ use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::rpc::RpcSubscriptions;
+use crate::eth::rpc::exporter::ExporterRuntime;
 use crate::eth::rpc::middleware::TransactionTracingIdentifiers;
 use crate::eth::rpc::middleware::decode_input_arguments;
 use crate::eth::rpc::next_rpc_param;
@@ -82,7 +85,6 @@ use crate::eth::rpc::pagination;
 use crate::eth::rpc::parser::RpcExtensionsExt;
 use crate::eth::rpc::parser::parse_rpc_rlp;
 use crate::eth::rpc::subscriptions::RpcSubscriptionsHandles;
-use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::Address;
@@ -93,14 +95,15 @@ use crate::eth::types::DecodeInputError;
 use crate::eth::types::Hash;
 #[cfg(feature = "dev")]
 use crate::eth::types::Nonce;
-use crate::eth::types::PointInTime;
 use crate::eth::types::SlotIndex;
 #[cfg(feature = "dev")]
 use crate::eth::types::SlotValue;
 use crate::eth::types::StateError;
 use crate::eth::types::StratusError;
+use crate::eth::types::TargetState;
 use crate::eth::types::TransactionInput;
 use crate::eth::types::TransactionStage;
+use crate::eth::types::UnexpectedError;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
 use crate::ext::InfallibleExt;
@@ -111,13 +114,13 @@ use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::infra::build_info;
 use crate::infra::kafka::KafkaConfig;
-use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
 // -----------------------------------------------------------------------------
 // Server
 // -----------------------------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 #[derive(Clone, derive_new::new)]
 pub struct Server {
     // services
@@ -125,6 +128,8 @@ pub struct Server {
     pub executor: Arc<Executor>,
     pub miner: Arc<Miner>,
     pub importer: Arc<RwLock<Option<Arc<ImporterConsensus>>>>,
+    pub importer_runtime: Arc<RwLock<Option<ImporterRuntime>>>,
+    pub exporter_runtime: Arc<RwLock<Option<ExporterRuntime>>>,
 
     // config
     pub app_config: StratusConfig,
@@ -166,6 +171,7 @@ impl Server {
                 // If the health state changes to unhealthy, stop the server and subscriptions and recreate them (causing all connections to be dropped)
                 _ = health.wait_for_change(|healthy| GlobalState::restart_on_unhealthy() && !healthy) => {
                     tracing::info!("health state changed to unhealthy, restarting the rpc server");
+                    metrics::inc_rpc_server_restarts();
                     let _ = server_handle.stop();
                     subscriptions.abort();
                     join!(server_handle.stopped(), subscriptions.stopped());
@@ -174,6 +180,14 @@ impl Server {
         };
         let res = join!(server_handle.stopped(), subscriptions.stopped(), health_worker_handle);
         res.2?;
+
+        if let Some(importer_runtime) = this.take_importer_runtime() {
+            importer_runtime.shutdown().await?;
+        }
+
+        if let Some(exporter_runtime) = this.take_exporter_runtime() {
+            exporter_runtime.shutdown().await?;
+        }
         Ok(())
     }
 
@@ -264,6 +278,23 @@ impl Server {
         *self.importer.write() = importer;
     }
 
+    pub fn set_importer_runtime(&self, importer_runtime: Option<ImporterRuntime>) {
+        *self.importer_runtime.write() = importer_runtime;
+    }
+
+    fn take_importer_runtime(&self) -> Option<ImporterRuntime> {
+        self.importer_runtime.write().take()
+    }
+
+    fn take_exporter_runtime(&self) -> Option<ExporterRuntime> {
+        self.exporter_runtime.write().take()
+    }
+
+    /// Handle of the dedicated exporter runtime for dispatching importer-facing requests.
+    fn exporter_handle(&self) -> Option<Handle> {
+        self.exporter_runtime.read().as_ref().map(|runtime| runtime.handle().clone())
+    }
+
     async fn health(&self) -> bool {
         match GlobalState::get_node_mode() {
             NodeMode::Leader | NodeMode::FakeLeader => true,
@@ -321,7 +352,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_async_method("stratus_changeToLeader", stratus_change_to_leader)?;
     module.register_async_method("stratus_changeToFollower", stratus_change_to_follower)?;
     module.register_async_method("stratus_initImporter", stratus_init_importer)?;
-    module.register_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
+    module.register_async_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
     module.register_async_method("stratus_changeMinerMode", stratus_change_miner_mode)?;
     module.register_async_method("stratus_emitBlockEvents", stratus_emit_block_events)?;
 
@@ -343,11 +374,21 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("eth_gasPrice", eth_gas_price)?;
 
     // stratus importing helpers
-    module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
-    module.register_blocking_method("stratus_getBlockWithChanges", stratus_get_block_with_changes)?;
+    // dispatched to the dedicated exporter runtime, so importer requests cannot stall behind a
+    // saturated main blocking pool (which makes followers fall behind)
+    module.register_async_method("stratus_getBlockAndReceipts", |params, ctx, ext| {
+        dispatch_exporter_method(stratus_get_block_and_receipts, params, ctx, ext)
+    })?;
+    module.register_async_method("stratus_getBlockWithChanges", |params, ctx, ext| {
+        dispatch_exporter_method(stratus_get_block_with_changes, params, ctx, ext)
+    })?;
 
     // block
-    module.register_blocking_method("eth_blockNumber", eth_block_number)?;
+    // `eth_blockNumber` is on the follower sync critical path (polled every sync interval), so it
+    // is also dispatched to the dedicated exporter runtime
+    module.register_async_method("eth_blockNumber", |params, ctx, ext| {
+        dispatch_exporter_method(eth_block_number, params, ctx, ext)
+    })?;
     module.register_blocking_method("eth_getBlockByNumber", eth_get_block_by_number)?;
     module.register_blocking_method("eth_getBlockByHash", eth_get_block_by_hash)?;
     module.register_blocking_method("stratus_getBlockByTimestamp", stratus_get_block_by_timestamp)?;
@@ -379,6 +420,27 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_subscription("eth_subscribe", "eth_subscription", "eth_unsubscribe", eth_subscribe)?;
 
     Ok(module)
+}
+
+/// Dispatches an importer-facing blocking method onto the dedicated exporter runtime.
+///
+/// These methods are on the follower sync critical path: when the main blocking pool saturates with
+/// external traffic (`eth_call`, `eth_getLogs`, ...), queued importer requests stall and followers
+/// fall behind. The exporter runtime's dedicated blocking pool keeps them isolated. Falls back to
+/// the main runtime's blocking pool when the exporter runtime is no longer available (shutdown).
+async fn dispatch_exporter_method<T, F>(handler: F, params: Params<'static>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<T, StratusError>
+where
+    T: Send + 'static,
+    F: FnOnce(Params<'static>, Arc<RpcContext>, Extensions) -> Result<T, StratusError> + Send + 'static,
+{
+    let response = match ctx.server.exporter_handle() {
+        Some(handle) => handle.spawn_blocking(move || handler(params, ctx, ext)).await,
+        None => tokio::task::spawn_blocking(move || handler(params, ctx, ext)).await,
+    };
+    response.unwrap_or_else(|error| {
+        tracing::error!(reason = ?error, "exporter blocking method failed to join");
+        Err(StratusError::Unexpected(UnexpectedError::Unexpected(anyhow::anyhow!(error))))
+    })
 }
 
 // -----------------------------------------------------------------------------
@@ -518,7 +580,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     }
 
     tracing::info!("shutting down importer");
-    let shutdown_importer_result = stratus_shutdown_importer(Params::new(None), &ctx, &ext);
+    let shutdown_importer_result = stratus_shutdown_importer(Params::new(None), Arc::clone(&ctx), ext.clone()).await;
     match shutdown_importer_result {
         Ok(_) => tracing::info!("importer shutdown successfully"),
         Err(StratusError::Importer(ImporterError::AlreadyShutdown)) => {
@@ -623,21 +685,22 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     })?;
 
     let importer_config = ImporterConfig {
-        external_rpc,
+        external_rpc: Some(external_rpc),
         external_rpc_ws: Some(external_rpc_ws),
         external_rpc_timeout,
         sync_interval,
-        enable_block_changes_replication: std::env::var("ENABLE_BLOCK_CHANGES_REPLICATION")
-            .ok()
-            .is_some_and(|val| val == "1" || val == "true"),
-        forward_access_list: !matches!(std::env::var("FORWARD_ACCESS_LIST").as_deref(), Ok("0") | Ok("false")),
+        // These values were previously configurable via environment variables only;
+        // now they use the same defaults as `[importer]` in the config file.
+        enable_block_changes_replication: false,
+        async_threads: 4,
+        forward_access_list: true,
         stop_at_block: None,
     };
 
     importer_config.init_follower_importer(ctx).await
 }
 
-fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) -> Result<JsonValue, StratusError> {
+async fn stratus_shutdown_importer(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     ext.authentication().auth_admin()?;
     if GlobalState::get_node_mode() != NodeMode::Follower {
         tracing::error!("node is currently not a follower");
@@ -650,9 +713,17 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) 
     }
 
     ctx.server.set_importer(None);
+    let importer_runtime = ctx.server.take_importer_runtime();
 
     const TASK_NAME: &str = "rpc-server::importer-shutdown";
     GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
+
+    if let Some(importer_runtime) = importer_runtime
+        && let Err(error) = importer_runtime.shutdown().await
+    {
+        tracing::error!(reason = ?error, "failed to shutdown dedicated importer runtime");
+        return Err(ImporterError::InitError.into());
+    }
 
     Ok(json!(true))
 }
@@ -1150,9 +1221,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     if let Some(to_address) = call.to
         && !call.data.is_empty()
     {
-        ctx.server
-            .executor
-            .validate_to_is_contract(to_address, ExecutionKind::RPC(PointInTime::Latest))?;
+        ctx.server.executor.validate_to_is_contract(to_address, TargetState::Latest)?;
     }
 
     let block_number = ctx.server.storage.read_mined_block_number();
@@ -1160,7 +1229,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     match ctx
         .server
         .executor
-        .execute_local_call::<CallExecutionOutput>(call, ExecutionKind::call_from_pit(PointInTime::Latest, block_number))
+        .execute_local_call::<CallExecutionOutput>(call, TargetState::LatestPinned(block_number))
     {
         // result is success
         Ok(result) if result.success => {
@@ -1197,17 +1266,15 @@ fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<CallExecutionOut
     tracing::info!(%filter, "executing eth_call");
 
     // execute
-    let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
-    let block_number = ctx.server.storage.translate_to_block_number(filter)?;
+    let target_state = ctx.server.storage.translate_to_pinned_target_state(filter)?;
 
     if let Some(to_address) = call.to
         && !call.data.is_empty()
     {
-        ctx.server.executor.validate_to_is_contract(to_address, ExecutionKind::RPC(point_in_time))?;
+        ctx.server.executor.validate_to_is_contract(to_address, target_state)?;
     }
-    ctx.server
-        .executor
-        .execute_local_call(call, ExecutionKind::call_from_pit(point_in_time, block_number))
+
+    ctx.server.executor.execute_local_call(call, target_state)
 }
 
 fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
@@ -1310,14 +1377,12 @@ fn stratus_access_list(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
     if let Some(to_address) = call.to
         && !call.data.is_empty()
     {
-        ctx.server
-            .executor
-            .validate_to_is_contract(to_address, ExecutionKind::RPC(PointInTime::Latest))?;
+        ctx.server.executor.validate_to_is_contract(to_address, TargetState::Latest)?;
     }
 
     ctx.server
         .executor
-        .execute_local_call::<AccessListOutput>(call, ExecutionKind::AccessList)
+        .execute_local_call::<AccessListOutput>(call, TargetState::Latest)
         .map(to_json_value)
         .inspect(|_| tracing::info!("executed stratus_accessList with success"))
         .inspect_err(|e| tracing::warn!(reason = ?e, "failed to execute stratus_accessList"))
@@ -1343,37 +1408,61 @@ pub fn eth_send_raw_transaction<'a>(
     });
     drop(enter);
 
-    request.extensions_mut().insert(span);
+    request.extensions_mut().insert(span.clone());
 
     let ext = request.extensions;
     let ext_clone = ext.clone();
 
-    let future = tokio::task::spawn_blocking(move || {
-        let rp = _eth_send_raw_transaction_impl(input, data, access_list, ctx, ext).into_response();
-        MethodResponse::response(id, rp, usize::MAX)
-    })
-    .map(|result| match result {
-        Ok(r) => r,
-        Err(err) => {
-            tracing::error!("Join error for blocking RPC method: {:?}", err);
-            MethodResponse::error(
-                Id::Null,
-                StratusError::Unexpected(crate::eth::types::UnexpectedError::Unexpected(anyhow::anyhow!(err))),
-            )
-            .with_extensions(ext_clone)
+    let future = {
+        let prepared_handle = tokio::task::spawn_blocking(move || _prepare_eth_send_raw_transaction(input, data, access_list, ctx, ext));
+        async move {
+            let prepared = prepared_handle.await;
+
+            let response = match prepared {
+                Ok(Ok(PreparedRawTransaction::Complete(result))) => MethodResponse::response(id, result.into_response(), usize::MAX),
+                Ok(Ok(PreparedRawTransaction::Forward {
+                    importer,
+                    tx_hash,
+                    data,
+                    access_list,
+                })) => {
+                    let result = importer.forward_to_leader(tx_hash, data, access_list).await.map(hex_data).into_response();
+                    MethodResponse::response(id, result, usize::MAX)
+                }
+                Ok(Err(err)) => MethodResponse::response(id, Err::<String, _>(err).into_response(), usize::MAX),
+                Err(err) => {
+                    tracing::error!("Join error for blocking RPC method: {:?}", err);
+                    MethodResponse::error(
+                        Id::Null,
+                        StratusError::Unexpected(crate::eth::types::UnexpectedError::Unexpected(anyhow::anyhow!(err))),
+                    )
+                }
+            };
+            response.with_extensions(ext_clone)
         }
-    })
+    }
+    .instrument(span)
     .boxed();
     Ok((future, tracing_identifiers))
 }
 
-fn _eth_send_raw_transaction_impl(
+enum PreparedRawTransaction {
+    Complete(Result<String, StratusError>),
+    Forward {
+        importer: Arc<ImporterConsensus>,
+        tx_hash: Hash,
+        data: Bytes,
+        access_list: Option<AccessListOutput>,
+    },
+}
+
+fn _prepare_eth_send_raw_transaction(
     tx: TransactionInput,
     data: Bytes,
     access_list: Option<AccessListOutput>,
     ctx: Arc<RpcContext>,
     ext: Extensions,
-) -> Result<String, StratusError> {
+) -> Result<PreparedRawTransaction, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!(
@@ -1405,23 +1494,31 @@ fn _eth_send_raw_transaction_impl(
     if let Some(to_address) = tx.execution_info.to
         && !tx.execution_info.input.is_empty()
     {
-        ctx.server.executor.validate_to_is_contract(to_address, ExecutionKind::Transaction)?;
+        ctx.server.executor.validate_to_is_contract(to_address, TargetState::Pending)?;
     };
 
-    // execute locally or forward to leader
+    // Execute locally, or prepare synchronous access-list work before forwarding asynchronously.
     match GlobalState::get_node_mode() {
-        NodeMode::Leader | NodeMode::FakeLeader => match ctx.server.executor.execute_local_transaction(tx, access_list) {
-            Ok(_) => Ok(hex_data(tx_hash)),
-            Err(e) => {
-                tracing::warn!(reason = ?e, ?tx_hash, "failed to execute eth_sendRawTransaction");
-                Err(e)
+        NodeMode::Leader | NodeMode::FakeLeader => {
+            let result = match ctx.server.executor.execute_local_transaction(tx, access_list) {
+                Ok(_) => Ok(hex_data(tx_hash)),
+                Err(e) => {
+                    tracing::warn!(reason = ?e, ?tx_hash, "failed to execute eth_sendRawTransaction");
+                    Err(e)
+                }
+            };
+            Ok(PreparedRawTransaction::Complete(result))
+        }
+        NodeMode::Follower => match ctx.server.read_importer() {
+            Some(importer) => {
+                let access_list = importer.prepare_forward_access_list(tx)?;
+                Ok(PreparedRawTransaction::Forward {
+                    importer,
+                    tx_hash,
+                    data,
+                    access_list,
+                })
             }
-        },
-        NodeMode::Follower => match &ctx.server.read_importer() {
-            Some(importer) => match Handle::current().block_on(importer.forward_to_leader(tx, tx_hash, data)) {
-                Ok(hash) => Ok(hex_data(hash)),
-                Err(e) => Err(e),
-            },
             None => {
                 tracing::error!("unable to forward transaction because consensus is temporarily unavailable for follower node");
                 Err(ConsensusError::Unavailable.into())
@@ -1514,8 +1611,8 @@ fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     });
     tracing::info!(%address, %filter, "reading account nonce");
 
-    let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
-    let (account, _) = ctx.server.storage.read_account(address, ExecutionKind::RPC(point_in_time))?;
+    let target_state = ctx.server.storage.translate_to_target_state(filter)?;
+    let (account, _) = ctx.server.storage.read_account(address, target_state)?;
     Ok(hex_num(account.nonce))
 }
 
@@ -1536,8 +1633,8 @@ fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) ->
     tracing::info!(%address, %filter, "reading account native balance");
 
     // execute
-    let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
-    let (account, _) = ctx.server.storage.read_account(address, ExecutionKind::RPC(point_in_time))?;
+    let target_state = ctx.server.storage.translate_to_target_state(filter)?;
+    let (account, _) = ctx.server.storage.read_account(address, target_state)?;
     Ok(hex_num(account.balance))
 }
 
@@ -1557,8 +1654,8 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     });
 
     // execute
-    let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
-    let (account, _) = ctx.server.storage.read_account(address, ExecutionKind::RPC(point_in_time))?;
+    let target_state = ctx.server.storage.translate_to_target_state(filter)?;
+    let (account, _) = ctx.server.storage.read_account(address, target_state)?;
 
     Ok(account.bytecode.map(|bytecode| hex_data(bytecode.original_bytes())).unwrap_or_else(hex_null))
 }
@@ -1649,8 +1746,8 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions)
     });
 
     // execute
-    let point_in_time = ctx.server.storage.translate_to_point_in_time(block_filter)?;
-    let (slot, _) = ctx.server.storage.read_slot(address, index, ExecutionKind::RPC(point_in_time))?;
+    let target_state = ctx.server.storage.translate_to_target_state(block_filter)?;
+    let (slot, _) = ctx.server.storage.read_slot(address, index, target_state)?;
 
     // It must be padded, even if it is zero.
     Ok(hex_num_zero_padded(slot.value.as_u256()))
@@ -1758,7 +1855,7 @@ mod tests {
     fn create_simple_test_call_structure() -> CallFrame {
         // Create deepest level calls (level 3)
         let deep_call_1 = CallFrame {
-            from: "0x562689c910361ae21d12eadafbfca727b3bcbc24".parse::<Address>().unwrap(), // Maps to Compound_Agent_4
+            from: "0xBfa36148f7c992AFA5519dC51Cc7c11397b98342".parse::<Address>().unwrap(), // Maps to CreditAgentCapybaraV2
             to: Some("0xa9a55a81a4c085ec0c31585aed4cfb09d78dfd53".parse::<Address>().unwrap()), // Maps to BRLCToken
             input: Bytes::from(
                 const_hex::decode(
@@ -1780,8 +1877,8 @@ mod tests {
         };
 
         let deep_call_2 = CallFrame {
-            from: "0x3181ab023a4d4788754258be5a3b8cf3d8276b98".parse::<Address>().unwrap(), // Maps to Cashier_BRLC_v2
-            to: Some("0x6d8da3c039d1d78622f27d4739e1e00b324afaaa".parse::<Address>().unwrap()), // Maps to USJIMToken
+            from: "0x6ac607aBA84f672C092838a5c32c22907765F666".parse::<Address>().unwrap(), // Maps to CashierRootBrlcCommon
+            to: Some("0x6d8da3c039d1d78622f27d4739e1e00b324afaaa".parse::<Address>().unwrap()), // Maps to UsJimToken
             input: Bytes::from(
                 const_hex::decode(
                     "dd62ed3e000000000000000000000000742d35cc6634c0532925a3b8d7c9be8813eeb02e000000000000000000000000a0b86a33e6441366ac2ed2e3a8da88e61c66a5e1", // allowance function
@@ -1803,8 +1900,8 @@ mod tests {
 
         // Create level 2 nested calls using real contract addresses from CONTRACTS map
         let nested_call_1 = CallFrame {
-            from: "0xa9a55a81a4c085ec0c31585aed4cfb09d78dfd53".parse::<Address>().unwrap(), // Maps to BRLCToken
-            to: Some("0x6d8da3c039d1d78622f27d4739e1e00b324afaaa".parse::<Address>().unwrap()), // Maps to USJIMToken
+            from: "0xa9a55a81a4c085ec0c31585aed4cfb09d78dfd53".parse::<Address>().unwrap(), // Maps to BrlcToken
+            to: Some("0x6d8da3c039d1d78622f27d4739e1e00b324afaaa".parse::<Address>().unwrap()), // Maps to UsJimToken
             input: Bytes::from(
                 const_hex::decode(
                     "a9059cbb000000000000000000000000742d35cc6634c0532925a3b8d7c9be8813eeb02e0000000000000000000000000000000000000000000000000de0b6b3a7640000", // transfer function
@@ -1825,8 +1922,8 @@ mod tests {
         };
 
         let nested_call_2 = CallFrame {
-            from: "0x6d8da3c039d1d78622f27d4739e1e00b324afaaa".parse::<Address>().unwrap(), // Maps to USJIMToken
-            to: Some("0x3181ab023a4d4788754258be5a3b8cf3d8276b98".parse::<Address>().unwrap()), // Maps to Cashier_BRLC_v2
+            from: "0x6d8da3c039d1d78622f27d4739e1e00b324afaaa".parse::<Address>().unwrap(), // Maps to BrlcToken
+            to: Some("0x6ac607aBA84f672C092838a5c32c22907765F666".parse::<Address>().unwrap()), // Maps to CashierRootBrlcCommon
             input: Bytes::from(
                 const_hex::decode(
                     "095ea7b3000000000000000000000000742d35cc6634c0532925a3b8d7c9be8813eeb02e0000000000000000000000000000000000000000000000000de0b6b3a7640000", // approve function
@@ -1849,7 +1946,7 @@ mod tests {
         // Create main call containing nested calls (level 1)
         CallFrame {
             from: "0x742d35Cc6634C0532925a3b8D7C9be8813eeb02e".parse::<Address>().unwrap(),
-            to: Some("0xa9a55a81a4c085ec0c31585aed4cfb09d78dfd53".parse::<Address>().unwrap()), // BRLCToken
+            to: Some("0xa9a55a81a4c085ec0c31585aed4cfb09d78dfd53".parse::<Address>().unwrap()), // BrlcToken
             input: Bytes::from(
                 const_hex::decode(
                     "23b872dd000000000000000000000000742d35cc6634c0532925a3b8d7c9be8813eeb02e000000000000000000000000a0b86a33e6441366ac2ed2e3a8da88e61c66a5e10000000000000000000000000000000000000000000000000de0b6b3a7640000", // transferFrom function
@@ -1880,10 +1977,10 @@ mod tests {
         let result = enhance_trace_with_decoded_info(&geth_trace);
         let result_str = serde_json::to_string_pretty(&result).unwrap();
 
-        assert!(result_str.contains("Cashier_BRLC_v2"));
-        assert!(result_str.contains("BRLCToken"));
-        assert!(result_str.contains("USJIMToken"));
-        assert!(result_str.contains("Compound_Agent_4"));
+        assert!(result_str.contains("CashierRootBrlcCommon"));
+        assert!(result_str.contains("BrlcToken"));
+        assert!(result_str.contains("UsJimToken"));
+        assert!(result_str.contains("CreditAgentCapybaraV2"));
 
         // Verify function signature decoding for all the expected functions
         assert!(result_str.contains("transfer(address,uint256)"));

@@ -5,9 +5,8 @@ use revm::context::TransactTo;
 
 use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::ExecutionMetricsContext;
-use crate::eth::executor::evm::types::GAS_MAX_LIMIT;
 use crate::eth::executor::evm::types::GeneralRevm;
-use crate::eth::storage::ExecutionKind;
+use crate::eth::executor::evm::types::execution_metrics::ExecutionKindLabel;
 use crate::eth::types::Address;
 use crate::eth::types::BlockInfo;
 use crate::eth::types::BlockNumber;
@@ -15,6 +14,7 @@ use crate::eth::types::Bytes;
 use crate::eth::types::ChainId;
 use crate::eth::types::Gas;
 use crate::eth::types::Nonce;
+use crate::eth::types::TargetState;
 use crate::eth::types::TransactionInput;
 use crate::eth::types::UnixTime;
 use crate::eth::types::Wei;
@@ -76,8 +76,6 @@ pub struct TransactionExecutionInput {
     ///
     /// If not specified, it will not be validated.
     pub chain_id: Option<ChainId>,
-
-    pub kind: ExecutionKind,
 }
 
 impl TransactionExecutionInput {
@@ -94,7 +92,6 @@ impl TransactionExecutionInput {
             block_number: block_info.number,
             block_timestamp: *block_info.timestamp,
             chain_id: input.execution_info.chain_id,
-            kind: ExecutionKind::Transaction,
         }
     }
 }
@@ -112,13 +109,13 @@ impl EvmInput for TransactionExecutionInput {
         evm.block.basefee = 0;
     }
 
-    fn fill_tx_env<DB: Database, I>(self, evm: &mut GeneralRevm<DB, I>) {
+    fn fill_tx_env<DB: Database, I>(self, evm: &mut GeneralRevm<DB, I>, gas_limit: u64) {
         evm.tx.caller = self.from.into();
         evm.tx.kind = match self.to {
             Some(contract) => TransactTo::Call(contract.into()),
             None => TransactTo::Create,
         };
-        evm.tx.gas_limit = GAS_MAX_LIMIT;
+        evm.tx.gas_limit = gas_limit;
         evm.tx.gas_price = 0;
         evm.tx.chain_id = self.chain_id.map_into();
         evm.tx.nonce = self.nonce.into();
@@ -127,11 +124,11 @@ impl EvmInput for TransactionExecutionInput {
         evm.tx.gas_priority_fee = None;
     }
 
-    fn kind(&self) -> ExecutionKind {
-        self.kind
+    fn target_state(&self) -> TargetState {
+        TargetState::Pending
     }
 
     fn metrics_context(&self) -> ExecutionMetricsContext {
-        ExecutionMetricsContext::new(self.kind, &self.to, &self.data)
+        ExecutionMetricsContext::new(self.target_state(), &self.to, &self.data, ExecutionKindLabel::Transaction)
     }
 }

@@ -1,3 +1,6 @@
+// Panics in proc macros abort compilation with an error message, so they are safe to use here.
+#![allow(clippy::panic)]
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse_macro_input;
@@ -11,80 +14,11 @@ use syn::Lit;
 use syn::Meta;
 
 mod fake_enum_variants;
-mod timed_attribute;
-
-/// Times a function and records its duration in an `infra::metrics` histogram.
-///
-/// The first argument is the name of a `histogram_duration` metric. Label
-/// values are positional and must follow the order in the metric definition.
-///
-/// ```ignore
-/// #[timed(
-///     storage_read_block,
-///     labels(
-///         storage = label::PERM,
-///         success = result.is_ok(),
-///     )
-/// )]
-/// fn read_block(...) -> Result<..., ...> {
-///     // ...
-/// }
-/// ```
-///
-/// Bare function parameters are converted to owned `MetricLabelValue`s before
-/// the function runs, without requiring the parameter to implement `Clone`:
-///
-/// ```ignore
-/// #[timed(executor_inspect, labels(trace_type))]
-/// fn inspect(trace_type: String) -> Result<(), StratusError> {
-///     // ...
-/// }
-/// ```
-///
-/// Closures derive and convert labels from input parameters before the body can
-/// consume them. Closure argument names must match function parameter names and
-/// receive references to those parameters:
-///
-/// ```ignore
-/// #[timed(
-///     executor_external_transaction,
-///     labels(
-///         contract = |input| contract_name(&input.execution_info.to),
-///         function = |input| function_sig(&input.execution_info.input),
-///     )
-/// )]
-/// fn execute(input: TransactionInput) -> Result<(), StratusError> {
-///     // ...
-/// }
-/// ```
-///
-/// Other expressions are converted after the function and may inspect its
-/// return value through the `result` binding:
-///
-/// ```ignore
-/// #[timed(
-///     storage_save_execution,
-///     labels(success = result.is_ok()),
-/// )]
-/// fn save_execution(...) -> Result<(), StorageError> {
-///     // ...
-/// }
-/// ```
-///
-/// Both synchronous and asynchronous functions are supported. `const fn` and
-/// `unsafe fn` are rejected.
-#[proc_macro_attribute]
-pub fn timed(args: TokenStream, input: TokenStream) -> TokenStream {
-    match timed_attribute::expand(args.into(), input.into()) {
-        Ok(expanded) => expanded.into(),
-        Err(error) => error.to_compile_error().into(),
-    }
-}
 
 #[proc_macro_derive(FakeEnum, attributes(fake_enum))]
 pub fn derive_fake_enum(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as ItemEnum);
-    fake_enum_variants::derive_fake_enum_impl(input).into()
+    fake_enum_variants::derive_fake_enum_impl(input)
 }
 
 #[proc_macro_derive(ErrorCode, attributes(error_code, major_error_code))]
@@ -140,7 +74,7 @@ fn derive_error_code_impl(input: DeriveInput) -> proc_macro2::TokenStream {
                     None
                 }
             })
-            .expect(&format!("Missing error_code attribute for variant {}", variant_name))
+            .unwrap_or_else(|| panic!("Missing error_code attribute for variant {}", variant_name))
             + major_error_code;
 
         // Handle different field types
@@ -190,14 +124,13 @@ fn derive_error_code_impl(input: DeriveInput) -> proc_macro2::TokenStream {
 
 #[cfg(test)]
 mod tests {
-    use proc_macro2::TokenStream;
     use quote::quote;
 
     use crate::derive_error_code_impl;
 
     #[test]
     fn test_derive_error_code() {
-        let input = TokenStream::from(quote! {
+        let input = quote! {
             #[derive(ErrorCode)]
             #[major_error_code = 100]
             pub enum TestError {
@@ -208,7 +141,7 @@ mod tests {
                 #[error_code = 0]
                 Third(u32),
             }
-        });
+        };
         let input = syn::parse2(input).unwrap();
 
         let out = derive_error_code_impl(input);
@@ -238,12 +171,12 @@ mod tests {
     #[test]
     #[should_panic(expected = "Missing error_code attribute")]
     fn test_missing_error_code() {
-        let input = TokenStream::from(quote! {
+        let input = quote! {
             #[derive(ErrorCode)]
             pub enum TestError {
                 First,
             }
-        });
+        };
         let input = syn::parse2(input).unwrap();
 
         let _out = derive_error_code_impl(input);
@@ -252,12 +185,12 @@ mod tests {
     #[test]
     #[should_panic(expected = "ErrorCode can only be derived for enums")]
     fn test_non_enum() {
-        let input = TokenStream::from(quote! {
+        let input = quote! {
             #[derive(ErrorCode)]
             pub struct TestError {
                 field: String,
             }
-        });
+        };
         let input = syn::parse2(input).unwrap();
         let _out = derive_error_code_impl(input);
     }

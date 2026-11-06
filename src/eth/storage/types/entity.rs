@@ -12,6 +12,7 @@ pub trait EntityRead: Sized + Clone {
     /// Reads the latest (mined tip) value from the cache, if present.
     fn read_latest_cache(s: &StratusStorage, key: &Self::Key) -> Option<Self>;
     /// Tries to read from the latest cache, if it gets a lock contention error from the cache, returns None
+    #[allow(unused)]
     fn try_read_latest_cache(s: &StratusStorage, key: &Self::Key) -> Option<Self>;
     /// Retains only the keys that are missing from both the temporary storage and the latest cache.
     fn retain_missing_keys(s: &StratusStorage, keys: &mut Vec<Self::Key>);

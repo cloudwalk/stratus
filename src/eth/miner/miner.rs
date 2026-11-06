@@ -8,6 +8,7 @@ use anyhow::anyhow;
 use parking_lot::Mutex;
 use parking_lot::MutexGuard;
 use parking_lot::RwLock;
+use stratus_metrics::timed;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::broadcast;
 use tokio::task::JoinSet;
@@ -40,6 +41,7 @@ cfg_if::cfg_if! {
 
 /// Represents different types of items that can be committed to storage
 #[allow(clippy::large_enum_variant)]
+#[derive(strum::AsRefStr)]
 pub enum CommitItem {
     /// A block
     Block(Block),
@@ -283,6 +285,7 @@ impl Miner {
     /// Mines local transactions.
     ///
     /// External transactions are not allowed to be part of the block.
+    #[timed(miner_mine_local)]
     pub fn mine_local(&self) -> (Block, State<Complete>) {
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_local", block_number = field::Empty).entered();
@@ -297,6 +300,7 @@ impl Miner {
         (block.into(), changes)
     }
 
+    #[timed(miner_commit, labels(item = || item.as_ref()))]
     pub fn commit(&self, item: CommitItem, changes: State<Complete>) -> anyhow::Result<(), StorageError> {
         match item {
             CommitItem::Block(block) => self.commit_block(block, changes),

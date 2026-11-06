@@ -3,10 +3,9 @@ use std::sync::Arc;
 use derive_more::Deref;
 use parking_lot::Condvar;
 use parking_lot::Mutex;
-use tokio::time::Instant;
-
 #[cfg(feature = "metrics")]
-use crate::infra::metrics;
+use stratus_metrics as metrics;
+use tokio::time::Instant;
 
 /// Amount of bytes in one GB (technically, GiB).
 pub const GIGABYTE: usize = 1024 * 1024 * 1024;
@@ -69,6 +68,8 @@ impl Semaphore {
         drop(permits);
         #[cfg(feature = "metrics")]
         metrics::dec_executor_local_transaction_semaphore_waiting(1);
+        #[cfg(feature = "metrics")]
+        metrics::inc_executor_local_transaction_permit_holders(1);
         Permit { sem: Arc::clone(&self.sem) }
     }
 }
@@ -78,6 +79,8 @@ impl Drop for Permit {
         let mut permits = self.sem.permits.lock();
         *permits += 1;
         self.sem.cvar.notify_one();
+        #[cfg(feature = "metrics")]
+        metrics::dec_executor_local_transaction_permit_holders(1);
     }
 }
 

@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   report_comment_tags:
-    runs-on: stratus-runner
+    runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
       - name: Checkout code

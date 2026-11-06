@@ -2,7 +2,7 @@ import { Consumer, Kafka, KafkaMessage } from "kafkajs";
 
 const kafka = new Kafka({
     clientId: "e2e",
-    brokers: ["localhost:29092"],
+    brokers: [process.env.E2E_KAFKA_BOOTSTRAP_SERVERS ?? "localhost:29092"],
 });
 
 let consumer: Consumer;

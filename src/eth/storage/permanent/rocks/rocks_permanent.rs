@@ -5,11 +5,12 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::bail;
-use stratus_macros::timed;
+use stratus_metrics::timed;
 
 use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_state::RocksStorageState;
 use super::types::BlockRocksdb;
+#[cfg(feature = "metrics")]
 use crate::GlobalState;
 use crate::eth::executor::State;
 use crate::eth::executor::types::state::Final;
@@ -18,6 +19,7 @@ use crate::eth::rpc::LogFilter;
 use crate::eth::storage::MinedPointInTime;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+#[cfg(feature = "metrics")]
 use crate::eth::storage::stratus_storage::label;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
@@ -35,8 +37,11 @@ use crate::eth::types::SlotValue;
 use crate::eth::types::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
+#[cfg(feature = "metrics")]
 use crate::ext::SleepReason;
+#[cfg(feature = "metrics")]
 use crate::ext::spawn;
+#[cfg(feature = "metrics")]
 use crate::ext::traced_sleep;
 
 #[derive(Debug)]
@@ -62,7 +67,7 @@ impl RocksPermanentStorage {
         shutdown_timeout: Duration,
         cf_cache_config: RocksCfCacheConfig,
         enable_sync_write: bool,
-        cf_size_metrics_interval: Option<Duration>,
+        #[cfg(feature = "metrics")] cf_size_metrics_interval: Option<Duration>,
         file_descriptors_limit: u64,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");

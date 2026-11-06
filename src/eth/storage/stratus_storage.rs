@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use stratus_macros::timed;
+use stratus_metrics::timed;
 use tracing::Span;
 
 use crate::eth::executor::AccessListOutput;
@@ -12,7 +12,6 @@ use crate::eth::executor::types::state::Complete;
 use crate::eth::genesis::GenesisConfig;
 use crate::eth::rpc::BlockFilter;
 use crate::eth::rpc::LogFilter;
-use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StorageCache;
@@ -36,10 +35,10 @@ use crate::eth::types::LogMessage;
 #[cfg(feature = "dev")]
 use crate::eth::types::Nonce;
 use crate::eth::types::PendingBlock;
-use crate::eth::types::PointInTime;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::SlotValue;
+use crate::eth::types::TargetState;
 use crate::eth::types::TransactionStage;
 use crate::eth::types::UnixTime;
 #[cfg(feature = "dev")]
@@ -115,51 +114,6 @@ impl StratusStorage {
         self.cache.clear();
     }
 
-    #[cfg(test)]
-    pub fn new_test() -> Result<Self, StorageError> {
-        use tempfile::tempdir;
-
-        use crate::eth::storage::cache::CacheConfig;
-
-        let temp = InMemoryTemporaryStorage::new(0.into());
-
-        // Create a temporary directory for RocksDB
-        let rocks_dir = tempdir().expect("Failed to create temporary directory for tests");
-        let rocks_path_prefix = rocks_dir.path().to_str().unwrap().to_string();
-
-        let perm = RocksPermanentStorage::new(
-            Some(rocks_path_prefix.clone()),
-            std::time::Duration::from_secs(240),
-            super::permanent::RocksCfCacheConfig::default(),
-            true,
-            None,
-            1024,
-        )
-        .expect("Failed to create RocksPermanentStorage for tests");
-
-        let cache = CacheConfig {
-            account_history_cache_capacity: 20000,
-            slot_history_cache_capacity: 100000,
-        }
-        .init();
-
-        Self::new(
-            temp,
-            perm,
-            cache,
-            #[cfg(feature = "dev")]
-            super::permanent::PermanentStorageConfig {
-                rocks_path_prefix: Some(rocks_path_prefix),
-                rocks_shutdown_timeout: std::time::Duration::from_secs(240),
-                rocks_cf_cache: super::permanent::RocksCfCacheConfig::default(),
-                rocks_disable_sync_write: false,
-                rocks_cf_size_metrics_interval: None,
-                genesis_file: crate::config::GenesisFileConfig::default(),
-                rocks_file_descriptors_limit: 1024,
-            },
-        )
-    }
-
     pub fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block_number_to_resume_import").entered();
@@ -210,22 +164,16 @@ impl StratusStorage {
     }
 
     /// Generic read algorithm shared by [`read_account`] and [`read_slot`].
-    fn read<E: resolve_pending::Resolve>(&self, key: E::Key, kind: ExecutionKind) -> Result<(E, FoundAt), StorageError> {
+    fn read<E: resolve_pending::Resolve>(&self, key: E::Key, target_state: TargetState) -> Result<(E, FoundAt), StorageError> {
         let (value, found_at) = 'query: {
-            match E::resolve(self, key, kind) {
+            match E::resolve(self, key, target_state) {
                 resolve_pending::Resolved::Temp(value) => break 'query (value, FoundAt::Temp),
                 resolve_pending::Resolved::Miss(mined_point) => {
                     let found_at = match &mined_point {
                         MinedPointInTime::Latest(_, _) =>
                         // Latest: try latest cache while guard is held, then fall through to perm.
                         {
-                            let cached_value = if matches!(kind, ExecutionKind::AccessList) {
-                                //bench without try_read
-                                E::try_read_latest_cache(self, &key)
-                            } else {
-                                E::read_latest_cache(self, &key)
-                            };
-                            if let Some(value) = cached_value {
+                            if let Some(value) = E::read_latest_cache(self, &key) {
                                 break 'query (value, FoundAt::Cache);
                             }
                             // If it wasnt found in the cache and we still have the guard the value can only be read in perm latest
@@ -239,25 +187,37 @@ impl StratusStorage {
         };
 
         // Reads that held the transient state lock and were found at perm can be cached
+        // If the latest state lock is aquired between the read and this update:
+        // 1. If cache_latest_if_missing is called before save_block updated the entry save_block will overwrite it
+        // 2. If cache_latest_if_missing is called after save_block updated the entry the value won't be missing and
+        // therefore won't be cached
+        // The one troublesome scenario is if the value is evicted during save_block, meaning the cache capacity
+        // is too low and prone to hot-evictions. This is a bug, but unlikely to happen if big caches are configured.
+        // This is a non-issue for transactional flows since any reads that would hit an entry that has been hot-evicted
+        // will read first from temp's latest storage.
+        // This bug exists for any flow that updates the cache without holding the latest-state lock. We could consider
+        // adding the latest block State<Final/Complete> to the cache too. Would requiring some locking but if we're smart
+        // about it we can make it so this lock is more relaxed than the latest_state_lock.
+        //
         if matches!(
-            (kind, found_at),
-            (ExecutionKind::CallLatest(_) | ExecutionKind::CallPast(_), FoundAt::PermLatest)
+            (target_state, found_at),
+            (TargetState::Latest | TargetState::Past(_) | TargetState::LatestPinned(_), FoundAt::PermLatest)
         ) {
             E::cache_latest_if_missing(self, key, value.clone());
         }
         Ok((value, found_at))
     }
 
-    pub fn read_account(&self, address: Address, kind: ExecutionKind) -> Result<(Account, FoundAt), StorageError> {
+    pub fn read_account(&self, address: Address, target_state: TargetState) -> Result<(Account, FoundAt), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_account", %address).entered();
-        self.read::<Account>(address, kind)
+        self.read::<Account>(address, target_state)
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, kind: ExecutionKind) -> Result<(Slot, FoundAt), StorageError> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, target_state: TargetState) -> Result<(Slot, FoundAt), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_slot", %address, %index).entered();
-        self.read::<Slot>((address, index), kind)
+        self.read::<Slot>((address, index), target_state)
     }
 
     // -------------------------------------------------------------------------
@@ -382,6 +342,15 @@ impl StratusStorage {
         }
     }
 
+    /// Reads the latest block info without acquiring the latest state lock.
+    ///
+    /// Relaxed atomic reads never block on the importer's block commits, at the cost of possibly
+    /// stale or torn (number, timestamp) pairs. Meant for throughput-sensitive consumers that do
+    /// not require strict consistency, like access-list computation for forwarded transactions.
+    pub fn read_latest_block_info_relaxed(&self) -> BlockInfo {
+        self.latest_state_lock.read_latest_block_info_relaxed()
+    }
+
     #[timed(storage_read_block_with_changes, labels(storage = label::PERM, success = result.is_ok()))]
     pub fn read_block_with_changes(&self, filter: BlockFilter) -> Result<Option<(BlockRocksdb, BlockChangesRocksdb)>, StorageError> {
         #[cfg(feature = "tracing")]
@@ -501,27 +470,25 @@ impl StratusStorage {
         self.temp.reset();
 
         // Try to load genesis block from the genesis file or use default
-        let genesis_block = if let Some(genesis_path) = &self.perm_config.genesis_file.genesis_path {
-            if std::path::Path::new(genesis_path).exists() {
-                match GenesisConfig::load_from_file(genesis_path) {
-                    Ok(genesis_config) => match genesis_config.to_genesis_block() {
-                        Ok(block) => {
-                            tracing::info!("using genesis block from file: {:?}", genesis_path);
-                            block
-                        }
-                        Err(e) => {
-                            tracing::error!("failed to create genesis block from file: {:?}", e);
-                            Block::genesis()
-                        }
-                    },
+        let genesis_block = if let Some(genesis_path) = self.perm_config.genesis_file.missing_file() {
+            tracing::error!("genesis file not found at: {:?}", genesis_path);
+            Block::genesis()
+        } else if let Some(genesis_path) = self.perm_config.genesis_file.genesis_path.as_deref() {
+            match GenesisConfig::load_from_file(genesis_path) {
+                Ok(genesis_config) => match genesis_config.to_genesis_block() {
+                    Ok(block) => {
+                        tracing::info!("using genesis block from file: {:?}", genesis_path);
+                        block
+                    }
                     Err(e) => {
-                        tracing::error!("failed to load genesis file: {:?}", e);
+                        tracing::error!("failed to create genesis block from file: {:?}", e);
                         Block::genesis()
                     }
+                },
+                Err(e) => {
+                    tracing::error!("failed to load genesis file: {:?}", e);
+                    Block::genesis()
                 }
-            } else {
-                tracing::error!("genesis file not found at: {:?}", genesis_path);
-                Block::genesis()
             }
         } else {
             tracing::info!("using default genesis block");
@@ -529,34 +496,32 @@ impl StratusStorage {
         };
         // Try to load genesis.json from the path specified in GenesisFileConfig
         // or use default genesis configuration
-        let (genesis_accounts, genesis_slots) = if let Some(genesis_path) = &self.perm_config.genesis_file.genesis_path {
-            if std::path::Path::new(genesis_path).exists() {
-                tracing::info!("found genesis file at: {:?}", genesis_path);
-                match GenesisConfig::load_from_file(genesis_path) {
-                    Ok(genesis) => match genesis.to_stratus_accounts_and_slots() {
-                        Ok((accounts, slots)) => {
-                            tracing::info!("loaded {} accounts from genesis.json", accounts.len());
-                            if !slots.is_empty() {
-                                tracing::info!("loaded {} storage slots from genesis.json", slots.len());
-                            }
-                            (accounts, slots)
+        let (genesis_accounts, genesis_slots) = if let Some(genesis_path) = self.perm_config.genesis_file.missing_file() {
+            tracing::error!("genesis file not found at: {:?}", genesis_path);
+            // Fallback to test accounts
+            (test_accounts(), vec![])
+        } else if let Some(genesis_path) = self.perm_config.genesis_file.genesis_path.as_deref() {
+            tracing::info!("found genesis file at: {:?}", genesis_path);
+            match GenesisConfig::load_from_file(genesis_path) {
+                Ok(genesis) => match genesis.to_stratus_accounts_and_slots() {
+                    Ok((accounts, slots)) => {
+                        tracing::info!("loaded {} accounts from genesis.json", accounts.len());
+                        if !slots.is_empty() {
+                            tracing::info!("loaded {} storage slots from genesis.json", slots.len());
                         }
-                        Err(e) => {
-                            tracing::error!("failed to convert genesis accounts: {:?}", e);
-                            // Fallback to test accounts
-                            (test_accounts(), vec![])
-                        }
-                    },
+                        (accounts, slots)
+                    }
                     Err(e) => {
-                        tracing::error!("failed to load genesis file: {:?}", e);
+                        tracing::error!("failed to convert genesis accounts: {:?}", e);
                         // Fallback to test accounts
                         (test_accounts(), vec![])
                     }
+                },
+                Err(e) => {
+                    tracing::error!("failed to load genesis file: {:?}", e);
+                    // Fallback to test accounts
+                    (test_accounts(), vec![])
                 }
-            } else {
-                tracing::error!("genesis file not found at: {:?}", genesis_path);
-                // Fallback to test accounts
-                (test_accounts(), vec![])
             }
         } else {
             // No genesis path specified, use default genesis configuration
@@ -597,31 +562,27 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     /// Translates a block filter to a specific storage point-in-time indicator.
-    pub fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StorageError> {
+    pub fn translate_to_target_state(&self, block_filter: BlockFilter) -> Result<TargetState, StorageError> {
         match block_filter {
-            BlockFilter::Pending => Ok(PointInTime::Pending),
-            BlockFilter::Latest => Ok(PointInTime::Latest),
-            BlockFilter::Earliest => Ok(PointInTime::Past(BlockNumber::ZERO)),
+            BlockFilter::Pending => Ok(TargetState::Pending),
+            // should we pin the block here, or just later?
+            BlockFilter::Latest => Ok(TargetState::Latest),
+            BlockFilter::Earliest => Ok(TargetState::Past(BlockNumber::ZERO)),
             // if number == latest (/pending) should we return PointInTime::Latest (/Pending) ?
-            BlockFilter::Number(number) => Ok(PointInTime::Past(number)),
+            BlockFilter::Number(number) => Ok(TargetState::Past(number)),
             BlockFilter::Hash(_) | BlockFilter::Timestamp(_) => self
                 .read_block(block_filter)?
-                .map(|b| PointInTime::Past(b.number()))
+                .map(|b| TargetState::Past(b.number()))
                 .ok_or(StorageError::BlockNotFound { filter: block_filter }),
         }
     }
 
-    pub fn translate_to_block_number(&self, block_filter: BlockFilter) -> Result<BlockNumber, StorageError> {
-        match block_filter {
-            BlockFilter::Pending => Ok(self.read_pending_block_header().number),
-            BlockFilter::Latest => Ok(self.read_mined_block_number()),
-            BlockFilter::Hash(_) | BlockFilter::Timestamp(_) => self
-                .read_block(block_filter)?
-                .map(|b| b.number())
-                .ok_or(StorageError::BlockNotFound { filter: block_filter }),
-            BlockFilter::Earliest => Ok(BlockNumber::ZERO),
-            BlockFilter::Number(number) => Ok(number),
-        }
+    pub fn translate_to_pinned_target_state(&self, block_filter: BlockFilter) -> Result<TargetState, StorageError> {
+        let target_state = self.translate_to_target_state(block_filter)?;
+        Ok(match target_state {
+            TargetState::Pending | TargetState::Latest => TargetState::LatestPinned(self.read_mined_block_number()),
+            target => target,
+        })
     }
 
     fn load_slots_to_cache(&self, slots: Vec<(Address, SlotIndex)>) -> Result<(), StorageError> {
@@ -655,6 +616,7 @@ impl StratusStorage {
         Ok(())
     }
 
+    #[timed(storage_load_access_list)]
     pub fn load_access_list(&self, access_list: AccessListOutput) {
         // can error
         let mut account_addresses = vec![];
@@ -669,102 +631,5 @@ impl StratusStorage {
         Slot::retain_missing_keys(self, &mut slot_keys);
         self.load_accounts_to_cache(account_addresses).ok();
         self.load_slots_to_cache(slot_keys).ok();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::eth::executor::ExecutionResult;
-    use crate::eth::executor::TransactionExecutionInput;
-    use crate::eth::executor::TransactionExecutionResult;
-    use crate::eth::executor::types::state::AccountChanges;
-    use crate::eth::executor::types::state::CompleteValue;
-    use crate::eth::types::Signature;
-    use crate::eth::types::SlotValue;
-    use crate::eth::types::TransactionInfo;
-    use crate::eth::types::TransactionInput;
-    use crate::eth::types::Wei;
-
-    /// Saves an execution applying `changes` to the pending block, without finishing it.
-    fn save_execution(storage: &StratusStorage, changes: State<Complete>) {
-        let header = storage.read_pending_block_header();
-        let evm_input = TransactionExecutionInput::create(&TransactionInput::default(), header);
-
-        let result = TransactionExecutionResult {
-            result: ExecutionResult::Success,
-            ..Default::default()
-        };
-
-        let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
-        storage.save_execution(tx, changes).expect("save execution");
-    }
-
-    /// Mines a block applying `changes`
-    fn mine_block(storage: &StratusStorage, changes: State<Complete>) -> BlockNumber {
-        save_execution(storage, changes);
-
-        let (block, block_changes) = storage.finish_pending_block();
-        storage.save_block(block.into(), block_changes).expect("save block");
-
-        storage.read_mined_block_number()
-    }
-
-    /// An `eth_call` pinned to a block that is no longer the latest must read the historical
-    /// state at its captured block, not the current latest state.
-    #[test]
-    fn read_slot_for_call_pinned_to_older_block_must_not_read_latest_state() {
-        let storage = StratusStorage::new_test().expect("failed to build test storage");
-
-        let address = Address::new([0xAA; 20]);
-        let index = SlotIndex::ZERO;
-
-        // Mine a block setting slot S = 100. The eth_call captures this block.
-        let mut changes1 = State::default();
-        changes1
-            .slots
-            .insert((address, index), CompleteValue::Changed(SlotValue::from([100u64, 0, 0, 0])));
-        let call_block = mine_block(&storage, changes1);
-
-        // A new block is mined while the call is in flight, changing the slot to 200.
-        let mut changes2 = State::default();
-        changes2
-            .slots
-            .insert((address, index), CompleteValue::Changed(SlotValue::from([200u64, 0, 0, 0])));
-        let latest = mine_block(&storage, changes2);
-        assert_ne!(call_block, latest);
-
-        // The in-flight call (pinned to the first block) reads the slot.
-        let (slot, _) = storage.read_slot(address, index, ExecutionKind::CallLatest(call_block)).expect("read slot");
-
-        // Must reflect the first block (100), not the freshly mined latest (200).
-        assert_eq!(slot.value, SlotValue::from([100u64, 0, 0, 0]));
-    }
-
-    #[test]
-    fn read_account_for_call_pinned_to_older_block_must_not_read_latest_state() {
-        let storage = StratusStorage::new_test().expect("failed to build test storage");
-
-        let address = Address::new([0xBB; 20]);
-
-        // Mine a block setting the account balance to 100. The eth_call captures this block.
-        let mut changes1 = State::default();
-        changes1
-            .accounts
-            .insert(address, AccountChanges::from_changed(Account::new_with_balance(address, Wei::from(100u64))));
-        let call_block = mine_block(&storage, changes1);
-
-        // A new block is mined while the call is in flight, changing the balance to 200.
-        let mut changes2 = State::default();
-        changes2
-            .accounts
-            .insert(address, AccountChanges::from_changed(Account::new_with_balance(address, Wei::from(200u64))));
-        let latest = mine_block(&storage, changes2);
-        assert_ne!(call_block, latest);
-
-        let (account, _) = storage.read_account(address, ExecutionKind::CallLatest(call_block)).expect("read account");
-
-        // Must reflect the first block (100), not the freshly mined latest (200).
-        assert_eq!(account.balance, Wei::from(100u64));
     }
 }

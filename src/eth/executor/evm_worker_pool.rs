@@ -1,34 +1,31 @@
 use std::sync::Arc;
 
 use alloy_rpc_types_trace::geth::GethTrace;
+use stratus_metrics as metrics;
 
 use crate::GlobalState;
 use crate::eth::executor::ExecutionMetrics;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::ExecutorError;
-use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::EvmKind;
 use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::executor::evm::types::CallExecutionInput;
+use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::InspectorInput;
-use crate::eth::executor::types::EvmRoute;
 use crate::eth::executor::types::EvmTask;
 use crate::eth::executor::types::ExecutionTask;
 use crate::eth::executor::types::InspectionTask;
 use crate::eth::executor::types::Task;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::StratusError;
+use crate::eth::types::TargetState;
 use crate::eth::types::UnexpectedError;
 use crate::ext::spawn_thread;
-use crate::infra::metrics;
 use crate::infra::tracing::warn_task_tx_closed;
 
 /// Manages EVM pool and communication channels.
 pub struct EvmWorkerPool {
-    /// Worker for execution of transactions.
-    pub tx: crossbeam_channel::Sender<EvmTask<ExecutionTask<TransactionExecutionInput>>>,
-
     /// Pool for parallel execution of calls (eth_call and eth_estimateGas) reading from current state. Usually contains multiple EVMs.
     pub call_present: crossbeam_channel::Sender<EvmTask<ExecutionTask<CallExecutionInput>>>,
 
@@ -80,7 +77,7 @@ impl EvmWorkerPool {
             for evm_index in 1..=num_evms {
                 let evm_task_name = format!("{task_name}-{evm_index}");
                 let evm_storage = Arc::clone(storage);
-                let evm_config = config.clone();
+                let evm_config = *config;
                 let evm_rx = evm_rx.clone();
                 let thread_name = evm_task_name.clone();
                 spawn_thread(&thread_name, move || {
@@ -91,13 +88,11 @@ impl EvmWorkerPool {
             evm_tx
         }
 
-        let tx = spawn_evms("evm-tx", 1, EvmKind::Transaction, &storage, config);
         let call_present = spawn_evms("evm-call-present", config.call_present_evms, EvmKind::CallPresent, &storage, config);
         let call_past = spawn_evms("evm-call-past", config.call_past_evms, EvmKind::CallPast, &storage, config);
         let inspector = spawn_evms("inspector", config.inspector_evms, EvmKind::Inspect, &storage, config);
 
         EvmWorkerPool {
-            tx,
             call_present,
             call_past,
             inspector,
@@ -105,22 +100,18 @@ impl EvmWorkerPool {
     }
 
     /// Executes a transaction in the specified route.
-    pub fn execute<Output>(&self, route: EvmRoute) -> Result<(Output, ExecutionMetrics), StratusError>
+    pub fn execute<Output>(&self, input: CallExecutionInput) -> Result<(Output, ExecutionMetrics), StratusError>
     where
         Output: TryFrom<RevmResultAndState, Error = StratusError>,
     {
         let (execution_tx, execution_rx) = oneshot::channel::<Result<(RevmResultAndState, ExecutionMetrics), StratusError>>();
 
-        match route {
-            EvmRoute::Transaction(input) => {
-                let task = ExecutionTask::new(input, execution_tx).into();
-                self.tx.send(task)?;
-            }
-            EvmRoute::CallPresent(input) => {
+        match input.target_state() {
+            TargetState::Pending | TargetState::Latest | TargetState::LatestPinned(_) => {
                 let task = ExecutionTask::new(input, execution_tx).into();
                 self.call_present.send(task)?;
             }
-            EvmRoute::CallPast(input) => {
+            TargetState::Past(_) => {
                 let task = ExecutionTask::new(input, execution_tx).into();
                 self.call_past.send(task)?;
             }

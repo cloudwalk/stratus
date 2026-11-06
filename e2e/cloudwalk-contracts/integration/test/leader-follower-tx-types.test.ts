@@ -1,7 +1,18 @@
 import { expect } from "chai";
 import { keccak256 } from "ethers";
 
-import { ALICE, BOB, CHARLIE, DAVE, EVE, FERDIE } from "./helpers/account";
+import {
+    ALICE,
+    BOB,
+    CHARLIE,
+    DAVE,
+    EVE,
+    FERDIE,
+    signUnsupportedAccessList,
+    signUnsupportedAuthorization,
+    signUnsupportedBlobTx,
+    signUnsupportedPriorityFee,
+} from "./helpers/account";
 import {
     sendAndGetFullResponse,
     sendWithRetry,
@@ -83,6 +94,34 @@ describe("Leader & Follower transaction types signer recovery regression test", 
         console.log("Type 4 (EIP-7702) transaction hash:", eip7702Hash);
         const response = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
         expect(response.data.result).to.equal(eip7702Hash);
+    });
+
+    it("Reject transactions signed over unsupported fields", async function () {
+        updateProviderUrl("stratus");
+        const nonceHex = await sendWithRetry("eth_getTransactionCount", [ALICE.address, "latest"]);
+        const nonce = parseInt(nonceHex, 16);
+
+        // Rejected transactions do not consume nonces, so every case can share the same nonce.
+        const unsupportedTransactions: [string, string][] = [
+            [
+                "Type 1 (EIP-2930) with non-empty access list",
+                await signUnsupportedAccessList(ALICE, BOB.address, nonce),
+            ],
+            [
+                "Type 2 (EIP-1559) with distinct priority fee",
+                await signUnsupportedPriorityFee(ALICE, BOB.address, nonce),
+            ],
+            ["Type 3 (EIP-4844) with blob fields", await signUnsupportedBlobTx(ALICE, BOB.address, nonce)],
+            [
+                "Type 4 (EIP-7702) with authorization list",
+                await signUnsupportedAuthorization(ALICE, BOB.address, nonce),
+            ],
+        ];
+
+        for (const [name, signedTx] of unsupportedTransactions) {
+            const response = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
+            expect(response.data.error?.code, name).to.equal(1008);
+        }
     });
 
     it("Wait for Follower to sync with Leader", async function () {

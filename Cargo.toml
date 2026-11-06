@@ -1,3 +1,10 @@
+[workspace]
+members = [
+    "crates/stratus_macros",
+    "crates/stratus_metrics",
+    "crates/stratus_metrics/macros",
+]
+
 [package]
 name = "stratus"
 version = "0.20.1"
@@ -11,12 +18,14 @@ default-run = "stratus"
 [dependencies]
 
 # general
+anstream = "=0.6.20"
+anstyle = "=1.0.11"
 anyhow = "=1.0.100"
 base64 = "=0.22.1"
 cfg-if = "=1.0.4"
 chrono = { version = "=0.4.43", features = ["serde"] }
-const_format = "=0.2.35"
-const-hex = "=1.19.0"
+const_format = "=0.2.36"
+const-hex = "=1.19.1"
 derive_more = "=2.0.1"
 derive-new = "=0.7.0"
 hash_hasher = "=2.0.4"
@@ -25,7 +34,7 @@ hex-literal = "=1.1.0"
 humantime = "=2.3.0"
 indexmap = { version = "=2.14.0", features = ["serde"] }
 itertools = "=0.14.0"
-nanoid = "=0.4.0"
+nanoid = "=0.5.0"
 oneshot = "=0.1.12"
 parking_lot = "=0.12.5"
 paste = "=1.0.15"
@@ -34,13 +43,14 @@ pin-project = "=1.1.13"
 rand = { version = "=0.9.4", features = ["small_rng"] }
 ring = "=0.17.14"
 rustc-hash = "=2.1.1"
-smallvec = "=1.15.1"
+smallvec = "=1.16.2"
 static_assertions = "=1.1.0"
 strum = { version = "=0.27.2", features = ["derive"] }
 sugars = "=3.0.1"
 thiserror = "=2.0.18"
 uuid = { version = "=1.23.3", features = ["v7"]}
 stratus_macros = { path = "./crates/stratus_macros" }
+stratus_metrics = { path = "./crates/stratus_metrics", default-features = false }
 libc = "=0.2.186"
 hostname = "=0.4.2"
 
@@ -53,8 +63,8 @@ tokio = { version = "=1.50.0", features = [
 tokio-util = "=0.7.18"
 
 # config
-clap = { version = "=4.5.60", features = ["derive", "env"] }
-dotenvy = "=0.15.7"
+clap = { version = "=4.5.60", features = ["derive", "string"] }
+toml = "=1.1.5"
 
 # serialization
 bincode = { version = "=2.0.1", features = ["derive"] }
@@ -62,7 +72,7 @@ display_json = "=0.2.1"
 serde = "=1.0.228"
 serde_json = "=1.0.149"
 serde_urlencoded = "=0.7.1"
-serde_with = "=3.14.1"
+serde_with = "=3.21.0"
 
 # parallelism
 crossbeam-channel = "=0.5.15"
@@ -83,7 +93,7 @@ alloy-dyn-abi = "=1.6.1"
 alloy-json-abi = "=1.6.1"
 revm-inspectors = { version = "=0.42.0", features = ["js-tracer"] }
 revm-state = "42.0.0"
-rlp = "=0.6.1"
+alloy-rlp = { version = "=0.3.16", features = ["derive"] }
 
 # network
 jsonrpsee = { version = "=0.26.0", features = ["server", "client"] }
@@ -97,8 +107,6 @@ bytes = "=1.11.1"
 
 # observability
 log = "=0.4.29"
-metrics = "=0.24.2"
-metrics-exporter-prometheus = { version = "=0.17.2", optional = true }
 opentelemetry = "=0.32.0"
 opentelemetry_sdk = { version = "=0.32.1", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "=0.32.0", features = [
@@ -128,7 +136,7 @@ rdkafka = {version = "=0.38.0", features = ["ssl", "sasl"] }
 sasl2-sys = { version = "=0.1.22", features = ["vendored"] }
 
 # Data migration
-indicatif = { version = "=0.18.3", optional = true }
+indicatif = { version = "=0.18.6", optional = true }
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies
@@ -171,7 +179,7 @@ tikv-jemallocator = { version = "=0.6.1", optional = true }
 [dev-dependencies]
 serde_plain = "=1.0.2"
 tempfile = "=3.24.0"
-glob = "=0.3.3"
+glob = "=0.3.4"
 
 # ------------------------------------------------------------------------------
 # Build dependencies
@@ -179,8 +187,8 @@ glob = "=0.3.3"
 
 [build-dependencies]
 anyhow = "=1.0.100"
-const-hex = "=1.19.0"
-glob = "=0.3.3"
+const-hex = "=1.19.1"
+glob = "=0.3.4"
 hostname = "=0.4.2"
 nom = "=8.0.0"
 phf_codegen = "=0.13.1"
@@ -209,7 +217,7 @@ dev = []
 tools = ["dep:indicatif"]
 
 # Enable runtime metrics collection.
-metrics = ["dep:metrics-exporter-prometheus"]
+metrics = ["stratus_metrics/metrics"]
 
 # Enable runtime rocksdb metrics collection.
 rocks_metrics = ["metrics"]
@@ -230,7 +238,7 @@ jeprof = ["tikv-jemallocator/profiling"]
 # Lints
 # ------------------------------------------------------------------------------
 
-[lints.clippy]
+[workspace.lints.clippy]
 clone_on_ref_ptr = "warn"
 cloned_instead_of_copied = "warn"
 default_trait_access = "warn"
@@ -244,6 +252,9 @@ wildcard_imports = "warn"
 unwrap_used = "allow"
 expect_used = "warn"
 panic = "warn"
+
+[lints]
+workspace = true
 
 # CI-only profile: strips debug symbols from dependencies to keep the shared
 # `stable-release` cache small, while keeping full debug info for stratus itself.

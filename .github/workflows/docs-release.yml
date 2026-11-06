@@ -30,7 +30,7 @@ env:
 jobs:
   # Build the documentation and upload as an artifact
   docs-build:
-    runs-on: stratus-runner
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout code
@@ -67,7 +67,7 @@ jobs:
 
   # Upload the documentation to GitHub Pages
   docs-release:
-    runs-on: stratus-runner
+    runs-on: ubuntu-22.04
     needs: docs-build
 
     environment:

@@ -1,0 +1,11 @@
+# Local development configuration for the Stratus leader node.
+# Selected automatically when no `--config` is passed and `--env` is `local` (the default).
+
+[executor]
+chain_id = 2008
+
+[common.tracing]
+filter = "info,stratus::eth::rpc::rpc_subscriptions::rx=off,stratus::eth::consensus::rx=off,stratus::eth::consensus=off,jsonrpsee-server=debug"
+
+[rpc]
+debug_trace_unsuccessful_only = ["blockscout"]
