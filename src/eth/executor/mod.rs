@@ -41,6 +41,7 @@ use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm_worker_pool::EvmWorkerPool;
 use crate::eth::executor::transaction_worker::TransactionWorker;
 use crate::eth::miner::Miner;
+use crate::eth::storage::JournalRecord;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::Address;
@@ -215,7 +216,7 @@ impl Executor {
         };
 
         // persist state
-        miner.save_execution(tx_execution, state)?;
+        miner.save_execution(tx_execution, state, None)?;
         Ok(())
     }
 
@@ -257,8 +258,12 @@ impl Executor {
             self.storage.load_access_list(access_list);
         }
 
+        let journal_record = JournalRecord::encode(&tx)
+            .inspect_err(|err| tracing::error!(?err, "journal record encoding failed"))
+            .ok();
+
         // The transaction worker serializes execution and persistence.
-        self.transaction_worker.execute_local_transaction(tx).map(|_| ())
+        self.transaction_worker.execute_local_transaction(tx, journal_record).map(|_| ())
     }
 
     /// Executes a read-only call in the local EVM, without persisting state changes.

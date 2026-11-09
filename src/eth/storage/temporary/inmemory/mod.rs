@@ -11,6 +11,7 @@ use crate::eth::storage::permanent::RocksPermanentStorage;
 use crate::eth::storage::stratus_storage::label;
 use crate::eth::storage::temporary::compute_pending_block_number;
 use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTemporaryStorage;
+use crate::eth::storage::temporary::journal::JournalRecord;
 use crate::eth::storage::temporary::journal::TransactionJournal;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
@@ -58,8 +59,8 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.set_pending_header(number, timestamp);
     }
 
-    pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
-        self.transaction_storage.save_pending_execution(tx, state)
+    pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>, journal_record: Option<&JournalRecord>) -> Result<(), StorageError> {
+        self.transaction_storage.save_pending_execution(tx, state, journal_record)
     }
 
     pub fn read_pending_executions(&self) -> Vec<TransactionExecution> {

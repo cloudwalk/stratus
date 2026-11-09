@@ -9,6 +9,7 @@ pub use stratus_storage::MinedPointInTime;
 pub use stratus_storage::StratusStorage;
 pub use temporary::InMemoryTemporaryStorage;
 pub use temporary::JournalBlock;
+pub use temporary::JournalRecord;
 pub use temporary::TransactionJournal;
 pub use types::FoundAt;
 mod cache;
@@ -97,7 +98,7 @@ mod tests {
             };
 
             let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
-            self.save_execution(tx, state).expect("save execution");
+            self.save_execution(tx, state, None).expect("save execution");
 
             let (block, block_changes) = self.finish_pending_block();
             let block_number = block.header.number;

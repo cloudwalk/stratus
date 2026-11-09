@@ -13,6 +13,7 @@ use crate::eth::executor::types::state::Complete;
 use crate::eth::executor::types::state::CompleteValue;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
+use crate::eth::storage::temporary::journal::JournalRecord;
 use crate::eth::storage::temporary::journal::TransactionJournal;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
@@ -66,9 +67,7 @@ impl InmemoryTransactionTemporaryStorage {
     // Block and executions
     // -------------------------------------------------------------------------
 
-    pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
-        let journal_record = TransactionJournal::encode(&tx).inspect_err(|err| tracing::error!(?err, "journal record encoding failed"));
-
+    pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>, journal_record: Option<&JournalRecord>) -> Result<(), StorageError> {
         let pending_block = self.pending_block.upgradable_read();
 
         // check conflicts
@@ -84,7 +83,7 @@ impl InmemoryTransactionTemporaryStorage {
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
-        if let (Some(journal), Ok(record)) = (pending_block.journal.as_mut(), &journal_record) {
+        if let (Some(journal), Some(record)) = (pending_block.journal.as_mut(), journal_record) {
             let _ = journal.append(record).inspect_err(|err| tracing::error!(?err, "append to journal failed"));
         }
         pending_block.state.merge(state);

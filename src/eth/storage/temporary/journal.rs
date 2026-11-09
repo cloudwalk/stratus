@@ -7,7 +7,6 @@ use std::path::PathBuf;
 use anyhow::anyhow;
 use serde::Deserialize;
 
-use crate::eth::executor::TransactionExecution;
 use crate::eth::storage::StorageError;
 use crate::eth::types::BlockInfo;
 use crate::eth::types::BlockNumber;
@@ -17,6 +16,20 @@ use crate::globals::DATABASE_PATH;
 pub struct JournalBlock {
     pub header: BlockInfo,
     pub transactions: Vec<TransactionInput>,
+}
+
+/// A transaction input serialized as a journal entry.
+///
+/// Local transactions are encoded on the submitting thread so the transaction worker only writes the bytes.
+#[derive(Debug)]
+pub struct JournalRecord(Vec<u8>);
+
+impl JournalRecord {
+    pub fn encode(transaction: &TransactionInput) -> Result<Self, StorageError> {
+        serde_json::to_vec(transaction)
+            .map(Self)
+            .map_err(|err| StorageError::Journal { err: anyhow!(err) })
+    }
 }
 
 const JOURNAL_DIRECTORY: &str = "transaction-journal";
@@ -73,19 +86,12 @@ impl TransactionJournal {
             })
     }
 
-    /// Serializes a transaction into a journal record.
-    pub fn encode(execution: &TransactionExecution) -> Result<Vec<u8>, StorageError> {
-        // could be a little cheaper if we created a TransactionInputView struct with all borrowed values that serialized the same
-        let transaction: TransactionInput = execution.into();
-        serde_json::to_vec(&transaction).map_err(|err| StorageError::Journal { err: anyhow!(err) })
-    }
-
-    /// Appends a record produced by [`Self::encode`] with a single write.
-    pub fn append(&mut self, record: &[u8]) -> Result<(), StorageError> {
+    /// Appends a record.
+    pub fn append(&mut self, record: &JournalRecord) -> Result<(), StorageError> {
         let file = self.file.as_mut().ok_or_else(|| StorageError::Journal {
             err: anyhow!("journal file for block {} is closed", self.number),
         })?;
-        file.write_all(record).map_err(|err| StorageError::Journal { err: anyhow!(err) })
+        file.write_all(&record.0).map_err(|err| StorageError::Journal { err: anyhow!(err) })
     }
 
     /// Reads the block recorded in this journal.
