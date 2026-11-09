@@ -1,6 +1,7 @@
 use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::anyhow;
@@ -66,19 +67,25 @@ impl TransactionJournal {
             .open(Self::path(header.number))
             .map_err(|err| StorageError::Journal { err: anyhow!(err) })
             .and_then(|mut file| {
-                serde_json::to_writer(&mut file, &header)
-                    .map(|_| file)
-                    .map_err(|err| StorageError::Journal { err: anyhow!(err) })
+                let record = serde_json::to_vec(&header).map_err(|err| StorageError::Journal { err: anyhow!(err) })?;
+                file.write_all(&record).map_err(|err| StorageError::Journal { err: anyhow!(err) })?;
+                Ok(file)
             })
     }
 
-    pub fn append(&mut self, execution: &TransactionExecution) -> Result<(), StorageError> {
+    /// Serializes a transaction into a journal record.
+    pub fn encode(execution: &TransactionExecution) -> Result<Vec<u8>, StorageError> {
         // could be a little cheaper if we created a TransactionInputView struct with all borrowed values that serialized the same
         let transaction: TransactionInput = execution.into();
+        serde_json::to_vec(&transaction).map_err(|err| StorageError::Journal { err: anyhow!(err) })
+    }
+
+    /// Appends a record produced by [`Self::encode`] with a single write.
+    pub fn append(&mut self, record: &[u8]) -> Result<(), StorageError> {
         let file = self.file.as_mut().ok_or_else(|| StorageError::Journal {
             err: anyhow!("journal file for block {} is closed", self.number),
         })?;
-        serde_json::to_writer(file, &transaction).map_err(|err| StorageError::Journal { err: anyhow!(err) })
+        file.write_all(record).map_err(|err| StorageError::Journal { err: anyhow!(err) })
     }
 
     /// Reads the block recorded in this journal.

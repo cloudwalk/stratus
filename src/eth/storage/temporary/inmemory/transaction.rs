@@ -67,6 +67,8 @@ impl InmemoryTransactionTemporaryStorage {
     // -------------------------------------------------------------------------
 
     pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
+        let journal_record = TransactionJournal::encode(&tx).inspect_err(|err| tracing::error!(?err, "journal record encoding failed"));
+
         let pending_block = self.pending_block.upgradable_read();
 
         // check conflicts
@@ -82,8 +84,8 @@ impl InmemoryTransactionTemporaryStorage {
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
-        if let Some(journal) = pending_block.journal.as_mut() {
-            let _ = journal.append(&tx).inspect_err(|err| tracing::error!(?err, "append to journal failed"));
+        if let (Some(journal), Ok(record)) = (pending_block.journal.as_mut(), &journal_record) {
+            let _ = journal.append(record).inspect_err(|err| tracing::error!(?err, "append to journal failed"));
         }
         pending_block.state.merge(state);
         pending_block.block.push_transaction(tx);
