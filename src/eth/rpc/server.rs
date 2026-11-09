@@ -1874,6 +1874,7 @@ mod tests {
             revert_reason: None,
             calls: Vec::new(),
             logs: Vec::new(),
+            ..Default::default()
         };
 
         let deep_call_2 = CallFrame {
@@ -1896,6 +1897,7 @@ mod tests {
             revert_reason: None,
             calls: Vec::new(),
             logs: Vec::new(),
+            ..Default::default()
         };
 
         // Create level 2 nested calls using real contract addresses from CONTRACTS map
@@ -1919,6 +1921,7 @@ mod tests {
             revert_reason: None,
             calls: vec![deep_call_1],
             logs: Vec::new(),
+            ..Default::default()
         };
 
         let nested_call_2 = CallFrame {
@@ -1941,6 +1944,7 @@ mod tests {
             revert_reason: None,
             calls: vec![deep_call_2],
             logs: Vec::new(),
+            ..Default::default()
         };
 
         // Create main call containing nested calls (level 1)
@@ -1964,6 +1968,7 @@ mod tests {
             revert_reason: None,
             calls: vec![nested_call_1, nested_call_2],
             logs: Vec::new(),
+            ..Default::default()
         }
     }
 

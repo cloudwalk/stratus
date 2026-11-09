@@ -37,6 +37,12 @@ criteria = "safe-to-deploy"
 delta = "1.1.0 -> 2.3.0"
 notes = "No unsafe/FFI/transmute/ptr in added source lines; build=false in Cargo.toml (no build.rs). Only std::fs usage is in #[test] functions reading testdata fixtures via CARGO_MANIFEST_DIR (test-only). New optional borsh derive feature and alloy-* dep version bumps are churn/non-security. Source changes are EIP-7594/7843/7928 consensus types and receipt/transaction refactors — pure Rust types, no netwo"
 
+[[audits.alloy-consensus]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "2.3.0 -> 2.4.2"
+notes = "Functional delta hardens decoding and adds EIP-8070 support. #4155 rewrites Block::decode_sealed (block/mod.rs) to decode children within the outer RLP list payload via decode_bytes and return ListLengthMismatch on leftover bytes, closing over-reads against decoders that expand input. #4157 tightens Eip658Value::decode (receipt/status.rs): rejects list headers and any status byte other than 0x00/0x01. #4121 adds clear_eip7594_blobs on the pooled EthereumTxEnvelope impls (transaction/pooled.rs) to strip blob payloads for eth/72 responses per EIP-8070. Remainder is the #4123 doc pass on Signed, Recovered, and ReceiptWithBloom. src/ contains zero unsafe; std::fs usage is confined to pre-existing #[cfg] test modules reading static fixtures. Cargo.toml churn is alloy-family version bumps only; MSRV stays 1.94.1. No RUSTSEC advisories for these versions."
+
 [[audits.alloy-consensus-any]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -54,6 +60,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "1.0.41 -> 2.3.0"
 notes = "Diff only touches header.rs (adds optional EIP-7928/7843 fields, a saturating base_fee_per_gas serde adapter clamping >u64::MAX) and receipt/envelope.rs (drops redundant Clone bound); Cargo.toml bumps alloy deps + MSRV 1.94.1, adds bincode dev-dep. No unsafe/FFI/transmute/pointers/build.rs/network/fs/env in the diff — pure domain-type and serde logic plus tests."
+
+[[audits.alloy-consensus-any]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "2.3.0 -> 2.4.2"
+notes = "Documentation-only delta: the sole src change rewrites the ReceiptEnvelope doc comment on legacy vs typed EIP-2718 encoding (CHANGELOG cites only #4123, 'Clarify public API behavior'). Cargo.toml changes are intra-family version bumps (alloy-consensus, alloy-eips, alloy-serde 2.3.0 -> 2.4.2) plus a lint-table key reformat (dashes to underscores, levels and warnings unchanged). src/ is entirely safe Rust, and the diff touches only doc comments, CHANGELOG, and Cargo.toml. MSRV stays 1.94.1. No RUSTSEC advisories for these versions."
 
 [[audits.alloy-dyn-abi]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
@@ -78,6 +90,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 version = "0.4.1"
 notes = "Pure EIP-7928 block-access-list data types. No unsafe, FFI, build.rs, env, fs, net, or process IO. Only Display/Debug write! formatting. Reputable deps only (alloy-primitives/rlp, once_cell, thiserror, optional serde/borsh/arbitrary/rand). No capability surface."
+
+[[audits.alloy-eip7928]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "0.4.1 -> 0.4.11"
+notes = "EIP-7928 block-access-list types. Diff adds BalAccountInfo, RawBal/RawOrDecodedBal (raw RLP with lazy keccak hash), Bal::merge and insert_changes_at (state-override layer support with index shifting), AccountChanges merge/normalize/collapse/shift helpers, post-state accessors, reusable hash-encoding buffer, a validate_block_access_list module enforcing canonical ordering and uint32 index bounds, and serde renames to index/value/code with old-name aliases. Pure safe Rust data-types and codecs; no unsafe, transmute, fs, net, env, or process code in the diff; no build.rs. Only dependency churn is alloy-primitives 1.4 -> 1.6. MSRV 1.90 unchanged. No advisories."
 
 [[audits.alloy-eips]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -124,6 +142,12 @@ criteria = "safe-to-deploy"
 delta = "1.1.0 -> 2.3.0"
 notes = "Refactor of pre-existing c-kzg layout transmutes into a documented AsCkzg/AsAlloy trait; removed raw from_raw_parts/as*mut pointer code (net safer). No build.rs, no FFI, no env/fs/net/process access. New eip7928.rs is an 8-line re-export. No new unsafe category."
 
+[[audits.alloy-eips]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "2.3.0 -> 2.4.2"
+notes = "Diff adds EIP-8070 blobless sidecar encoding (BlobSidecarEncoding, encode_7594_with/_len_with, clear_eip7594_blobs), EIP-7594 sidecar reconstruction from sparse cells (try_recover_from_cells, kzg feature; re-authenticates each blob by recomputing its commitment and rejects cell-count mismatch/overflow), EIP-8282 builder deposit/exit system-contract constants and bytecode, EIP-7910 Amsterdam system-contract entries, plus doc clarifications of unvalidated invariants. Pure safe Rust; no unsafe, FFI, fs, net, env, or process code in the diff. No build.rs; only dependency churn is the in-family alloy-serde 2.4.2 bump. MSRV 1.94.1 unchanged. No advisories."
+
 [[audits.alloy-json-abi]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -153,6 +177,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "1.0.41 -> 2.3.0"
 notes = "Diff is pure trait/struct additions: TransactionFailedError, default methods (block_hash_num, ensure_success, inclusion_info, num_hash), EIP-4844/EIP-7594 sidecar variant refactor in TransactionBuilder4844, new InclusionInfo data struct, and into_hashes_vec. No unsafe, FFI, transmute, build.rs, env::var, fs, net, or I/O in the source changes. Cargo.toml only bumps MSRV to 1.94.1 and sibling alloy-"
+
+[[audits.alloy-network-primitives]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "2.3.0 -> 2.4.2"
+notes = "Documentation-only delta under #4123: doc rewrites across block.rs (BlockTransactions untagged-serde and convert_to_hashes semantics), traits.rs (ReceiptResponse::cost overflow behavior, TransactionResponse gas_price/max_fee_per_gas defaults keyed on tx type), tx_builders.rs, and tx_meta.rs, plus an expanded README example. The only code-adjacent churn is Cargo.toml version bumps of the alloy-family deps (alloy-consensus, alloy-eips, alloy-serde 2.3.0 -> 2.4.2) and the lint-table key reformat. src/ is safe Rust throughout; build = false. MSRV stays 1.94.1. No RUSTSEC advisories for these versions."
 
 [[audits.alloy-primitives]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -202,6 +232,12 @@ criteria = "safe-to-deploy"
 delta = "1.0.41 -> 2.3.0"
 notes = "Pure RPC data-types crate; diff adds optional serde fields, aliases, builder helpers, and minor perf tweaks. Grep across full diff found no unsafe/FFI/transmute, no build.rs (build=false), no network/fs/env access, no pointers. No attack-surface expansion; only ambient capability is serde deserialization of trusted-shaped JSON. Dependency/feature churn in Cargo.toml is non-blocking. Safe to deploy"
 
+[[audits.alloy-rpc-types-eth]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "2.3.0 -> 2.4.2"
+notes = "Documentation-only delta (#4123 plus #4164 Filter doc-link fixes): doc rewrites in block.rs, fee.rs, filter.rs, log.rs, state.rs, simulate.rs, transaction/receipt.rs, and transaction/request.rs clarifying existing behavior — Header::hash is trusted RPC metadata preserved across map/into_sealed/into_consensus_sealed, TransactionInput prefers 'input' over 'data' when both are set, TransactionRequest type selection is field-driven, and FeeHistory array lengths (N+1 base fees). Cargo.toml changes are alloy-family version bumps (2.3.0 -> 2.4.2) and the lint-table key reformat. src/ is safe Rust throughout. MSRV stays 1.94.1. No RUSTSEC advisories for these versions."
+
 [[audits.alloy-rpc-types-trace]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -219,6 +255,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "1.0.41 -> 2.3.0"
 notes = "Version bump 1.0.41 -> 2.3.0 adds a safe CallFrameIter, Erc7562Tracer variant, MuxConfig keyed on GethDebugTracerType, a manual safe Deserialize for TraceOutput, null-default CallOutput.output, 0x-prefix storage serialization fix, and PreStateFrame accessors. No unsafe, FFI, transmute, build.rs, network, fs, env, or telemetry introduced. Only dependency churn, serde tweaks, safe iterators, and MSR"
+
+[[audits.alloy-rpc-types-trace]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "2.3.0 -> 2.4.2"
+notes = "Adds EIP-8037 state-gas tracer support (#4113): new geth/state_gas.rs module with the StateGasTrace per-transaction two-dimensional gas summary; optional executionGasUsed/stateGasUsed/gasRefund/stateGasRefund fields on CallFrame (geth/call.rs) and DefaultFrame, and signed stateGasCost (i64, can be negative under EIP-8037 refunds) plus stateGasReservoir on StructLog; new GethTrace::StateGasTracer variant and GethDebugBuiltInTracerType::StateGasTracer with its is/try_into/From accessors, documented as appearing from the Amsterdam hardfork onward. #4115 adds ChainBlockTraceResult for debug_traceChain subscription results. All additions are serde-annotated data types in safe Rust. Dependency churn is alloy-family version bumps only (alloy-rpc-types-eth, alloy-serde 2.3.0 -> 2.4.2); MSRV stays 1.94.1. No RUSTSEC advisories for these versions."
 
 [[audits.alloy-serde]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -246,6 +288,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "1.1.0 -> 2.3.0"
 notes = "Diff is pure serde logic: Cargo.toml MSRV/dep bumps; src/other/mod.rs deserialize_as refactor via serde_json::to_value; src/quantity.rs replaces infallible from_ruint with try_from_ruint returning Result and adds NonZeroU8..U128 support; src/storage.rs fixes an off-by-one length check and avoids a heap alloc in Display. No unsafe, FFI, transmute, pointers, build.rs, network, fs, or env access intr"
+
+[[audits.alloy-serde]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "2.3.0 -> 2.5.0"
+notes = "Diff adds the json_rpc module: lenient deserializers for JSON-RPC params accepting JSON numbers, 0x-quantity strings, decimal strings, and optionally a one-element positional sequence, for u8-u128 and Uint targets; overflow, floats, and multi-element sequences are rejected rather than truncated. Rest is doc rewrites (quantity/ttd/storage/optional) and README examples. Pure safe Rust; no unsafe, transmute, fs, net, env, or process code. No build.rs, no dependency or feature changes, MSRV 1.94.1 unchanged. No advisories."
 
 [[audits.alloy-sol-macro]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -358,6 +406,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "1.2.1 -> 2.3.0"
 notes = "Diff is confined to src/expand.rs and Cargo.toml/CHANGELOG. Source changes are: a fallback-decode cursor-preservation bugfix (clones the &[u8] cursor, decodes into a candidate, restores buf only on Ok), a path-hygiene fix (alloy_rlp::Result -> #alloy_rlp::Result macro), and a new generated tx_type() match impl. No unsafe/FFI/pointers/transmute, no build.rs, no network/fs/env access. Cargo.toml onl"
+
+[[audits.alloy-tx-macros]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "2.3.0 -> 2.5.0"
+notes = "Proc-macro crate whose diff is documentation-only: expanded derive(TransactionEnvelope) docs (input requirements, ty/flatten semantics, *_cfg attribute gating, generated-API list) plus Cargo.toml lint-table reformatting (dash-to-underscore keys); the macro body and emitted code are unchanged, so generated imports and emitted impls are identical to the previously audited version. No unsafe, fs, net, env, or process code; no new dependencies, features, or build.rs. MSRV 1.94.1 unchanged. No advisories."
 
 [[audits.ark-bls12-381]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
@@ -1175,6 +1229,12 @@ criteria = "safe-to-deploy"
 delta = "30.2.0 -> 42.0.1"
 notes = "Facade crate; only re-export restructuring, opt-in feature flags, MSRV bump, dep churn. No new unsafe/FFI/build.rs in the revm crate itself; actual unsafe lives in sub-crates audited separately."
 
+[[audits.revm]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "42.0.1 -> 43.0.3"
+notes = "Facade crate; the src/lib.rs delta only adds re-exports gated behind the existing asyncdb feature (AsyncDb, DatabaseAsync, WrapDatabaseAsync, ExecuteEvmAsync, SystemCallEvmAsync). Cargo.toml bumps all revm subcrates to 43.x, adds an opt-in account-ext feature forwarding to state/context(-interface), and broadens asyncdb to also enable std plus the asyncdb flag on context and handler. Actual unsafe lives in the sub-crates audited separately; MSRV unchanged at 1.91.0 and the dependency set gains nothing outside the revm workspace."
+
 [[audits.revm-bytecode]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -1186,6 +1246,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "7.0.2 -> 42.0.0"
 notes = "Diff 7.0.2->42.0.0 is a soundness-improving refactor. new_analyzed is now unsafe with an explicit padding-invariant contract plus debug asserts (#3557). analyze_legacy fixes an OOB raw-pointer advance via wrapping_add under a <end guard and hardens DUPN/SWAPN/EXCHANGE padding (#3752). JumpTable drops its cached raw *const u8 and manual unsafe Send/Sync in favor of Cow<'static,[u8]>; is_valid's bit"
+
+[[audits.revm-bytecode]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "42.0.0 -> 43.0.0"
+notes = "Pure version-bump release: the diff touches only CHANGELOG.md and Cargo.toml, advancing revm-primitives 42.0.0 -> 43.0.0 as the sole dependency change. All of src/ is byte-identical, so the previously audited bytecode analysis/JumpTable logic is carried over unchanged and its unsafe footprint is identical. Feature set and MSRV (rust-version 1.91.0) are untouched. No known advisories for 43.0.0."
 
 [[audits.revm-context]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -1199,6 +1265,12 @@ criteria = "safe-to-deploy"
 delta = "10.1.2 -> 42.0.0"
 notes = "Version 10.1.2→42.0.0 adds Amsterdam EIPs (7702/7708/7843/7928/8037), GasParams restructuring, JournaledAccount refactor, transient-storage wrapper, Display impls. Only unsafe block (local.rs set_len(0)) is pre-existing and unchanged. No FFI/extern, transmute, ptr/raw, build.rs, fs, net, env, or data-exposure added. Dep churn is internal revm-* bumps plus a map-foldhash feature. No new security-se"
 
+[[audits.revm-context]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "42.0.0 -> 43.0.3"
+notes = "Code changes are minimal: PR #3709's asyncdb support adds a database_interface::async_db::FiberStack field to the Evm struct (evm.rs), threaded through constructors/copy methods strictly behind the opt-in `asyncdb` feature (fiber machinery itself lives in revm-database-interface); PR #3894 adds the opt-in `account-ext` feature plus a journal/inner.rs test verifying extension checkpoint revert/commit semantics. Unsafe footprint and ambient capabilities are unchanged — the whole diff is safe Rust over in-memory journal/EVM state. Dep churn is internal revm-* version bumps only (database-interface/state 43.0.1, context-interface 43.0.2); MSRV stays 1.91.0. RustSec advisory check: clean."
+
 [[audits.revm-context-interface]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -1210,6 +1282,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "11.1.2 -> 42.0.0"
 notes = "No new unsafe blocks, FFI, transmute, build.rs, fs/net/env, or data exposure. 'unsafe_' names are a journal-warning convention with safe bodies; Arc::as_ptr cast only feeds Hash without dereference. Changes are EIP trait additions, GasTracker/JournaledAccount/AnyError refactors, dep churn, and MSRV bump."
+
+[[audits.revm-context-interface]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "42.0.0 -> 43.0.2"
+notes = "Main changes: PR #3893 adds GasTracker::absorb_returned_reservoir (cfg/gas.rs), reconciling sibling state-gas refills by unwinding the parent's spilled state gas LIFO before parking the excess in the reservoir; glamsterdam devnet-8 gas repricing (PRs #3850/#3857) updates EIP-8038 constants in gas_params.rs (ACCOUNT_WRITE 9000, STORAGE_CLEAR_REFUND 11616, access-list items priced at cold-minus-warm) and drops the tx_transfer_log_cost GasId (count 50→49); PR #3894 adds feature-gated `account-ext` journaling (JournaledAccountTr::set_extension, JournalEntry::ExtensionChange with old-value restore on revert in journaled_state/entry.rs); DummyHost now carries its spec so is_amsterdam_eip8037_enabled reflects it. All new code is safe arithmetic/comparison Rust over in-memory gas and journal state; the one added unwrap() sits in the ExtensionChange revert arm following the crate's established entry-dispatch pattern. Dep churn is internal revm-* bumps plus the account-ext feature forwarding to state; MSRV stays 1.91.0. RustSec advisory check: clean."
 
 [[audits.revm-database]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -1223,6 +1301,12 @@ criteria = "safe-to-deploy"
 delta = "9.0.2 -> 42.0.0"
 notes = "No unsafe/FFI/raw-pointers/transmute added (zero source-level hits). No build.rs (build=false), no build-time execution, no new fs/env/net/process access, no telemetry, no outbound IPC. Only new std imports are Box/Cow/Vec/Arc. AlloyDB network code is opt-in and pre-existing; its diff only refactors the error type and replaces a block.unwrap() panic with a typed BlockNotFound error. New BlockHashC"
 
+[[audits.revm-database]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "42.0.0 -> 43.0.1"
+notes = "Contentful change is one fix in src/states/cache.rs (#3855): transition_newly_created_block now inserts the created contract's code into the shared contracts map (keyed by code_hash) before returning the transition, so code_by_hash resolves for contracts created in the same block; covered by a new test in state.rs. reverts.rs swaps bundle_account.storage.drain().collect() for core::mem::take, which is semantically equivalent (both leave an empty map and hand over the old one). Entirely safe Rust; ambient capabilities limited to in-memory state. Internal dep bumps to revm-state/interface 43.x; MSRV stays 1.91.0."
+
 [[audits.revm-database-interface]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -1234,6 +1318,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "8.0.3 -> 42.0.0"
 notes = "Diff (8.0.3 to 42.0.0) contains only safe Rust: new trait methods (storage_by_account_id, BAL fallback), a new in-memory bal.rs (EIP-7928 Block Access List data structures), thiserror derive, const fn additions, MSRV bump 1.88->1.91, and a tokio block_in_place refactor. No unsafe, FFI, transmute, raw pointers, build.rs, network, filesystem, env access, or telemetry anywhere in the diff. All grep h"
+
+[[audits.revm-database-interface]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "42.0.0 -> 43.0.1"
+notes = "Reviewed 42.0.0 -> 43.0.1 via cargo vet diff. The 43.0.0 fiber-backed asyncdb support (#3709) rewrites src/async_db.rs: AsyncDb (WrapDatabaseAsync now delegates to it) runs sync Database calls on a corosensei Coroutine over a reusable 1 MiB FiberStack, and block_on_current() lets sync code inside the fiber await futures by suspending the fiber instead of blocking the executor thread — fibers execute on the calling thread via tokio block_in_place/handle.block_on, so thread or process creation happens only through the caller's own tokio runtime. The new unsafe footprint lives entirely behind the non-default `asyncdb` feature (now = std + dep:tokio/rt-multi-thread + new optional corosensei 0.3.4 with default-stack+unwind): two public unsafe constructors with documented stack-lifetime/exclusivity contracts, unsafe impl Send for FiberFuture justified at the blocking boundary, Coroutine::with_stack_unchecked tied to the closure's 'a lifetime via PhantomData, NonNull derefs through a thread-local current-fiber cell, force_reset on cancelled stacks, and two Context lifetime transmutes confined to same-thread poll/resume — each contract is stated and holds. Poll-after-completion panics/expects guard future state-machine misuse only. The default std build keeps the prior unsafe-free surface; MSRV 1.91.0, ambient capability limited to the caller-supplied tokio Handle, and cargo vet diff surfaced no advisory warnings."
 
 [[audits.revm-handler]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -1253,6 +1343,12 @@ criteria = "safe-to-deploy"
 delta = "11.2.0 -> 42.0.1"
 notes = "Only pre-existing unsafe block (end_init token), unchanged; no FFI, build.rs, env, network, or fs. Changes are EIP alignment, gas-accounting, and structural refactors."
 
+[[audits.revm-handler]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "42.0.1 -> 43.0.3"
+notes = "Adds PR #3709's async-database fiber support: ExecuteEvmAsync/SystemCallEvmAsync traits (api.rs, system_call.rs) whose four unsafe blocks each pass NonNull::from(&mut self.async_stack) to database_interface::on_fiber_result_with_stack, re-entrantly running the synchronous transact/system-call path on a fiber-backed stack; safety reasoning holds — the NonNull comes from a live &mut, and the closure moves the exclusive &mut self borrow so the stack slot stays unaliased until the returned future drops — and the whole feature is gated behind opt-in `asyncdb` (this workspace leaves it off). PR #3893/#3892 rework handle_reservoir_remaining_gas in frame.rs to absorb the child reservoir LIFO instead of overwriting it, fixing sibling state-gas refills and placing the EIP-8037 system-call state-gas margin in the reservoir; frame.rs also propagates the new depth field (PR #3829) and precompile_provider.rs documents the Ok(None) pass-through semantics (PR #3769). Dep churn is internal revm-* bumps only; MSRV stays 1.91.0 and ambient surface is pure computation. RustSec advisory check: clean."
+
 [[audits.revm-inspector]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -1271,6 +1367,12 @@ criteria = "safe-to-deploy"
 delta = "11.2.0 -> 42.0.1"
 notes = "Pure Rust source changes (EIP semantics, Inspector trait frame_start/frame_end + log_full, CountInspector HashMap->fixed array, ResultGas plumbing, const fn additions, revm-* internal dep bumps, MSRV 1.88->1.91). No build.rs, no unsafe/FFI/transmute/pointers, no network/IPC/telemetry, no runtime fs/env access, no build-time execution. Only benign match is 'extern crate alloc'. Attack surface uncha"
 
+[[audits.revm-inspector]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "42.0.1 -> 43.0.3"
+notes = "Facade-only delta: only CHANGELOG.md and Cargo.toml change, bumping the internal revm subcrates (context, database-interface, handler 43.0.3, interpreter 43.0.2, primitives, state 43.0.1). src/ is unchanged; the changelog's only contentful item (EIP-8037 system-call state-gas margin moved to the reservoir, #3892) landed in revm-state/interpreter, audited separately. Unsafe footprint and ambient capabilities are identical to the audited 42.0.1. MSRV unchanged at 1.91.0; no new dependencies or features."
+
 [[audits.revm-inspectors]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -1282,6 +1384,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "0.31.2 -> 0.42.0"
 notes = "Only new unsafe is `unsafe impl<T> Trace for Shared<T>{empty_trace!()}` on a private Rc<RefCell<T>> helper holding plain data and Rc-based GuardedNullableGc wrappers (no real boa Gc/JsObject); mirrors the pre-existing sound GuardedNullableGc pattern. The transmute in bindings.rs is unchanged context; two OpCode::new_unchecked calls were removed. No new FFI, build.rs, env::var, as_ptr/from_raw, net"
+
+[[audits.revm-inspectors]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "0.42.0 -> 0.43.0"
+notes = "Reviewed 0.42.0 -> 0.43.0 via cargo vet diff (spans the 0.42.1/0.42.2 patch releases). Adds EIP-8037 (Amsterdam) state-gas tracing (#476): CallTraceStep gains state_gas_cost/state_gas_reservoir/state_gas_spent (saturating_sub delta, #482 avoids repeated spec-ID writes), GethTraceBuilder gains spec_id tracking captured via new initialize_interp/call/create hooks plus geth_traces_with_result_gas/geth_call_traces_with_result_gas over revm's ResultGas, and a new StateGasTracer built-in variant (NoOp-backed StateGasTrace frame) is wired into DebugInspector, MuxInspector, and the delegate macro. The 0.42.x fixes (#474, #480) add ..Default::default() to CallFrame/StructLog literals for forward compatibility with new alloy trace fields. Cargo.toml delta is the revm bump 42.0.1 -> 43.0.0 alone — the js-tracer/Boa dependency set and every other dep pin are byte-identical between the two versions, so Boa/JS-engine churn from this delta is nil; MSRV 1.94 was already set in 0.42.0. The diff is entirely safe Rust over trace-data plumbing (no unsafe, fs, net, env, or process code touched), and cargo vet diff surfaced no advisory warnings."
 
 [[audits.revm-interpreter]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -1301,6 +1409,12 @@ criteria = "safe-to-deploy"
 delta = "28.0.0 -> 42.0.0"
 notes = "No new unsafe/FFI/build.rs/env/fs/network surface. Unsafe blocks are pre-existing stack/memory/gas ops with preserved bounds checks; Bytecode::new_analyzed newly marked unsafe (hardening + Miri test); #[unsafe(no_mangle)] is commented-out; dep bumps are internal revm workspace sync; MSRV bump only."
 
+[[audits.revm-interpreter]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "42.0.0 -> 43.0.2"
+notes = "Diff is small and EVM-semantics-focused: PR #3864 makes a failed memory resize return MemoryOOG (shared_memory.rs resize_memory_cold now checks the resize return), PR #3829 adds the EIP-8037 CREATE call-depth pre-access check in instructions/contract.rs (depth+1 > CALL_STACK_LIMIT pushes 0 without touching the destination, keeping it out of the EIP-7928 access list), InputsImpl/InputsTr gain a depth field, and stack.rs swaps chunks_exact for as_chunks::<32>(). The only unsafe in the crate (local.rs set_len) is pre-existing and untouched by the diff. Dep churn is internal revm-* bumps (bytecode/primitives 43.0.0, context-interface 43.0.2, state 43.0.1); MSRV stays 1.91.0. Ambient surface is pure computation. RustSec advisory check: clean."
+
 [[audits.revm-precompile]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -1312,6 +1426,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "28.1.1 -> 42.0.1"
 notes = "Blake2 AVX2 SIMD module (blake2/avx2.rs) is vendored from blake2_simd (MIT), runtime-feature-detected via is_x86_feature_detected! with portable fallback — sound. BLS MSM p1_msm/p2_msm use from_raw_parts to reinterpret &[blst_scalar] as &[u8]; blst_scalar is #[repr(C)] with a single b:[u8;32] field, so the cast is layout-sound with correct len()*32 byte count. gmp-mpfr-sys FFI is NOT compiled (gmp feature off; modexp uses aurora-engine-modexp). All new unsafe is constrained and justified."
+
+[[audits.revm-precompile]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "42.0.1 -> 43.0.3"
+notes = "Reviewed 42.0.1 -> 43.0.3 via cargo vet diff. Headline change is the fused BLS12-381 multi-miller loop (#3823): bls12_381/blst.rs drops the per-pair blst_miller_loop + blst_fp12_mul helpers and calls blst_miller_loop_n directly through null-terminated [*const blst_*_affine; 2] arrays over Vec-owned points with an exact pairs.len() count; the FFI's requirement of infinity-free inputs is satisfied because pairing_common.rs already skips all-zero-encoded pairs upstream, and kz_point_evaluation/blst.rs adds an explicit blst_p1_affine_is_inf/blst_p2_affine_is_inf filter for the constant-polynomial proof case, with new tests covering both. Net unsafe-block count is unchanged (~70 mentions, all FFI on valid blst types); read_fp canonical-check fix is comment-only (#3824). blake2 portable path (#3840) unrolls the round loop with const-generic SIGMA indices and adds a #[doc(hidden)] const compress_portable plus a runtime-index reference test and the EIP-152 vector-4 oracle. Dep churn is workspace-internal only (context-interface -> 43.0.2, primitives -> 43.0.0); blst/c-kzg/arkworks pins unchanged, MSRV 1.91.0, build remains `build = false`; benches were reworked (benchmarkoor BLS cases, direct arkworks/blst KZG backend benches) and chunks_exact -> as_chunks sweeps applied throughout. cargo vet diff surfaced no advisory warnings."
 
 [[audits.revm-primitives]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -1325,6 +1445,12 @@ criteria = "safe-to-deploy"
 delta = "21.0.1 -> 42.0.0"
 notes = "Only unsafe in the diff is SpecId::try_from_u8 transmuting u8->Self (a #[repr(u8)] enum) after a `spec_id <= NEXT` range guard; discriminants are contiguous from FRONTIER=0 to AMSTERDAM so no invalid values are producible. Justified by making the fn const after dropping num_enum. Rest of diff is Cargo.toml churn (alloy-primitives bump, num_enum removed, MSRV 1.91), new pure-const EIP constant modu"
 
+[[audits.revm-primitives]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "42.0.0 -> 43.0.0"
+notes = "Diff is constant-and-doc churn only, realigning Glamsterdam gas parameters with execution-specs forks/amsterdam (devnet-8): eip2780 folds TRANSFER_LOG_COST into TX_VALUE_COST (4,244+1,756=6,000; creates drop the value charge), eip8037 removes the unused CPSB derivation constants (BLOCKS_PER_YEAR, TARGET_STATE_GROWTH_PER_YEAR, CPSB_OFFSET, CPSB_SIGNIFICANT_BITS), and eip8038 updates EIP-8038 numbers (ACCOUNT_WRITE 8,000->9,000, COLD_STORAGE_ACCESS 3,000->2,100 as total cold charge, CREATE_ACCESS rebased on COLD_ACCOUNT_ACCESS, access-list costs now cold-premium-only = cold-WARM_ACCESS). All values are const u64 arithmetic cross-checked by updated unit tests (constants_match_spec, derived_relations). Safe Rust throughout, MSRV stays 1.91.0, and the dependency set is unchanged."
+
 [[audits.revm-state]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -1336,6 +1462,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "8.0.2 -> 42.0.0"
 notes = "Pure safe-Rust data-types crate. No build.rs, unsafe, FFI, transmute, network, fs, env, or process code in the diff. New BAL/EIP-7928 module, AccountId (NonMaxU32 wrapper), JournaledAccount, and refactors are all safe data plumbing. The only 'extern' is 'extern crate alloc as std;' (benign no_std alias). Dependency churn (alloy-eip7928, nonmax added; bitflags/bytecode/primitives bumped) and MSRV 1"
+
+[[audits.revm-state]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+delta = "42.0.0 -> 43.0.1"
+notes = "Adds the opt-in `account-ext` feature (PR #3894): new account_extension.rs defines AccountExtension as a one-pointer Option<ThinArc<(),u8>> shared payload (new optional dep triomphe 0.1.17, pulled only under that feature, used via its safe ThinArc API), plumbed into AccountInfo (participates in Eq/Ord/is_empty, serde skip-if-empty) and into the BAL builders via AccountInfoBal.extension BalWrites. lib.rs PR #3870 reorders the manual AccountSerde Deserialize fields to match the derived Serialize order, fixing positional (bincode/postcard) round-trips; bal/alloy.rs moves to the alloy-eip7928 0.4.0→0.4.11 CodeChange accessors. Changelog caveat worth remembering: with account-ext, binary account serialization requires struct boundaries (MessagePack-style). All new code is safe Rust over in-memory state (the lone expect() in AccountExtension::new_with fires only on a fresh unique allocation); new dev-deps postcard/rmp-serde are test-only. MSRV stays 1.91.0. RustSec advisory check: clean."
 
 [[audits.ripemd]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
@@ -1593,6 +1725,12 @@ who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "0.3.20 -> 0.3.23"
 notes = "0.3.21 yanked (depended on yanked tracing 0.1.42), 0.3.22 fixed that, 0.3.23 adds an option to disable ANSI sanitization (#3484; the RUSTSEC-2025-0055 ANSI-injection fix was already in 0.3.20). unsafe 15->26 all downcast_raw delegations through layered/tuple subscribers (#3379 - standard Subscriber/Layer downcast pattern, correctness improvement). Registry exit now decrements local span ref only; removed clone_span on enter for perf. tracing dep 0.1.41->0.1.43. Historical RUSTSEC-2025-0055 patched >=0.3.20; 0.3.23 OK."
+
+[[audits.triomphe]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+version = "0.1.17"
+notes = "Manish Goregaokar's fork of std::sync::Arc (ex-servo_arc), used by revm-state. Unsafe surface (~140 sites) is confined to the well-known Arc invariants: ArcInner<T> holds an AtomicUsize strong count (no weak count by design), Arc is repr(transparent) over NonNull<ArcInner<T>>, clone does fetch_add(Relaxed) with abort at MAX_REFCOUNT = isize::MAX, drop does fetch_sub(Acquire/Release) with Box::from_raw — mirroring std; Send/Sync impls are all bounded by T: Send + Sync; thin_arc synthesizes fat pointers from a HeaderWithLength under documented repr(C) invariants; the few transmutes are layout-identical (ManuallyDrop transparent, UniqueArc<->Arc). No build.rs; no fs/net/env access; std is used only for process::abort on refcount-overflow/allocation failure; serde impls (default features: serde, stable_deref_trait, std) serialize the inner T only. Optional deps: serde, stable_deref_trait, arc-swap, unsize. MSRV 1.85. No advisories; well-known, widely-deployed crate."
 
 [[audits.uuid]]
 who = "Claude / cargo-vet auditor"
