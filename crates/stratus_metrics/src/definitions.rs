@@ -173,6 +173,9 @@ metrics! {
         "Time to run Consensus::forward."
         histogram_duration consensus_forward{},
 
+        "Time to run Consensus::forward_and_get_receipt."
+        histogram_duration forward_and_get_receipt{},
+
         "The readiness of Stratus."
         gauge consensus_is_ready{}
     },

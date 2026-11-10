@@ -18,6 +18,7 @@ use tokio::sync::RwLockReadGuard;
 
 use crate::GlobalState;
 use crate::alias::AlloyBytes;
+use crate::alias::AlloyReceipt;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::executor::AccessListOutput;
@@ -361,6 +362,25 @@ impl BlockchainClient {
         }
     }
 
+    /// Forwards a transaction to the leader and returns its execution receipt.
+    pub async fn send_raw_transaction_and_get_receipt(&self, tx: AlloyBytes, access_list: Option<AccessListOutput>) -> Result<AlloyReceipt, StratusError> {
+        let tx = to_json_value(tx);
+        let access_list = to_json_value(access_list);
+        let result = self
+            .http
+            .request::<AlloyReceipt, _>("stratus_sendRawTransactionAndGetReceipt", [tx, access_list])
+            .await;
+
+        match result {
+            Ok(receipt) => Ok(receipt),
+            Err(ClientError::Call(response)) => Err(ExecutorError::LeaderFailed(response.into_owned()).into()),
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to send raw transaction to leader for execution receipt");
+                Err(ExecutorError::ForwardToLeaderFailed.into())
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // RPC subscriptions
     // -------------------------------------------------------------------------
@@ -411,12 +431,7 @@ impl BlockchainClient {
 
 #[cfg(test)]
 impl BlockchainClient {
-    /// Test-only constructor that builds an HTTP-only client without performing the health check.
-    ///
-    /// Intended for tests that need a `BlockchainClient` to satisfy a struct field (e.g. a fetcher's
-    /// `chain`) but only exercise code paths that never issue real RPC calls (such as
-    /// `BlockWithChangesFetcher::post_process`, which only converts already-fetched data).
-    #[cfg(test)]
+    /// Builds a client for tests that configure their own RPC server.
     pub(crate) fn new_without_health_check(http_url: &str) -> anyhow::Result<Self> {
         let timeout = Duration::from_secs(1);
         let http = Self::build_http_client(http_url, timeout)?;

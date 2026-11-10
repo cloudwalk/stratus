@@ -214,12 +214,13 @@ impl RpcServiceT for RpcMiddleware {
             s.rec_str("rpc_method", &method);
         });
 
-        let (future_response, tracing_identifiers) = if method == "eth_sendRawTransaction" {
+        let (future_response, tracing_identifiers) = if matches!(method.as_str(), "eth_sendRawTransaction" | "stratus_sendRawTransactionAndGetReceipt") {
             drop(middleware_enter);
-            match eth_send_raw_transaction(request, Arc::clone(&self.ctx), span) {
+            let with_receipt = method == "stratus_sendRawTransactionAndGetReceipt";
+            match eth_send_raw_transaction(request, Arc::clone(&self.ctx), span, with_receipt) {
                 Ok(result) => result,
                 Err(err) => {
-                    tracing::warn!(?err, "failed to parse eth_sendRawTransaction request");
+                    tracing::warn!(?err, %method, "failed to parse transaction submission request");
                     let future: BoxFuture<'a, MethodResponse> = Box::pin(err.to_response_future(request_id.clone()));
                     (future, None)
                 }
