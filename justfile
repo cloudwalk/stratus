@@ -20,13 +20,13 @@ default:
 # Project: Run project setup
 setup:
     @just _log "Installing Cargo killport"
-    cargo install killport
+    cargo install killport --version 2.0.2 --locked
 
     @just _log "Installing Cargo wait-service"
-    cargo install wait-service
+    cargo install wait-service --version 0.4.0 --locked
 
     @just _log "Installing Cargo flamegraph"
-    cargo install flamegraph
+    cargo install flamegraph --version 0.6.15 --locked
 
     @just _log "Cloning Solidity repositories"
     just contracts-clone
@@ -51,7 +51,7 @@ check:
 
 # Stratus: Check all features individually using cargo hack
 check-features *args="":
-    command -v cargo-hack >/dev/null 2>&1 || { cargo install cargo-hack; }
+    command -v cargo-hack >/dev/null 2>&1 || { cargo install cargo-hack --version 0.6.46 --locked; }
     cargo hack check --each-feature --keep-going {{args}}
 
 # Stratus: Clean build artifacts
@@ -73,7 +73,7 @@ lint-check nightly-version="" clippy-flags="-D warnings -A clippy::unwrap_used -
 # Stratus: Check for dependencies major updates
 outdated:
     #!/bin/bash
-    command -v cargo-outdated >/dev/null 2>&1 || { cargo install cargo-outdated; }
+    command -v cargo-outdated >/dev/null 2>&1 || { cargo install cargo-outdated --version 0.19.0 --locked; }
     cargo outdated --root-deps-only --ignore-external-rel
 
 # Stratus: Check for unused dependencies
