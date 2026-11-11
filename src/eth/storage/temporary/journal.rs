@@ -3,8 +3,12 @@ use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::anyhow;
+use parking_lot::ArcMutexGuard;
+use parking_lot::Mutex;
+use parking_lot::RawMutex;
 use serde::Deserialize;
 
 use crate::eth::storage::StorageError;
@@ -19,8 +23,6 @@ pub struct JournalBlock {
 }
 
 /// A transaction input serialized as a journal entry.
-///
-/// Local transactions are encoded on the submitting thread so the transaction worker only writes the bytes.
 #[derive(Debug)]
 pub struct JournalRecord(Vec<u8>);
 
@@ -29,6 +31,25 @@ impl JournalRecord {
         serde_json::to_vec(transaction)
             .map(Self)
             .map_err(|err| StorageError::Journal { err: anyhow!(err) })
+    }
+}
+
+/// The journal of the pending block, swapped when the block finishes.
+pub type PendingJournal = Arc<Mutex<Option<Arc<TransactionJournal>>>>;
+
+/// A transaction's turn to append its record to the journal of the block it was saved in.
+///
+/// Turns are taken in execution order and hold the pending journal lock, so records reach the journals in execution
+/// order and the journal is swapped only after the previous block's records are appended.
+#[derive(derive_new::new)]
+pub struct JournalTurn(ArcMutexGuard<RawMutex, Option<Arc<TransactionJournal>>>);
+
+impl JournalTurn {
+    pub fn append(self, record: &JournalRecord) -> Result<(), StorageError> {
+        match self.0.as_ref() {
+            Some(journal) => journal.append(record),
+            None => Ok(()),
+        }
     }
 }
 
@@ -87,8 +108,8 @@ impl TransactionJournal {
     }
 
     /// Appends a record.
-    pub fn append(&mut self, record: &JournalRecord) -> Result<(), StorageError> {
-        let file = self.file.as_mut().ok_or_else(|| StorageError::Journal {
+    pub fn append(&self, record: &JournalRecord) -> Result<(), StorageError> {
+        let mut file = self.file.as_ref().ok_or_else(|| StorageError::Journal {
             err: anyhow!("journal file for block {} is closed", self.number),
         })?;
         file.write_all(&record.0).map_err(|err| StorageError::Journal { err: anyhow!(err) })

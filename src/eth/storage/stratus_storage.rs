@@ -15,7 +15,7 @@ use crate::eth::miner::Miner;
 use crate::eth::rpc::BlockFilter;
 use crate::eth::rpc::LogFilter;
 use crate::eth::storage::InMemoryTemporaryStorage;
-use crate::eth::storage::JournalRecord;
+use crate::eth::storage::JournalTurn;
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StorageCache;
 use crate::eth::storage::StorageError;
@@ -263,7 +263,7 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     #[timed(storage_save_execution, labels(success = result.is_ok()))]
-    pub fn save_execution(&self, tx: TransactionExecution, state: State<Complete>, journal_record: Option<&JournalRecord>) -> Result<(), StorageError> {
+    pub fn save_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<JournalTurn, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.info.hash).entered();
 
@@ -276,7 +276,7 @@ impl StratusStorage {
             }
         }
 
-        self.temp.save_pending_execution(tx, state, journal_record)
+        self.temp.save_pending_execution(tx, state)
     }
 
     /// Retrieves pending transactions being mined.

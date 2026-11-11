@@ -216,7 +216,7 @@ impl Executor {
         };
 
         // persist state
-        miner.save_execution(tx_execution, state, None)?;
+        miner.save_execution(tx_execution, state)?;
         Ok(())
     }
 
@@ -262,8 +262,15 @@ impl Executor {
             .inspect_err(|err| tracing::error!(?err, "journal record encoding failed"))
             .ok();
 
-        // The transaction worker serializes execution and persistence.
-        self.transaction_worker.execute_local_transaction(tx, journal_record).map(|_| ())
+        // The transaction worker serializes execution and persistence, and hands back the journal turn so the record is
+        // written here while the worker executes the next transaction.
+        let (_, journal_turn) = self.transaction_worker.execute_local_transaction(tx)?;
+        if let (Some(journal_turn), Some(record)) = (journal_turn, journal_record) {
+            let _ = journal_turn
+                .append(&record)
+                .inspect_err(|err| tracing::error!(?err, "append to journal failed"));
+        }
+        Ok(())
     }
 
     /// Executes a read-only call in the local EVM, without persisting state changes.
