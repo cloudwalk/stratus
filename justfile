@@ -9,7 +9,6 @@ export CARGO_COMMAND := env("CARGO_COMMAND", "")
 nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly-2026-05-08" } else { "" }
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 profile_flag := if env("STRATUS_PROFILE", "") != "" { "--profile " + env("STRATUS_PROFILE", "") } else { "" }
-database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
 kafka_bootstrap_servers := env("E2E_KAFKA_BOOTSTRAP_SERVERS", "localhost:29092")
 kafka_managed_externally := env("KAFKA_MANAGED_EXTERNALLY", "")
 
@@ -85,15 +84,6 @@ check-unused-deps nightly-version="":
 # Stratus: Update only the project dependencies
 update:
     cargo update stratus
-
-# ------------------------------------------------------------------------------
-# Database tasks
-# ------------------------------------------------------------------------------
-
-# Database: Compile SQLx queries
-db-compile:
-    SQLX_OFFLINE=true cargo sqlx prepare --database-url {{database_url}} -- --all-targets
-alias sqlx := db-compile
 
 # ------------------------------------------------------------------------------
 # Additional binaries
