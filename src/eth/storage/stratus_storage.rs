@@ -148,8 +148,7 @@ impl StratusStorage {
     pub fn recover_transaction_journal(&self, executor: &Executor, miner: &Miner) -> anyhow::Result<()> {
         let mined = self.read_mined_block_number();
         for number in TransactionJournal::journaled_blocks()? {
-            // every listed journal already exists, so the fresh timestamp is discarded
-            let mut journal = TransactionJournal::open(BlockInfo::new_at_now(number))?;
+            let mut journal = TransactionJournal::prepare(number)?;
             if mined >= number {
                 journal.retire()?;
                 continue;
