@@ -1,6 +1,7 @@
 pub use inmemory::InMemoryTemporaryStorage;
 pub use journal::JournalBlock;
 pub use journal::JournalRecord;
+pub use journal::JournalTurn;
 pub use journal::TransactionJournal;
 
 mod inmemory;

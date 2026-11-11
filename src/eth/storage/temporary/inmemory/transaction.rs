@@ -1,5 +1,8 @@
 //! In-memory storage implementations.
 
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 use parking_lot::RwLock;
 use parking_lot::RwLockUpgradableReadGuard;
 #[cfg(not(feature = "dev"))]
@@ -13,7 +16,8 @@ use crate::eth::executor::types::state::Complete;
 use crate::eth::executor::types::state::CompleteValue;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
-use crate::eth::storage::temporary::journal::JournalRecord;
+use crate::eth::storage::temporary::journal::JournalTurn;
+use crate::eth::storage::temporary::journal::PendingJournal;
 use crate::eth::storage::temporary::journal::TransactionJournal;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
@@ -38,12 +42,16 @@ use crate::eth::types::Wei;
 pub struct InmemoryTransactionTemporaryStorage {
     pub pending_block: RwLock<InMemoryTemporaryStorageState>,
     pub latest_block: RwLock<Option<InMemoryTemporaryStorageState>>,
+    /// Journal of the pending block, also held by the pending state so finished blocks keep theirs until retired.
+    pending_journal: PendingJournal,
 }
 
 impl InmemoryTransactionTemporaryStorage {
     pub fn new(block_number: BlockNumber) -> Self {
+        let pending_block = InMemoryTemporaryStorageState::new(block_number);
         Self {
-            pending_block: RwLock::new(InMemoryTemporaryStorageState::new(block_number)),
+            pending_journal: Arc::new(Mutex::new(pending_block.journal.clone())),
+            pending_block: RwLock::new(pending_block),
             latest_block: RwLock::new(None),
         }
     }
@@ -67,7 +75,8 @@ impl InmemoryTransactionTemporaryStorage {
     // Block and executions
     // -------------------------------------------------------------------------
 
-    pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>, journal_record: Option<&JournalRecord>) -> Result<(), StorageError> {
+    /// Saves the execution to the pending block, returning the turn for the caller to append the transaction record.
+    pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<JournalTurn, StorageError> {
         let pending_block = self.pending_block.upgradable_read();
 
         // check conflicts
@@ -81,15 +90,13 @@ impl InmemoryTransactionTemporaryStorage {
             });
         }
 
-        let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
+        let journal_turn = JournalTurn::new(self.pending_journal.lock_arc());
 
-        if let (Some(journal), Some(record)) = (pending_block.journal.as_mut(), journal_record) {
-            let _ = journal.append(record).inspect_err(|err| tracing::error!(?err, "append to journal failed"));
-        }
+        let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
         pending_block.state.merge(state);
         pending_block.block.push_transaction(tx);
 
-        Ok(())
+        Ok(journal_turn)
     }
 
     pub fn read_pending_executions(&self) -> Vec<TransactionExecution> {
@@ -97,8 +104,10 @@ impl InmemoryTransactionTemporaryStorage {
     }
 
     /// Removes the journal handle from the pending block, leaving its file on disk.
-    pub fn take_pending_journal(&self) -> Option<TransactionJournal> {
-        self.pending_block.write().journal.take()
+    pub fn take_pending_journal(&self) -> Option<Arc<TransactionJournal>> {
+        let mut pending_block = self.pending_block.write();
+        self.pending_journal.lock().take();
+        pending_block.journal.take()
     }
 
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {
@@ -117,6 +126,9 @@ impl InmemoryTransactionTemporaryStorage {
         };
 
         let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number());
+
+        // waits for the records of the finishing block to be appended
+        *self.pending_journal.lock() = next_state.journal.clone();
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
         let mut latest = self.latest_block.write();
@@ -261,7 +273,9 @@ impl InmemoryTransactionTemporaryStorage {
         pending.reset();
         pending.journal = TransactionJournal::open(pending.block.header)
             .inspect_err(|err| tracing::error!(?err, "journal failed to open after reset"))
-            .ok();
+            .ok()
+            .map(Arc::new);
+        *self.pending_journal.lock() = pending.journal.clone();
         *self.latest_block.write() = None;
     }
 }

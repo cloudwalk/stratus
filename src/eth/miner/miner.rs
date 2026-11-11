@@ -19,7 +19,7 @@ use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::types::state::Complete;
 use crate::eth::miner::MinerMode;
-use crate::eth::storage::JournalRecord;
+use crate::eth::storage::JournalTurn;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::Block;
@@ -212,13 +212,8 @@ impl Miner {
         }
     }
 
-    /// Persists a transaction execution, appending its journal record to the pending block journal when provided.
-    pub fn save_execution(
-        &self,
-        tx_execution: TransactionExecution,
-        state: State<Complete>,
-        journal_record: Option<&JournalRecord>,
-    ) -> Result<(), StratusError> {
+    /// Persists a transaction execution, returning the turn for the caller to append the transaction record.
+    pub fn save_execution(&self, tx_execution: TransactionExecution, state: State<Complete>) -> Result<Option<JournalTurn>, StratusError> {
         let tx_hash = tx_execution.info.hash;
 
         // track
@@ -232,7 +227,7 @@ impl Miner {
         let _save_execution_lock = if is_automine { Some(self.locks.save_execution.lock()) } else { None };
 
         // save execution to temporary storage
-        self.storage.save_execution(tx_execution, state, journal_record)?;
+        let journal_turn = self.storage.save_execution(tx_execution, state)?;
 
         // notify
         if self.has_pending_tx_subscribers() {
@@ -241,10 +236,13 @@ impl Miner {
 
         // if automine is enabled, automatically mines a block
         if is_automine {
+            // the block is committed before returning, so its journal record is skipped
+            drop(journal_turn);
             self.mine_local_and_commit()?;
+            return Ok(None);
         }
 
-        Ok(())
+        Ok(Some(journal_turn))
     }
 
     /// Mines external block and external transactions.
