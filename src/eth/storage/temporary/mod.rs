@@ -5,6 +5,7 @@ pub use journal::TransactionJournal;
 
 mod inmemory;
 mod journal;
+mod record_file;
 
 use super::RocksPermanentStorage;
 use crate::eth::types::BlockNumber;

@@ -132,10 +132,22 @@ pub struct InMemoryTemporaryStorageState {
 
 impl InMemoryTemporaryStorageState {
     pub fn new(block_number: BlockNumber) -> Self {
-        let block = PendingBlock::new_at_now(block_number);
-        let journal = TransactionJournal::open(block.header)
+        let journal = TransactionJournal::prepare(block_number)
             .inspect_err(|err| tracing::error!(?err, "journal failed to open, temp state will be created without it"))
             .ok();
+        Self::with_journal(block_number, journal)
+    }
+
+    /// Creates the state for a block, recording its header in a journal produced by [`TransactionJournal::prepare`].
+    pub fn with_journal(block_number: BlockNumber, journal: Option<TransactionJournal>) -> Self {
+        let block = PendingBlock::new_at_now(block_number);
+        let journal = journal.and_then(|mut journal| {
+            journal
+                .start(block.header)
+                .inspect_err(|err| tracing::error!(?err, "journal failed to start, temp state will be created without it"))
+                .ok()
+                .map(|_| journal)
+        });
 
         Self {
             block,
