@@ -67,18 +67,6 @@ metrics! {
     },
 
     group: executor {
-        "Time executing and persist an external block with all transactions."
-        histogram_duration executor_external_block{},
-
-        "Time executing an external transaction."
-        histogram_duration executor_external_transaction{contract, function},
-
-        "Time executing and persist an imported stratus block with all transactions."
-        histogram_duration executor_imported_block{},
-
-        "Time executing an imported stratus transaction."
-        histogram_duration executor_imported_transaction{contract, function},
-
         "Time executing a local transaction."
         histogram_duration executor_local_transaction{success, contract, function},
 

@@ -11,7 +11,6 @@ use crate::alias::JsonValue;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::types::BlockHeader;
 use crate::eth::types::BlockNumber;
-use crate::eth::types::ExternalBlock;
 use crate::eth::types::Hash;
 use crate::eth::types::Index;
 use crate::eth::types::LogMessage;
@@ -20,6 +19,7 @@ use crate::eth::types::Size;
 use crate::eth::types::TransactionMined;
 use crate::eth::types::UnixTime;
 use crate::ext::to_json_value;
+use crate::log_and_err;
 
 #[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize)]
 #[cfg_attr(test, derive(fake::Dummy))]
@@ -92,22 +92,26 @@ impl Block {
         }
     }
 
-    pub fn apply_external(&mut self, external_block: &ExternalBlock) {
-        self.header.hash = external_block.hash();
-        assert!(*self.header.timestamp == external_block.header.timestamp);
-        for transaction in self.transactions.iter_mut() {
-            assert!(transaction.input.block_timestamp == self.header.timestamp);
-            transaction.mined_data.block_hash = external_block.hash();
+    pub fn apply_imported(&mut self, imported_block: &Block) -> anyhow::Result<()> {
+        if *self.header.timestamp != *imported_block.header.timestamp {
+            return log_and_err!(format!(
+                "mismatching block timestamp | local={} imported={}",
+                self.header.timestamp, imported_block.header.timestamp
+            ));
         }
-    }
 
-    pub fn apply_imported(&mut self, imported_block: &Block) {
         self.header.hash = imported_block.hash();
-        assert!(*self.header.timestamp == *imported_block.header.timestamp);
         for transaction in self.transactions.iter_mut() {
-            assert!(transaction.input.block_timestamp == self.header.timestamp);
+            if transaction.input.block_timestamp != self.header.timestamp {
+                return log_and_err!(format!(
+                    "mismatching transaction timestamp | transaction={} block={}",
+                    transaction.input.block_timestamp, self.header.timestamp
+                ));
+            }
             transaction.mined_data.block_hash = imported_block.hash();
         }
+
+        Ok(())
     }
 }
 

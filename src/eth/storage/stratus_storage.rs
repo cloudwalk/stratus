@@ -30,7 +30,6 @@ use crate::eth::types::BlockInfo;
 use crate::eth::types::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::types::Bytes;
-use crate::eth::types::ExternalBlock;
 use crate::eth::types::Hash;
 use crate::eth::types::LogMessage;
 #[cfg(feature = "dev")]
@@ -131,10 +130,6 @@ impl StratusStorage {
 
     pub fn read_mined_block_number(&self) -> BlockNumber {
         self.perm.read_mined_block_number()
-    }
-
-    pub fn set_pending_from_external(&self, block: &ExternalBlock) {
-        self.temp.set_pending_header(block.number(), block.timestamp());
     }
 
     pub fn set_pending_header(&self, number: BlockNumber, timestamp: UnixTime) {

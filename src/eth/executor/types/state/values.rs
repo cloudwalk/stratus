@@ -156,16 +156,6 @@ where
         }
     }
 
-    /// Sets the original value only if no changes have been applied yet.
-    ///
-    /// This method will update the internal value only if the `changed` flag is `false`,
-    /// preserving any modifications that may have been made.
-    fn apply_original(&mut self, value: T) {
-        if let Self::Original(original_value) = self {
-            *original_value = value;
-        }
-    }
-
     pub fn from_diff(original: T, current: T) -> Self {
         match original == current {
             true => Self::Original(current),
@@ -263,12 +253,6 @@ impl AccountChanges<Complete> {
         self.nonce.merge(other.nonce);
         self.balance.merge(other.balance);
         self.bytecode.merge(other.bytecode);
-    }
-
-    pub(crate) fn apply_original(&mut self, original_account: Account) {
-        self.nonce.apply_original(original_account.nonce);
-        self.balance.apply_original(original_account.balance);
-        self.bytecode.apply_original(original_account.bytecode);
     }
 }
 

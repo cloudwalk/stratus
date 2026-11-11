@@ -1,6 +1,6 @@
 import { expect } from "chai";
 
-import { ALICE } from "../helpers/account";
+import { ALICE, BOB } from "../helpers/account";
 import { CHAIN_ID_DEC, send } from "../helpers/rpc";
 import { FOLLOWER_URL, rpcCall, waitForFollowerBlock, waitForReceipt } from "./helpers";
 
@@ -33,9 +33,55 @@ describe("Pagination (stratus-native importer format)", () => {
         expect(followerBlock.result.transactions).to.have.lengthOf(leaderBlock.transactions.length);
         expect(followerBlock.result.transactions[0].hash).to.equal(txHash);
 
-        // and the transaction receipt is available on the follower
+        expect(followerBlock.result.gasUsed).to.equal(leaderBlock.gasUsed);
+        expect(followerBlock.result.transactionsRoot).to.equal(leaderBlock.transactionsRoot);
+        expect(followerBlock.result.logsBloom).to.equal(leaderBlock.logsBloom);
+        expect(followerBlock.result.timestamp).to.equal(leaderBlock.timestamp);
+
         const followerReceipt = await rpcCall(FOLLOWER_URL, "eth_getTransactionReceipt", [txHash]);
         expect(followerReceipt.result).to.not.equal(null);
         expect(followerReceipt.result.blockNumber).to.equal(receipt.blockNumber);
+        expect(followerReceipt.result.status).to.equal(receipt.status);
+        expect(followerReceipt.result.gasUsed).to.equal(receipt.gasUsed);
+        expect(followerReceipt.result.cumulativeGasUsed).to.equal(receipt.cumulativeGasUsed);
+        expect(followerReceipt.result.effectiveGasPrice).to.equal(receipt.effectiveGasPrice);
+        expect(followerReceipt.result.contractAddress).to.equal(receipt.contractAddress);
+        expect(followerReceipt.result.logs).to.deep.equal(receipt.logs);
+    });
+
+    it("reproduces the leader's execution results for successful transactions", async () => {
+        const nonce = await send("eth_getTransactionCount", [ALICE.address]);
+        const signedTx = await ALICE.signer().signTransaction({
+            to: BOB.address,
+            value: 0,
+            chainId: CHAIN_ID_DEC,
+            gasPrice: 0,
+            gasLimit: 21_000,
+            nonce: nonce,
+        });
+        const txHash = await send("eth_sendRawTransaction", [signedTx]);
+
+        const receipt = await waitForReceipt(txHash);
+        const blockNumber = parseInt(receipt.blockNumber, 16);
+
+        await waitForFollowerBlock(blockNumber);
+
+        const leaderBlock = await send("eth_getBlockByNumber", [receipt.blockNumber, false]);
+        const followerBlock = await rpcCall(FOLLOWER_URL, "eth_getBlockByNumber", [receipt.blockNumber, false]);
+        expect(followerBlock.result.hash).to.equal(leaderBlock.hash);
+        expect(followerBlock.result.gasUsed).to.equal(leaderBlock.gasUsed);
+        expect(followerBlock.result.transactionsRoot).to.equal(leaderBlock.transactionsRoot);
+        expect(followerBlock.result.logsBloom).to.equal(leaderBlock.logsBloom);
+
+        const followerReceipt = await rpcCall(FOLLOWER_URL, "eth_getTransactionReceipt", [txHash]);
+        expect(followerReceipt.result).to.not.equal(null);
+        expect(followerReceipt.result.status).to.equal(receipt.status);
+        expect(followerReceipt.result.gasUsed).to.equal(receipt.gasUsed);
+        expect(followerReceipt.result.cumulativeGasUsed).to.equal(receipt.cumulativeGasUsed);
+        expect(followerReceipt.result.logs).to.deep.equal(receipt.logs);
+
+        const leaderBalance = await send("eth_getBalance", [BOB.address, receipt.blockNumber]);
+        const followerBalance = await rpcCall(FOLLOWER_URL, "eth_getBalance", [BOB.address, receipt.blockNumber]);
+        expect(followerBalance.result).to.equal(leaderBalance);
     });
 });
