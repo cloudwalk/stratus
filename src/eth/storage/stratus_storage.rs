@@ -144,43 +144,46 @@ impl StratusStorage {
         self.temp.set_pending_header(number, timestamp);
     }
 
-    /// Replays every journaled block left by a previous run, committing them to permanent storage.
+    /// Replays the journaled blocks left by a previous run in order, committing each to permanent storage, then starts
+    /// journaling the pending block.
+    ///
+    /// Each recovered block is committed on top of the previous one, so recovery stops at the first missing or
+    /// unreadable journal and sets that journal and every later one aside for review.
     pub fn recover_transaction_journal(&self, executor: &Executor, miner: &Miner) -> anyhow::Result<()> {
         let mined = self.read_mined_block_number();
         let mut expected = mined.next_block_number();
-        for number in TransactionJournal::journaled_blocks()? {
-            let mut journal = TransactionJournal::resume(number)?;
-            if mined >= number {
-                journal.retire()?;
+        let journaled = TransactionJournal::journaled_blocks()?;
+
+        for (position, &number) in journaled.iter().enumerate() {
+            if number <= mined {
+                TransactionJournal::remove(number)?;
                 continue;
             }
 
-            if number != expected {
-                tracing::error!(%number, %expected, "journal of the next block is missing, stopping recovery");
-                break;
-            }
-            let Some(journal_block) = journal.block()? else {
-                tracing::error!(%number, "journal is unreadable, stopping recovery");
+            let journal_block = if number == expected {
+                TransactionJournal::read(number)?
+            } else {
+                tracing::error!(%number, %expected, "journal of the next block is missing");
+                None
+            };
+            let Some(journal_block) = journal_block else {
+                for &unrecovered in &journaled[position..] {
+                    let destination = TransactionJournal::set_aside(unrecovered)?;
+                    tracing::error!(number = %unrecovered, ?destination, "journal set aside for review, stopping recovery");
+                }
                 break;
             };
 
-            if journal_block.transactions.is_empty() && journal.is_live() {
-                // An empty live journal belongs to the pending block being built, so there is nothing to recover.
-                continue;
-            }
-
-            // Re-executing the transactions re-appends them to the journal file; removing the journal handle
-            // from the pending state keeps the file as-is.
-            let _pending_journal = self.temp.take_pending_journal();
             self.set_pending_header(journal_block.header.number, *journal_block.header.timestamp);
             for transaction in journal_block.transactions {
                 executor.execute_local_transaction(transaction, None)?;
             }
-
             miner.mine_local_and_commit()?;
-            journal.retire()?;
+            TransactionJournal::remove(number)?;
             expected = number.next_block_number();
         }
+
+        self.temp.start_journal();
         Ok(())
     }
 

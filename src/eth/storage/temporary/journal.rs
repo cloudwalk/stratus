@@ -1,5 +1,9 @@
 use std::fs;
 use std::path::PathBuf;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
+
+use serde::Deserialize;
 
 use crate::eth::storage::StorageError;
 use crate::eth::storage::temporary::record_file::RecordFile;
@@ -27,6 +31,9 @@ impl JournalRecord {
 
 const JOURNAL_DIRECTORY: &str = "transaction-journal";
 
+/// Directory inside the journal directory holding the journals left when recovery stops
+const UNRECOVERED_DIRECTORY: &str = "unrecovered";
+
 fn journal_directory() -> PathBuf {
     // permanent storage sets the database directory during its init, so this only fails
     // when a journal is opened before the permanent storage exists
@@ -49,21 +56,15 @@ pub struct TransactionJournal {
 }
 
 impl TransactionJournal {
-    /// Opens the journal for a block, resuming the file left by a previous run when one exists
+    /// Creates the journal of a block
     pub fn open(header: BlockInfo) -> Result<Self, StorageError> {
-        let mut journal = Self::resume(header.number)?;
-        let file = journal.file()?;
-        if file.is_empty() {
-            file.append(&serde_json::to_vec(&header).map_err(journal_error)?).map_err(journal_error)?;
-        }
-        Ok(journal)
-    }
-
-    /// Opens an existing journal file
-    pub fn resume(number: BlockNumber) -> Result<Self, StorageError> {
         fs::create_dir_all(journal_directory()).map_err(journal_error)?;
-        let file = RecordFile::open(&Self::path(number)).map_err(journal_error)?;
-        Ok(Self { file: Some(file), number })
+        let mut file = RecordFile::create(&Self::path(header.number)).map_err(journal_error)?;
+        file.append(&serde_json::to_vec(&header).map_err(journal_error)?).map_err(journal_error)?;
+        Ok(Self {
+            file: Some(file),
+            number: header.number,
+        })
     }
 
     fn path(number: BlockNumber) -> PathBuf {
@@ -81,28 +82,24 @@ impl TransactionJournal {
         self.file()?.append(&record.0).map_err(journal_error)
     }
 
-    /// Reads the block recorded in this journal, transactions are read up to the first unreadable record
-    pub fn block(&mut self) -> anyhow::Result<Option<JournalBlock>> {
-        let number = self.number;
-        let records = self.file()?.records();
+    /// Reads the block journaled for `number`, with its transactions up to the first unreadable record.
+    /// Returns `None` when the journal holds no readable header.
+    pub fn read(number: BlockNumber) -> anyhow::Result<Option<JournalBlock>> {
+        let mut records = serde_json::Deserializer::from_reader(RecordFile::open(&Self::path(number))?);
 
-        let Some((header, transactions)) = records.split_first() else {
-            return Ok(None);
-        };
-
-        let header = match serde_json::from_slice(header) {
+        let header = match BlockInfo::deserialize(&mut records) {
             Ok(header) => header,
             Err(err) => {
-                tracing::error!(?err, %number, "journal header is unreadable, skipping the block");
+                tracing::error!(?err, %number, "journal header is unreadable");
                 return Ok(None);
             }
         };
 
-        let transactions = transactions
-            .iter()
+        let transactions = records
+            .into_iter::<TransactionInput>()
             .enumerate()
-            .map_while(|(index, record)| {
-                serde_json::from_slice(record)
+            .map_while(|(index, transaction)| {
+                transaction
                     .inspect_err(|err| tracing::error!(?err, %number, index, "journal record is unreadable, replaying the transactions before it"))
                     .ok()
             })
@@ -113,13 +110,23 @@ impl TransactionJournal {
     /// Closes the journal file and removes it from disk.
     pub fn retire(&mut self) -> Result<(), StorageError> {
         self.file = None;
-        let path = Self::path(self.number);
+        Self::remove(self.number)
+    }
+
+    /// Removes the journal file of a block
+    pub fn remove(number: BlockNumber) -> Result<(), StorageError> {
+        let path = Self::path(number);
         path.exists().then(|| fs::remove_file(path)).transpose().map(|_| ()).map_err(journal_error)
     }
 
-    /// A journal with no journal files for later blocks belongs to the pending block.
-    pub fn is_live(&self) -> bool {
-        self.newer_journal_count() == 0
+    /// Moves the journal file of a block into the unrecovered directory for review
+    pub fn set_aside(number: BlockNumber) -> anyhow::Result<PathBuf> {
+        let directory = journal_directory().join(UNRECOVERED_DIRECTORY);
+        fs::create_dir_all(&directory)?;
+        let moved_at = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+        let destination = directory.join(format!("{:020}-{moved_at}.journal", number.as_u64()));
+        fs::rename(Self::path(number), &destination)?;
+        Ok(destination)
     }
 
     /// Lists the blocks with a journal file, in ascending order.
@@ -198,21 +205,17 @@ mod tests {
     }
 
     #[test]
-    fn block_survives_reopen_in_order() {
+    fn block_is_read_in_order() {
         const BLOCK_NUMBER: u64 = u64::MAX;
         anchor_database_path();
         let transactions = [transaction(0), transaction(1), transaction(2)];
-        let record = |transaction: &TransactionInput| JournalRecord::encode(transaction).unwrap();
 
         let mut journal = TransactionJournal::open(header(BLOCK_NUMBER, 123)).unwrap();
-        journal.append(&record(&transactions[0])).unwrap();
-        journal.append(&record(&transactions[1])).unwrap();
-        drop(journal);
+        for transaction in &transactions {
+            journal.append(&JournalRecord::encode(transaction).unwrap()).unwrap();
+        }
 
-        // a resumed journal keeps the header recorded by the previous run
-        let mut journal = TransactionJournal::open(header(BLOCK_NUMBER, 456)).unwrap();
-        journal.append(&record(&transactions[2])).unwrap();
-        let block = journal.block().unwrap().unwrap();
+        let block = TransactionJournal::read(BLOCK_NUMBER.into()).unwrap().unwrap();
         assert_eq!(block.header.number, header(BLOCK_NUMBER, 123).number);
         assert_eq!(block.header.timestamp, header(BLOCK_NUMBER, 123).timestamp);
         assert_eq!(block.transactions, transactions.to_vec());
@@ -232,8 +235,32 @@ mod tests {
         journal.file().unwrap().append(br#"{"transaction_info":"#).unwrap();
         journal.append(&record(&transactions[2])).unwrap();
 
-        let block = journal.block().unwrap().unwrap();
+        let block = TransactionJournal::read(BLOCK_NUMBER.into()).unwrap().unwrap();
         assert_eq!(block.transactions, transactions[..2].to_vec());
         journal.retire().unwrap();
+    }
+
+    #[test]
+    fn unreadable_header_reads_as_no_block() {
+        const BLOCK_NUMBER: u64 = u64::MAX - 2;
+        anchor_database_path();
+        fs::write(TransactionJournal::path(BLOCK_NUMBER.into()), br#"{"number":"0x"#).unwrap();
+
+        assert!(TransactionJournal::read(BLOCK_NUMBER.into()).unwrap().is_none());
+        TransactionJournal::remove(BLOCK_NUMBER.into()).unwrap();
+    }
+
+    #[test]
+    fn set_aside_journal_leaves_the_journaled_blocks() {
+        const BLOCK_NUMBER: u64 = u64::MAX - 3;
+        anchor_database_path();
+        // held until the file is moved, since dropping a journal removes its file once newer journals exist
+        let journal = TransactionJournal::open(header(BLOCK_NUMBER, 123)).unwrap();
+        assert!(TransactionJournal::journaled_blocks().unwrap().contains(&BLOCK_NUMBER.into()));
+
+        let destination = TransactionJournal::set_aside(BLOCK_NUMBER.into()).unwrap();
+        assert!(destination.exists());
+        assert!(!TransactionJournal::journaled_blocks().unwrap().contains(&BLOCK_NUMBER.into()));
+        drop(journal);
     }
 }

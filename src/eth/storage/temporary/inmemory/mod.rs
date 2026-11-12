@@ -67,9 +67,8 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.read_pending_executions()
     }
 
-    /// Removes the journal handle from the pending block, leaving its file on disk.
-    pub fn take_pending_journal(&self) -> Option<TransactionJournal> {
-        self.transaction_storage.take_pending_journal()
+    pub fn start_journal(&self) {
+        self.transaction_storage.start_journal();
     }
 
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {
@@ -131,17 +130,21 @@ pub struct InMemoryTemporaryStorageState {
 }
 
 impl InMemoryTemporaryStorageState {
-    pub fn new(block_number: BlockNumber) -> Self {
+    pub fn new(block_number: BlockNumber, with_journal: bool) -> Self {
         let block = PendingBlock::new_at_now(block_number);
-        let journal = TransactionJournal::open(block.header)
-            .inspect_err(|err| tracing::error!(?err, "journal failed to open, temp state will be created without it"))
-            .ok();
+        let journal = with_journal.then(|| Self::open_journal(block.header)).flatten();
 
         Self {
             block,
             state: State::default(),
             journal,
         }
+    }
+
+    pub fn open_journal(header: BlockInfo) -> Option<TransactionJournal> {
+        TransactionJournal::open(header)
+            .inspect_err(|err| tracing::error!(?err, "journal failed to open, temp state will be created without it"))
+            .ok()
     }
 
     pub fn reset(&mut self) {
