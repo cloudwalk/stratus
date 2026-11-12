@@ -34,39 +34,26 @@ impl Default for MinerConfig {
 
 impl MinerConfig {
     /// Inits [`Miner`] with the appropriate mining mode based on the node mode.
-    pub async fn init(&self, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<Miner>> {
+    pub fn init(&self, storage: Arc<StratusStorage>) -> Arc<Miner> {
         tracing::info!(config = ?self, "creating block miner");
 
         let node_mode = GlobalState::get_node_mode();
         if self.has_conflicting_block_mode(node_mode) {
-            tracing::error!(block_mode = ?self.block_mode, "invalid block-mode, a follower's miner can only start as external!");
+            tracing::warn!(block_mode = ?self.block_mode, "invalid block-mode, a follower's miner can only start as external!");
         }
+
         let mode = match node_mode {
             NodeMode::Follower | NodeMode::FakeLeader => MinerMode::External,
             NodeMode::Leader => self.block_mode,
         };
 
-        self.init_with_mode(mode, storage).await
+        let miner = Miner::new(Arc::clone(&storage), mode);
+        Arc::new(miner)
     }
 
     /// A follower or fake-leader node can only mine in external mode.
     pub fn has_conflicting_block_mode(&self, node_mode: NodeMode) -> bool {
         matches!(node_mode, NodeMode::Follower | NodeMode::FakeLeader) && not(self.block_mode.is_external())
-    }
-
-    /// Inits [`Miner`] with a specific mining mode, regardless of node mode.
-    pub async fn init_with_mode(&self, mode: MinerMode, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<Miner>> {
-        tracing::info!(config = ?self, mode = ?mode, "creating block miner with specific mode");
-
-        // create miner
-        let miner = Miner::new(Arc::clone(&storage), mode);
-        let miner = Arc::new(miner);
-
-        if let MinerMode::Interval(block_time) = mode {
-            miner.start_interval_mining(block_time).await;
-        }
-
-        Ok(miner)
     }
 }
 

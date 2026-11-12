@@ -41,6 +41,7 @@ use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm_worker_pool::EvmWorkerPool;
 use crate::eth::executor::transaction_worker::TransactionWorker;
 use crate::eth::miner::Miner;
+use crate::eth::storage::JournalRecord;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::Address;
@@ -215,7 +216,7 @@ impl Executor {
         };
 
         // persist state
-        miner.save_execution(tx_execution, state)?;
+        miner.save_execution(tx_execution, state, None)?;
         Ok(())
     }
 
@@ -257,9 +258,12 @@ impl Executor {
             self.storage.load_access_list(access_list);
         }
 
-        // The transaction worker serializes execution and persistence so that the next transaction
-        // cannot execute against state that the previous transaction has not saved yet.
-        self.transaction_worker.execute_local_transaction(tx).map(|_| ())
+        let journal_record = JournalRecord::encode(&tx)
+            .inspect_err(|err| tracing::error!(?err, "journal record encoding failed"))
+            .ok();
+
+        // The transaction worker serializes execution and persistence.
+        self.transaction_worker.execute_local_transaction(tx, journal_record).map(|_| ())
     }
 
     /// Executes a read-only call in the local EVM, without persisting state changes.
@@ -303,6 +307,7 @@ impl Executor {
             .map_or("missing", GethDebugTracerType::as_str)
         )
     )]
+
     pub fn trace_transaction(&self, tx_hash: Hash, opts: Option<GethDebugTracingOptions>, trace_unsuccessful_only: bool) -> Result<GethTrace, StratusError> {
         Span::with(|s| {
             s.rec_str("tx_hash", &tx_hash);

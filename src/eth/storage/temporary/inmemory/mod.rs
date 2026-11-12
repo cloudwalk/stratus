@@ -11,6 +11,8 @@ use crate::eth::storage::permanent::RocksPermanentStorage;
 use crate::eth::storage::stratus_storage::label;
 use crate::eth::storage::temporary::compute_pending_block_number;
 use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTemporaryStorage;
+use crate::eth::storage::temporary::journal::JournalRecord;
+use crate::eth::storage::temporary::journal::TransactionJournal;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::BlockInfo;
@@ -53,21 +55,21 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.read_pending_block_header()
     }
 
-    #[cfg(feature = "dev")]
-    pub fn set_pending_block_header(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError> {
-        self.transaction_storage.set_pending_block_header(block_number)
-    }
-
     pub fn set_pending_header(&self, number: BlockNumber, timestamp: UnixTime) {
         self.transaction_storage.set_pending_header(number, timestamp);
     }
 
-    pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
-        self.transaction_storage.save_pending_execution(tx, state)
+    pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>, journal_record: Option<&JournalRecord>) -> Result<(), StorageError> {
+        self.transaction_storage.save_pending_execution(tx, state, journal_record)
     }
 
     pub fn read_pending_executions(&self) -> Vec<TransactionExecution> {
         self.transaction_storage.read_pending_executions()
+    }
+
+    /// Removes the journal handle from the pending block, leaving its file on disk.
+    pub fn take_pending_journal(&self) -> Option<TransactionJournal> {
+        self.transaction_storage.take_pending_journal()
     }
 
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {
@@ -117,20 +119,28 @@ impl InMemoryTemporaryStorage {
 // Inner State
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct InMemoryTemporaryStorageState {
     /// Block that is being mined.
     pub block: PendingBlock,
 
     /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
     pub state: State<Complete>,
+
+    pub journal: Option<TransactionJournal>,
 }
 
 impl InMemoryTemporaryStorageState {
     pub fn new(block_number: BlockNumber) -> Self {
+        let block = PendingBlock::new_at_now(block_number);
+        let journal = TransactionJournal::open(block.header)
+            .inspect_err(|err| tracing::error!(?err, "journal failed to open, temp state will be created without it"))
+            .ok();
+
         Self {
-            block: PendingBlock::new_at_now(block_number),
+            block,
             state: State::default(),
+            journal,
         }
     }
 

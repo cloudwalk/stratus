@@ -21,6 +21,7 @@ use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::TransactionExecutionOutput;
 use crate::eth::executor::evm::Evm;
 use crate::eth::miner::Miner;
+use crate::eth::storage::JournalRecord;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::BlockNumber;
@@ -86,9 +87,9 @@ impl TransactionWorker {
         function = |tx_input| codegen::function_sig(&tx_input.execution_info.input)
         )
     )]
-    pub fn execute_local_transaction(&self, tx_input: TransactionInput) -> LocalTransactionResult {
+    pub fn execute_local_transaction(&self, tx_input: TransactionInput, journal_record: Option<JournalRecord>) -> LocalTransactionResult {
         let (response_tx, response_rx) = oneshot::channel();
-        self.task_tx.send(TransactionTask::local(tx_input, response_tx))?;
+        self.task_tx.send(TransactionTask::local(tx_input, journal_record, response_tx))?;
         let Ok((execution_duration, result)) = response_rx.recv() else {
             return Err(UnexpectedError::ChannelClosed { channel: "evm" }.into());
         };
@@ -103,6 +104,7 @@ impl TransactionWorker {
         miner: &Miner,
         evm: &mut Evm<TransactionExecutionInput>,
         tx_input: TransactionInput,
+        journal_record: Option<JournalRecord>,
         max_attempts: usize,
     ) -> LocalTransactionResult {
         let mut attempt = 0;
@@ -127,7 +129,7 @@ impl TransactionWorker {
                 }
             }
 
-            match miner.save_execution(tx_execution, evm_result.state) {
+            match miner.save_execution(tx_execution, evm_result.state, journal_record.as_ref()) {
                 Ok(_) => return Ok(evm_metrics),
                 Err(e) => match e {
                     StratusError::Storage(StorageError::EvmInputMismatch { ref expected, ref actual }) => {
@@ -162,11 +164,12 @@ impl TransactionTask {
         }
     }
 
-    fn local(tx_input: TransactionInput, response_tx: oneshot::Sender<LocalTransactionResponse>) -> Self {
+    fn local(tx_input: TransactionInput, journal_record: Option<JournalRecord>, response_tx: oneshot::Sender<LocalTransactionResponse>) -> Self {
         Self {
             span: Span::current(),
             kind: TransactionTaskKind::Local {
                 tx_input: Box::new(tx_input),
+                journal_record,
                 response_tx,
             },
         }
@@ -188,9 +191,13 @@ impl TransactionTask {
                     tracing::error!(reason = ?e, "failed to send external transaction execution result");
                 }
             }
-            TransactionTaskKind::Local { tx_input, response_tx } => {
+            TransactionTaskKind::Local {
+                tx_input,
+                journal_record,
+                response_tx,
+            } => {
                 let start = stratus_metrics::now();
-                let result = TransactionWorker::execute_local_transaction_attempts(storage, miner, evm, *tx_input, usize::MAX);
+                let result = TransactionWorker::execute_local_transaction_attempts(storage, miner, evm, *tx_input, journal_record, usize::MAX);
                 let response = (start.elapsed(), result);
                 if let Err(e) = response_tx.send(response) {
                     tracing::error!(reason = ?e, "failed to send local transaction execution result");
@@ -210,6 +217,7 @@ enum TransactionTaskKind {
     },
     Local {
         tx_input: Box<TransactionInput>,
+        journal_record: Option<JournalRecord>,
         response_tx: oneshot::Sender<LocalTransactionResponse>,
     },
 }
