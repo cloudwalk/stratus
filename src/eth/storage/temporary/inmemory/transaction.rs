@@ -102,12 +102,6 @@ impl InmemoryTransactionTemporaryStorage {
     }
 
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {
-        // the next block journal is created and mapped before taking the lock, leaving only its header copy under it
-        let next_number = self.pending_block.read().block.header.number.next_block_number();
-        let next_journal = TransactionJournal::prepare(next_number)
-            .inspect_err(|err| tracing::error!(?err, "journal failed to open, temp state will be created without it"))
-            .ok();
-
         let pending_block = self.pending_block.upgradable_read();
 
         // This has to happen BEFORE creating the new state, because UnixTimeNow::default() may change the offset.
@@ -122,11 +116,7 @@ impl InmemoryTransactionTemporaryStorage {
             (finished_block, pending_block.state.clone())
         };
 
-        let next_number = pending_block.block.header.number.next_block_number();
-        let next_state = match next_journal {
-            Some(journal) if journal.number() == next_number => InMemoryTemporaryStorageState::with_journal(next_number, Some(journal)),
-            _ => InMemoryTemporaryStorageState::new(next_number),
-        };
+        let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number());
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
         let mut latest = self.latest_block.write();

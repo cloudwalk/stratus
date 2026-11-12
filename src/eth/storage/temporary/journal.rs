@@ -49,38 +49,21 @@ pub struct TransactionJournal {
 }
 
 impl TransactionJournal {
-    /// Opens the journal for a block, resuming the file left by a previous run when one exists.
+    /// Opens the journal for a block, resuming the file left by a previous run when one exists
     pub fn open(header: BlockInfo) -> Result<Self, StorageError> {
-        let mut journal = Self::prepare(header.number)?;
-        journal.start(header)?;
-        Ok(journal)
-    }
-
-    /// Opens the journal file for a block ahead of [`Self::start`], or resumes the file left by a previous run.
-    pub fn prepare(number: BlockNumber) -> Result<Self, StorageError> {
-        fs::create_dir_all(journal_directory()).map_err(journal_error)?;
-        let file = RecordFile::open(&Self::path(number)).map_err(journal_error)?;
-        Ok(Self { file: Some(file), number })
-    }
-
-    /// Records the block header, keeping the header of a resumed journal.
-    pub fn start(&mut self, header: BlockInfo) -> Result<(), StorageError> {
-        if header.number != self.number {
-            return Err(journal_error(anyhow::anyhow!(
-                "journal for block {} cannot start block {}",
-                self.number,
-                header.number
-            )));
-        }
-        let file = self.file()?;
+        let mut journal = Self::resume(header.number)?;
+        let file = journal.file()?;
         if file.is_empty() {
             file.append(&serde_json::to_vec(&header).map_err(journal_error)?).map_err(journal_error)?;
         }
-        Ok(())
+        Ok(journal)
     }
 
-    pub fn number(&self) -> BlockNumber {
-        self.number
+    /// Opens an existing journal file
+    pub fn resume(number: BlockNumber) -> Result<Self, StorageError> {
+        fs::create_dir_all(journal_directory()).map_err(journal_error)?;
+        let file = RecordFile::open(&Self::path(number)).map_err(journal_error)?;
+        Ok(Self { file: Some(file), number })
     }
 
     fn path(number: BlockNumber) -> PathBuf {
@@ -98,16 +81,33 @@ impl TransactionJournal {
         self.file()?.append(&record.0).map_err(journal_error)
     }
 
-    /// Reads the block recorded in this journal.
+    /// Reads the block recorded in this journal, transactions are read up to the first unreadable record
     pub fn block(&mut self) -> anyhow::Result<Option<JournalBlock>> {
+        let number = self.number;
         let records = self.file()?.records();
+
         let Some((header, transactions)) = records.split_first() else {
             return Ok(None);
         };
-        Ok(Some(JournalBlock {
-            header: serde_json::from_slice(header)?,
-            transactions: transactions.iter().map(|record| serde_json::from_slice(record)).collect::<Result<_, _>>()?,
-        }))
+
+        let header = match serde_json::from_slice(header) {
+            Ok(header) => header,
+            Err(err) => {
+                tracing::error!(?err, %number, "journal header is unreadable, skipping the block");
+                return Ok(None);
+            }
+        };
+
+        let transactions = transactions
+            .iter()
+            .enumerate()
+            .map_while(|(index, record)| {
+                serde_json::from_slice(record)
+                    .inspect_err(|err| tracing::error!(?err, %number, index, "journal record is unreadable, replaying the transactions before it"))
+                    .ok()
+            })
+            .collect();
+        Ok(Some(JournalBlock { header, transactions }))
     }
 
     /// Closes the journal file and removes it from disk.
@@ -216,6 +216,24 @@ mod tests {
         assert_eq!(block.header.number, header(BLOCK_NUMBER, 123).number);
         assert_eq!(block.header.timestamp, header(BLOCK_NUMBER, 123).timestamp);
         assert_eq!(block.transactions, transactions.to_vec());
+        journal.retire().unwrap();
+    }
+
+    #[test]
+    fn unreadable_record_keeps_the_transactions_before_it() {
+        const BLOCK_NUMBER: u64 = u64::MAX - 1;
+        anchor_database_path();
+        let transactions = [transaction(0), transaction(1), transaction(2)];
+        let record = |transaction: &TransactionInput| JournalRecord::encode(transaction).unwrap();
+
+        let mut journal = TransactionJournal::open(header(BLOCK_NUMBER, 123)).unwrap();
+        journal.append(&record(&transactions[0])).unwrap();
+        journal.append(&record(&transactions[1])).unwrap();
+        journal.file().unwrap().append(br#"{"transaction_info":"#).unwrap();
+        journal.append(&record(&transactions[2])).unwrap();
+
+        let block = journal.block().unwrap().unwrap();
+        assert_eq!(block.transactions, transactions[..2].to_vec());
         journal.retire().unwrap();
     }
 }

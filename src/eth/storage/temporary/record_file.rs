@@ -44,14 +44,13 @@ impl RecordFile {
         self.end == 0
     }
 
-    /// Returns the records, without their newlines.
+    /// Returns the records, without their newlines
     pub fn records(&self) -> Vec<&[u8]> {
         read_records(&self.map[..self.end]).0
     }
 
-    /// Appends a record, which must hold no newline or zero byte.
+    /// Appends a record
     pub fn append(&mut self, record: &[u8]) -> io::Result<()> {
-        debug_assert!(!record.contains(&b'\n') && !record.contains(&0), "record holds a newline or zero byte");
         let record_end = self.end + record.len();
         if record_end + 1 > self.map.len() {
             self.grow(record_end + 1)?;

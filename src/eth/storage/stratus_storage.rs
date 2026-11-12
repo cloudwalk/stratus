@@ -147,15 +147,21 @@ impl StratusStorage {
     /// Replays every journaled block left by a previous run, committing them to permanent storage.
     pub fn recover_transaction_journal(&self, executor: &Executor, miner: &Miner) -> anyhow::Result<()> {
         let mined = self.read_mined_block_number();
+        let mut expected = mined.next_block_number();
         for number in TransactionJournal::journaled_blocks()? {
-            let mut journal = TransactionJournal::prepare(number)?;
+            let mut journal = TransactionJournal::resume(number)?;
             if mined >= number {
                 journal.retire()?;
                 continue;
             }
 
+            if number != expected {
+                tracing::error!(%number, %expected, "journal of the next block is missing, stopping recovery");
+                break;
+            }
             let Some(journal_block) = journal.block()? else {
-                continue;
+                tracing::error!(%number, "journal is unreadable, stopping recovery");
+                break;
             };
 
             if journal_block.transactions.is_empty() && journal.is_live() {
@@ -173,6 +179,7 @@ impl StratusStorage {
 
             miner.mine_local_and_commit()?;
             journal.retire()?;
+            expected = number.next_block_number();
         }
         Ok(())
     }
