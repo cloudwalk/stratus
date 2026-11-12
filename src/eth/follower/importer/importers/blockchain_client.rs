@@ -40,6 +40,14 @@ use crate::ext::to_json_value;
 use crate::infra::tracing::TracingExt;
 use crate::log_and_err;
 
+/// Leader response for `stratus_getBlockAndReceipts`, in either wire format.
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum BlockAndReceiptsResponse {
+    Alloy(Box<ExternalBlockWithReceipts>),
+    Stratus(Box<BlockRocksdb>),
+}
+
 #[derive(Debug)]
 pub struct BlockchainClient {
     http: HttpClient,
@@ -205,22 +213,9 @@ impl BlockchainClient {
         };
         let value = match serde_json::from_str::<T>(full.get()) {
             Ok(value) => value,
-            Err(e) if format == Some(ResponseFormat::Stratus) && Self::is_legacy_alloy_response(full.get()) => {
-                tracing::error!(reason = ?e, method, "leader answered the stratus format request with the legacy alloy format");
-                anyhow::bail!(
-                    "leader answered the stratus format request with the legacy alloy format, \
-                     which means it likely runs an old version without stratus response format support; \
-                     set importer response_format back to alloy or upgrade the leader"
-                );
-            }
             Err(e) => return Err(e).with_context(|| format!("failed to deserialize importer data from {method}")),
         };
         Ok(Some(value))
-    }
-
-    /// Checks whether a response has the legacy alloy shape (top-level `block` and `receipts` objects).
-    fn is_legacy_alloy_response(response: &str) -> bool {
-        serde_json::from_str::<serde_json::Value>(response).is_ok_and(|value| value.get("block").is_some() && value.get("receipts").is_some())
     }
 
     /// Fetches the full serialized response for an importer method, reassembling pagination chunks.
@@ -300,24 +295,17 @@ impl BlockchainClient {
 
         const METHOD: &str = "stratus_getBlockAndReceipts";
 
-        let result = match response_format {
-            ResponseFormat::Alloy => self
-                .request_importer_data::<ExternalBlockWithReceipts>(METHOD, block_number, Some(response_format))
-                .await
-                .map(|block| {
-                    block.map(|response| FetchedBlockWithReceipts::Alloy {
-                        block: response.block,
-                        receipts: response.receipts,
-                    })
-                }),
-            ResponseFormat::Stratus => self
-                .request_importer_data::<BlockRocksdb>(METHOD, block_number, Some(response_format))
-                .await
-                .map(|block| block.map(|block| FetchedBlockWithReceipts::Stratus(block.into()))),
-        };
+        let response = self
+            .request_importer_data::<BlockAndReceiptsResponse>(METHOD, block_number, Some(response_format))
+            .await;
 
-        match result {
-            Ok(block) => Ok(block),
+        match response {
+            Ok(Some(BlockAndReceiptsResponse::Alloy(response))) => Ok(Some(FetchedBlockWithReceipts::Alloy {
+                block: response.block,
+                receipts: response.receipts,
+            })),
+            Ok(Some(BlockAndReceiptsResponse::Stratus(block))) => Ok(Some(FetchedBlockWithReceipts::Stratus((*block).into()))),
+            Ok(None) => Ok(None),
             Err(e) => log_and_err!(reason = e, "failed to fetch block with receipts"),
         }
     }

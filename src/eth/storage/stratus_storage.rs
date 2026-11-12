@@ -320,6 +320,16 @@ impl StratusStorage {
             .inspect_err(|err| tracing::error!(reason = ?err, "failed to read block"))
     }
 
+    #[timed(storage_read_block, labels(storage = label::PERM, success = result.is_ok()))]
+    pub fn read_block_rocksdb(&self, filter: BlockFilter) -> Result<Option<BlockRocksdb>, StorageError> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::read_block", %filter).entered();
+
+        self.perm
+            .read_block_rocksdb(filter)
+            .inspect_err(|err| tracing::error!(reason = ?err, "failed to read block"))
+    }
+
     pub fn read_block_info(&self, filter: BlockFilter) -> Result<Option<BlockInfo>, StorageError> {
         let latest_state = self.latest_state_lock.read();
         let mined = latest_state.number;

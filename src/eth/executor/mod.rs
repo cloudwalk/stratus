@@ -20,8 +20,6 @@ pub use evm::types::TransactionExecutionOutput;
 pub use evm::types::TransactionExecutionResult;
 use stratus_metrics::timed;
 use tracing::Span;
-#[cfg(feature = "tracing")]
-use tracing::info_span;
 pub use types::ExecutionResult;
 pub use types::ExecutorError;
 pub use types::RevertReason;
@@ -41,7 +39,6 @@ use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::Address;
-use crate::eth::types::Block;
 use crate::eth::types::CallInput;
 use crate::eth::types::Hash;
 use crate::eth::types::PointInTime;
@@ -84,26 +81,6 @@ impl Executor {
             storage,
             reject_not_contract,
         }
-    }
-
-    // -------------------------------------------------------------------------
-    // Imported transactions
-    // -------------------------------------------------------------------------
-
-    /// Reexecutes an imported block locally, importing it to the temporary storage.
-    pub fn execute_imported_block(&self, block: &Block) -> Result<(), StratusError> {
-        #[cfg(feature = "tracing")]
-        let _span = info_span!("executor::imported_block", block_number = %block.number()).entered();
-        tracing::info!(block_number = %block.number(), "reexecuting imported block");
-
-        self.storage.set_pending_header(block.number(), block.timestamp());
-
-        for tx in &block.transactions {
-            let tx_input: TransactionInput = (&tx.execution).into();
-            self.execute_local_transaction(tx_input, None)?;
-        }
-
-        Ok(())
     }
 
     // -------------------------------------------------------------------------

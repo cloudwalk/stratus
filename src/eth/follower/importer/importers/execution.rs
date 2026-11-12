@@ -11,10 +11,12 @@ use crate::eth::follower::importer::importers::ImporterWorker;
 use crate::eth::follower::importer::send_block_to_kafka;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::CommitItem;
+use crate::eth::storage::StratusStorage;
 use crate::eth::types::Block;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::Gas;
 use crate::eth::types::Log;
+use crate::eth::types::TransactionInput;
 use crate::ext::to_json_string;
 use crate::infra::kafka::KafkaConnector;
 use crate::log_and_err;
@@ -22,6 +24,7 @@ use crate::log_and_err;
 pub struct ReexecutionWorker {
     pub executor: Arc<Executor>,
     pub miner: Arc<Miner>,
+    pub storage: Arc<StratusStorage>,
     pub kafka_connector: Option<KafkaConnector>,
 }
 
@@ -40,10 +43,17 @@ impl ImporterWorker for ReexecutionWorker {
 
         let receipts_len = block.receipts_len();
 
-        if let Err(e) = self.executor.execute_imported_block(&block.block) {
-            let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute imported block");
-            return log_and_err!(reason = e, message);
-        };
+        tracing::info!(block_number = %block.block.number(), "reexecuting imported block");
+
+        self.storage.set_pending_header(block.block.number(), block.block.timestamp());
+
+        for tx in &block.block.transactions {
+            let tx_input: TransactionInput = (&tx.execution).into();
+            if let Err(e) = self.executor.execute_local_transaction(tx_input, None) {
+                let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute imported block");
+                return log_and_err!(reason = e, message);
+            }
+        }
 
         let (mined_block, changes) = match self.miner.mine_imported(block.block.clone()) {
             Ok((mined_block, changes)) => {

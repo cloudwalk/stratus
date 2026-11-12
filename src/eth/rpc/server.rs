@@ -89,7 +89,6 @@ use crate::eth::rpc::subscriptions::RpcSubscriptionsHandles;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
-use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::types::Address;
 use crate::eth::types::Bytes;
 use crate::eth::types::CallInput;
@@ -986,23 +985,23 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     // track
     tracing::info!(%filter, %response_format, "reading block and receipts");
 
-    let Some(block) = ctx.server.storage.read_block(filter)? else {
-        tracing::info!(%filter, "block not found");
-        return Ok(to_raw_value(&JsonValue::Null).expect_infallible());
-    };
-
-    tracing::info!(%filter, "block with transactions found");
-
-    // serialize in the requested format
-    let value = match response_format {
-        ResponseFormat::Stratus => to_json_value(BlockRocksdb::from(block)),
-        ResponseFormat::Alloy => {
+    // serialize in the requested format, reading the stored shape directly when possible
+    let Some(value) = (match response_format {
+        ResponseFormat::Stratus => ctx.server.storage.read_block_rocksdb(filter)?.map(|block| {
+            tracing::info!(%filter, "block with transactions found");
+            to_json_value(block)
+        }),
+        ResponseFormat::Alloy => ctx.server.storage.read_block(filter)?.map(|block| {
+            tracing::info!(%filter, "block with transactions found");
             let receipts = block.transactions.iter().cloned().map(AlloyReceipt::from).collect::<Vec<_>>();
             json!({
                 "block": block.to_json_rpc_with_full_transactions(),
                 "receipts": receipts,
             })
-        }
+        }),
+    }) else {
+        tracing::info!(%filter, "block not found");
+        return Ok(to_raw_value(&JsonValue::Null).expect_infallible());
     };
 
     pagination::respond(value, pagination, ctx.server.rpc_config.rpc_max_response_size_bytes)

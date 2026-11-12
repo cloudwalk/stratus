@@ -438,17 +438,13 @@ mod wire_tests {
     }
 
     #[tokio::test]
-    async fn stratus_format_against_old_leader_answers_with_clear_error() {
-        // minimal legacy alloy-shape response, so the old leader delivers it in a single message
-        let alloy_response = serde_json::json!({
-            "block": { "number": "0x1" },
-            "receipts": [],
-        });
-        let storage = Arc::new(RwLock::new(alloy_response));
-
+    async fn stratus_format_against_old_leader_parses_alloy_response_transparently() {
         // old leader: ignores the format parameter, answers with the legacy alloy shape
-        let server_config = jsonrpsee::server::ServerConfig::builder().max_response_body_size(MAX_RESPONSE_BYTES).build();
-        let server = Server::builder().set_config(server_config).build("127.0.0.1:0").await.expect("build server");
+        let mut expected = fake_first::<ExternalBlockWithReceipts>();
+        expected.receipts.clear();
+        let storage = Arc::new(RwLock::new(to_json_value(expected.clone())));
+
+        let server = Server::builder().build("127.0.0.1:0").await.expect("build server");
         let addr = server.local_addr().expect("server addr");
 
         let mut module = RpcModule::new(Arc::clone(&storage));
@@ -466,14 +462,16 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        // the follower requests the stratus format; the error must explain the real cause
-        let error = client
+        // the follower requests the stratus format; the legacy alloy answer is handled transparently
+        let fetched = client
             .fetch_block_and_receipts(BlockNumber::from(1), ResponseFormat::Stratus)
             .await
-            .expect_err("fetch should fail");
-        let message = format!("{error:#}");
-        assert!(message.contains("legacy alloy format"), "unexpected error: {message}");
-        assert!(message.contains("old version"), "unexpected error: {message}");
+            .expect("fetch block");
+        let FetchedBlockWithReceipts::Alloy { block, receipts } = fetched.expect("block present") else {
+            panic!("expected alloy response");
+        };
+        assert_eq!(block, expected.block);
+        assert_eq!(receipts, expected.receipts);
     }
 
     #[tokio::test]
