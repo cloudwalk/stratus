@@ -10,6 +10,8 @@ use jsonrpsee::server::HttpRequest;
 use jsonrpsee::server::HttpResponse;
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
+#[cfg(feature = "metrics")]
+use stratus_metrics as metrics;
 use tower::Service;
 
 use crate::eth::rpc::RpcClientApp;
@@ -78,7 +80,7 @@ fn parse_admin_password(headers: &HeaderMap<HeaderValue>) -> Authentication {
     }
 }
 
-/// Extracts the client application name from the `app` query parameter.
+/// Extracts the client application name from the `app` query parameter, HTTP headers, or URL path.
 fn parse_client_app(headers: &HeaderMap<HeaderValue>, uri: &Uri) -> RpcClientApp {
     fn try_query_params(uri: &Uri) -> Option<RpcClientApp> {
         let query_params = uri.query()?;
@@ -91,7 +93,10 @@ fn parse_client_app(headers: &HeaderMap<HeaderValue>, uri: &Uri) -> RpcClientApp
         };
         for param in ["app", "client"] {
             if let Some(name) = query_params.get(param) {
-                return Some(RpcClientApp::parse(name));
+                let app = RpcClientApp::parse(name);
+                #[cfg(feature = "metrics")]
+                metrics::inc_rpc_client_auth_query(&app, param);
+                return Some(app);
             }
         }
         None
@@ -105,7 +110,10 @@ fn parse_client_app(headers: &HeaderMap<HeaderValue>, uri: &Uri) -> RpcClientApp
                     continue;
                 };
                 if not(name.is_empty()) {
-                    return Some(RpcClientApp::parse(name));
+                    let app = RpcClientApp::parse(name);
+                    #[cfg(feature = "metrics")]
+                    metrics::inc_rpc_client_auth_header(&app, header);
+                    return Some(app);
                 }
             }
         }
@@ -114,11 +122,14 @@ fn parse_client_app(headers: &HeaderMap<HeaderValue>, uri: &Uri) -> RpcClientApp
 
     fn try_path(uri: &Uri) -> Option<RpcClientApp> {
         let path = uri.path();
-        let mut path_parts = path.split('/');
-        while let Some(part) = path_parts.next() {
+        let mut path_parts = path.split('/').enumerate();
+        while let Some((position, part)) = path_parts.next() {
             if part == "app" || part == "client" {
-                let name = path_parts.next()?;
-                return Some(RpcClientApp::parse(name));
+                let (_, name) = path_parts.next()?;
+                let app = RpcClientApp::parse(name);
+                #[cfg(feature = "metrics")]
+                metrics::inc_rpc_client_auth_path(&app, part, position <= 1);
+                return Some(app);
             }
         }
         None
@@ -134,4 +145,34 @@ fn parse_client_app(headers: &HeaderMap<HeaderValue>, uri: &Uri) -> RpcClientApp
         return app;
     }
     RpcClientApp::Unknown
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_client_app_ways() {
+        let empty_headers = HeaderMap::new();
+
+        // Query param
+        let uri: Uri = "http://localhost:3000/?app=blockscout".parse().unwrap();
+        assert_eq!(parse_client_app(&empty_headers, &uri).to_string(), "infra::blockscout");
+
+        let uri: Uri = "http://localhost:3000/?client=golani".parse().unwrap();
+        assert_eq!(parse_client_app(&empty_headers, &uri).to_string(), "infra::golani");
+
+        // Header
+        let mut headers = HeaderMap::new();
+        headers.insert("x-stratus-app", HeaderValue::from_static("authorizer"));
+        let uri: Uri = "http://localhost:3000/".parse().unwrap();
+        assert_eq!(parse_client_app(&headers, &uri).to_string(), "acquiring::authorizer");
+
+        // Path
+        let uri: Uri = "http://localhost:3000/app/blockscoutv8".parse().unwrap();
+        assert_eq!(parse_client_app(&empty_headers, &uri).to_string(), "other::blockscoutv8");
+
+        let uri: Uri = "http://localhost:3000/v1/client/insomnia".parse().unwrap();
+        assert_eq!(parse_client_app(&empty_headers, &uri).to_string(), "user::insomnia");
+    }
 }
