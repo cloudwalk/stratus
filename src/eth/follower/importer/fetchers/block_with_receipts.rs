@@ -71,6 +71,21 @@ impl ImportedBlock {
         transactions.sort_by_key(|tx| tx.transaction_index);
         receipts.sort_by_key(|receipt| receipt.transaction_index);
 
+        for (position, (tx, receipt)) in transactions.iter().zip(receipts.iter()).enumerate() {
+            let tx_index = tx
+                .transaction_index
+                .ok_or_else(|| anyhow!("block {block_number}: transaction at position {position} has no transaction index"))?;
+            let receipt_index = receipt
+                .0
+                .transaction_index
+                .ok_or_else(|| anyhow!("block {block_number}: receipt at position {position} has no transaction index"))?;
+            if tx_index != receipt_index {
+                bail!(
+                    "block {block_number}: transaction/receipt pairing mismatch at position {position}: transaction index {tx_index} vs receipt index {receipt_index}"
+                );
+            }
+        }
+
         for window in transactions.windows(2) {
             let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
             let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
