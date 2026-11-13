@@ -1,4 +1,3 @@
-use std::mem;
 use std::sync::Arc;
 
 use anyhow::bail;
@@ -11,11 +10,11 @@ use crate::eth::follower::importer::fetchers::DataFetcher;
 use crate::eth::follower::importer::fetchers::fake_leader::FakeLeaderFetcher;
 use crate::eth::follower::importer::importers::ImportData;
 use crate::eth::follower::importer::importers::ImporterWorker;
+use crate::eth::follower::importer::importers::reexecute_imported_transactions;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::interval_miner::commit_retry;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::StratusError;
-use crate::eth::types::TransactionInput;
 
 pub struct FakeLeaderWorker {
     pub executor: Arc<Executor>,
@@ -34,16 +33,12 @@ impl ImporterWorker for FakeLeaderWorker {
 
     #[timed(import_online_mined_block)]
     async fn import(&self, (fetched, (expected_block, expected_changes)): Self::DataType) -> anyhow::Result<usize> {
-        let mut block = fetched.block;
+        let block = fetched.block;
 
         let block_tx_len = block.transactions.len();
-        self.storage.set_pending_header(block.number(), block.timestamp());
 
-        let transactions: Vec<TransactionInput> = mem::take(&mut block.transactions).into_iter().map(|tx| (&tx.execution).into()).collect();
-
-        for tx in transactions {
-            tracing::info!(?tx, "executing tx as fake miner");
-            if let Err(e) = self.executor.execute_local_transaction(tx, None) {
+        for result in reexecute_imported_transactions(self.storage.as_ref(), self.executor.as_ref(), &block) {
+            if let Err(e) = result {
                 match e {
                     StratusError::Executor(ExecutorError::Nonce { transaction: _, account: _ }) => {
                         tracing::warn!(reason = ?e, "transaction failed, was this node restarted?");

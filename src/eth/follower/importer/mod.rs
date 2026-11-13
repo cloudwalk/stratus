@@ -12,9 +12,9 @@ use std::time::Duration;
 
 use anyhow::bail;
 pub use config::ImporterConfig;
-pub use fetchers::block_with_receipts::FetchedBlockWithReceipts;
 pub use fetchers::block_with_receipts::ImportedBlock;
 pub use importers::BlockchainClient;
+pub use importers::blockchain_client::BlockAndReceiptsResponse;
 pub use runtime::ImporterRuntime;
 pub use runtime::ImporterRuntimeConfig;
 #[cfg(feature = "metrics")]

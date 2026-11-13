@@ -4,19 +4,17 @@ use stratus_metrics::timed;
 
 use crate::GlobalState;
 use crate::eth::executor::Executor;
-use crate::eth::executor::TransactionExecutionResult;
+use crate::eth::follower::importer::fetchers::block_with_receipts::BlockOrigin;
 use crate::eth::follower::importer::fetchers::block_with_receipts::ImportedBlock;
 use crate::eth::follower::importer::importers::ImportData;
 use crate::eth::follower::importer::importers::ImporterWorker;
+use crate::eth::follower::importer::importers::reexecute_imported_transactions;
 use crate::eth::follower::importer::send_block_to_kafka;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::CommitItem;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::Block;
 use crate::eth::types::BlockNumber;
-use crate::eth::types::Gas;
-use crate::eth::types::Log;
-use crate::eth::types::TransactionInput;
 use crate::ext::to_json_string;
 use crate::infra::kafka::KafkaConnector;
 use crate::log_and_err;
@@ -28,7 +26,7 @@ pub struct ReexecutionWorker {
     pub kafka_connector: Option<KafkaConnector>,
 }
 
-impl ImportData for ImportedBlock {
+impl ImportData for <ReexecutionWorker as ImporterWorker>::DataType {
     fn block_number(&self) -> BlockNumber {
         self.block_number()
     }
@@ -45,11 +43,8 @@ impl ImporterWorker for ReexecutionWorker {
 
         tracing::info!(block_number = %block.block.number(), "reexecuting imported block");
 
-        self.storage.set_pending_header(block.block.number(), block.block.timestamp());
-
-        for tx in &block.block.transactions {
-            let tx_input: TransactionInput = (&tx.execution).into();
-            if let Err(e) = self.executor.execute_local_transaction(tx_input, None) {
+        for result in reexecute_imported_transactions(self.storage.as_ref(), self.executor.as_ref(), &block.block) {
+            if let Err(e) = result {
                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute imported block");
                 return log_and_err!(reason = e, message);
             }
@@ -91,37 +86,28 @@ impl ImporterWorker for ReexecutionWorker {
 fn compare_with_imported(mined_block: &Block, imported: &ImportedBlock) -> anyhow::Result<()> {
     let block_number = mined_block.number();
 
-    match imported.legacy_receipts.as_deref() {
-        Some(receipts) =>
-            for (mined_tx, receipt) in mined_block.transactions.iter().zip(receipts) {
-                let mined_result = &mined_tx.execution.output;
-                let receipt_logs: Vec<Log> = receipt.inner.logs().iter().cloned().map(Log::from).collect();
+    for (mined_tx, imported_tx) in mined_block.transactions.iter().zip(&imported.block.transactions) {
+        let mined_result = &mined_tx.execution.output;
+        let imported_result = &imported_tx.execution.output;
 
-                if mined_result.result.is_success() != receipt.is_success()
-                    || mined_result.logs != receipt_logs
-                    || mined_result.gas_used != Gas::from(receipt.gas_used)
-                {
-                    let json_mined = to_json_string(mined_result);
-                    let json_receipt = to_json_string(receipt);
-                    return log_and_err!(format!(
-                        "reexecution mismatch between leader and follower | block_number={} tx_hash={} mined={} receipt={}",
-                        block_number, mined_tx.execution.info.hash, json_mined, json_receipt
-                    ));
-                }
-            },
-        None =>
-            for (mined_tx, imported_tx) in mined_block.transactions.iter().zip(&imported.block.transactions) {
-                let mined_result = &mined_tx.execution.output;
-                let imported_result: &TransactionExecutionResult = &imported_tx.execution.output;
-                if mined_result != imported_result {
-                    let json_mined = to_json_string(mined_result);
-                    let json_imported = to_json_string(imported_result);
-                    return log_and_err!(format!(
-                        "reexecution mismatch between leader and follower | block_number={} tx_hash={} mined={} imported={}",
-                        block_number, mined_tx.execution.info.hash, json_mined, json_imported
-                    ));
-                }
-            },
+        let results_match = match imported.origin {
+            BlockOrigin::Stratus => mined_result == imported_result,
+            // the alloy receipt carries no revert reason and no return output, so those are not comparable
+            BlockOrigin::Alloy =>
+                mined_result.result.is_success() == imported_result.result.is_success()
+                    && mined_result.logs == imported_result.logs
+                    && mined_result.gas_used == imported_result.gas_used
+                    && mined_result.deployed_contract_address == imported_result.deployed_contract_address,
+        };
+
+        if !results_match || mined_tx.mined_data != imported_tx.mined_data {
+            let json_mined = to_json_string(mined_result);
+            let json_imported = to_json_string(imported_result);
+            return log_and_err!(format!(
+                "reexecution mismatch between leader and follower | block_number={} tx_hash={} mined={} imported={}",
+                block_number, mined_tx.execution.info.hash, json_mined, json_imported
+            ));
+        }
     }
 
     Ok(())

@@ -3,10 +3,15 @@ use std::future::Future;
 use tokio::sync::mpsc;
 
 use crate::GlobalState;
+use crate::eth::executor::Executor;
 use crate::eth::follower::importer::receive_with_timeout;
 use crate::eth::follower::importer::record_import_metrics;
 use crate::eth::follower::importer::should_shutdown;
+use crate::eth::storage::StratusStorage;
+use crate::eth::types::Block;
 use crate::eth::types::BlockNumber;
+use crate::eth::types::StratusError;
+use crate::eth::types::TransactionInput;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
 use crate::infra::tracing::warn_task_tx_closed;
 
@@ -16,6 +21,23 @@ pub mod fake_leader;
 pub mod replication;
 
 pub use blockchain_client::BlockchainClient;
+
+/// Re-executes the transactions of an imported block locally, one at a time.
+///
+/// Sets the pending header from the imported block, then executes each stored transaction through
+/// the local execution path, yielding one result per transaction.
+pub fn reexecute_imported_transactions<'a>(
+    storage: &'a StratusStorage,
+    executor: &'a Executor,
+    block: &'a Block,
+) -> impl Iterator<Item = Result<(), StratusError>> + 'a {
+    storage.set_pending_header(block.number(), block.timestamp());
+
+    block.transactions.iter().map(|tx| {
+        let tx_input: TransactionInput = (&tx.execution).into();
+        executor.execute_local_transaction(tx_input, None)
+    })
+}
 
 pub trait ImportData {
     fn block_number(&self) -> BlockNumber;

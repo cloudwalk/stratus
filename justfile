@@ -424,8 +424,8 @@ e2e-leader-follower-pagination:
     just e2e-leader-follower-down
     exit $exit_code
 
-# E2E: Leader & Follower pagination, with the follower importing the stratus-native response format
-# (stratus_getBlockAndReceipts with `format: "stratus"`)
+# E2E: Leader & Follower pagination, with the follower importing through the stratus-native response format
+# (the follower now always requests the stratus-native response format)
 e2e-leader-follower-pagination-stratus:
     #!/bin/bash
 
@@ -433,7 +433,7 @@ e2e-leader-follower-pagination-stratus:
     just e2e-leader --max-response-size-bytes 8192
 
     # follower importing through the stratus-native response format
-    just e2e-follower test/follower/e2e-pagination-stratus.test.ts false --response-format stratus
+    just e2e-follower test/follower/e2e-pagination-stratus.test.ts false
 
     cd e2e
     if [ ! -d node_modules ]; then npm install; fi

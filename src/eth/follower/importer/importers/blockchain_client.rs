@@ -22,7 +22,6 @@ use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::ExecutorError;
-use crate::eth::follower::importer::fetchers::block_with_receipts::FetchedBlockWithReceipts;
 use crate::eth::rpc::pagination;
 use crate::eth::rpc::pagination::ResponseFormat;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
@@ -43,9 +42,18 @@ use crate::log_and_err;
 /// Leader response for `stratus_getBlockAndReceipts`, in either wire format.
 #[derive(serde::Deserialize)]
 #[serde(untagged)]
-enum BlockAndReceiptsResponse {
+pub enum BlockAndReceiptsResponse {
     Alloy(Box<ExternalBlockWithReceipts>),
     Stratus(Box<BlockRocksdb>),
+}
+
+impl std::fmt::Debug for BlockAndReceiptsResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BlockAndReceiptsResponse::Alloy(_) => write!(f, "BlockAndReceiptsResponse::Alloy(..)"),
+            BlockAndReceiptsResponse::Stratus(_) => write!(f, "BlockAndReceiptsResponse::Stratus(..)"),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -286,26 +294,16 @@ impl BlockchainClient {
     }
 
     /// Fetches a block by number with receipts.
-    pub async fn fetch_block_and_receipts(
-        &self,
-        block_number: BlockNumber,
-        response_format: ResponseFormat,
-    ) -> anyhow::Result<Option<FetchedBlockWithReceipts>> {
-        tracing::debug!(%block_number, %response_format, "fetching block");
+    pub async fn fetch_block_and_receipts(&self, block_number: BlockNumber) -> anyhow::Result<Option<BlockAndReceiptsResponse>> {
+        tracing::debug!(%block_number, "fetching block");
 
         const METHOD: &str = "stratus_getBlockAndReceipts";
 
-        let response = self
-            .request_importer_data::<BlockAndReceiptsResponse>(METHOD, block_number, Some(response_format))
-            .await;
-
-        match response {
-            Ok(Some(BlockAndReceiptsResponse::Alloy(response))) => Ok(Some(FetchedBlockWithReceipts::Alloy {
-                block: response.block,
-                receipts: response.receipts,
-            })),
-            Ok(Some(BlockAndReceiptsResponse::Stratus(block))) => Ok(Some(FetchedBlockWithReceipts::Stratus((*block).into()))),
-            Ok(None) => Ok(None),
+        match self
+            .request_importer_data::<BlockAndReceiptsResponse>(METHOD, block_number, Some(ResponseFormat::Stratus))
+            .await
+        {
+            Ok(response) => Ok(response),
             Err(e) => log_and_err!(reason = e, "failed to fetch block with receipts"),
         }
     }

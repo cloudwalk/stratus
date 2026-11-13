@@ -331,8 +331,8 @@ mod wire_tests {
     use super::parser::next_rpc_param;
     use super::types::BlockFilter;
     use crate::alias::JsonValue;
+    use crate::eth::follower::importer::BlockAndReceiptsResponse;
     use crate::eth::follower::importer::BlockchainClient;
-    use crate::eth::follower::importer::FetchedBlockWithReceipts;
     use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
     use crate::eth::types::Block;
     use crate::eth::types::BlockNumber;
@@ -394,15 +394,12 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        let fetched = client
-            .fetch_block_and_receipts(BlockNumber::from(1), ResponseFormat::Alloy)
-            .await
-            .expect("fetch block");
-        let FetchedBlockWithReceipts::Alloy { block, receipts } = fetched.expect("block present") else {
+        let fetched = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect("fetch block");
+        let BlockAndReceiptsResponse::Alloy(response) = fetched.expect("block present") else {
             panic!("expected alloy response");
         };
-        assert_eq!(block, expected.block);
-        assert_eq!(receipts, expected.receipts);
+        assert_eq!(response.block, expected.block);
+        assert_eq!(response.receipts, expected.receipts);
     }
 
     #[tokio::test]
@@ -430,10 +427,7 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        let error = client
-            .fetch_block_and_receipts(BlockNumber::from(1), ResponseFormat::Alloy)
-            .await
-            .expect_err("fetch should fail");
+        let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
         assert!(error.to_string().contains("failed to fetch block with receipts"));
     }
 
@@ -463,15 +457,12 @@ mod wire_tests {
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
         // the follower requests the stratus format; the legacy alloy answer is handled transparently
-        let fetched = client
-            .fetch_block_and_receipts(BlockNumber::from(1), ResponseFormat::Stratus)
-            .await
-            .expect("fetch block");
-        let FetchedBlockWithReceipts::Alloy { block, receipts } = fetched.expect("block present") else {
+        let fetched = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect("fetch block");
+        let BlockAndReceiptsResponse::Alloy(response) = fetched.expect("block present") else {
             panic!("expected alloy response");
         };
-        assert_eq!(block, expected.block);
-        assert_eq!(receipts, expected.receipts);
+        assert_eq!(response.block, expected.block);
+        assert_eq!(response.receipts, expected.receipts);
     }
 
     #[tokio::test]
@@ -498,10 +489,7 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        let fetched = client
-            .fetch_block_and_receipts(BlockNumber::from(1), ResponseFormat::Alloy)
-            .await
-            .expect("fetch block");
+        let fetched = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect("fetch block");
         assert!(fetched.is_none(), "null response must deserialize to Ok(None)");
     }
 
@@ -531,10 +519,7 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        let error = client
-            .fetch_block_and_receipts(BlockNumber::from(1), ResponseFormat::Alloy)
-            .await
-            .expect_err("fetch should fail");
+        let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
         assert!(format!("{error:?}").contains("exceeds the reassembly cap"));
     }
 
@@ -570,10 +555,7 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        let error = client
-            .fetch_block_and_receipts(BlockNumber::from(1), ResponseFormat::Alloy)
-            .await
-            .expect_err("fetch should fail");
+        let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
         assert!(format!("{error:?}").contains("expected paginated chunk but got normal response"));
     }
 
@@ -584,8 +566,7 @@ mod wire_tests {
         block.header.number = BlockNumber::from(1u32);
         block.transactions = fake_list::<TransactionMined>(200);
         let expected_rocks = BlockRocksdb::from(block);
-        let expected: Block = expected_rocks.clone().into();
-        let storage = Arc::new(RwLock::new(to_json_value(expected_rocks)));
+        let storage = Arc::new(RwLock::new(to_json_value(expected_rocks.clone())));
 
         // leader with a tiny response limit, using the same handler shape as the real stratus branch
         let server_config = jsonrpsee::server::ServerConfig::builder().max_response_body_size(MAX_RESPONSE_BYTES).build();
@@ -612,13 +593,10 @@ mod wire_tests {
         let url = format!("http://{addr}");
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
-        let fetched = client
-            .fetch_block_and_receipts(BlockNumber::from(1), ResponseFormat::Stratus)
-            .await
-            .expect("fetch block");
-        let FetchedBlockWithReceipts::Stratus(fetched_block) = fetched.expect("block present") else {
+        let fetched = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect("fetch block");
+        let BlockAndReceiptsResponse::Stratus(fetched_block) = fetched.expect("block present") else {
             panic!("expected stratus response");
         };
-        assert_eq!(fetched_block, expected);
+        assert_eq!(*fetched_block, expected_rocks);
     }
 }

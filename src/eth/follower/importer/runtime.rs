@@ -10,7 +10,6 @@ use crate::eth::follower::importer::BlockchainClient;
 use crate::eth::follower::importer::ImporterMode;
 use crate::eth::follower::importer::supervisor::start_importer;
 use crate::eth::miner::Miner;
-use crate::eth::rpc::pagination::ResponseFormat;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::BlockNumber;
 use crate::infra::kafka::KafkaConnector;
@@ -24,7 +23,6 @@ pub struct ImporterRuntime {
 pub struct ImporterRuntimeConfig {
     pub async_threads: usize,
     pub importer_mode: ImporterMode,
-    pub response_format: ResponseFormat,
     pub external_rpc: String,
     pub external_rpc_ws: Option<String>,
     pub external_rpc_timeout: Duration,
@@ -113,7 +111,6 @@ fn run_importer_runtime(config: ImporterRuntimeConfig, shutdown: CancellationTok
         tokio::select! {
             result = start_importer(
                 config.importer_mode,
-                config.response_format,
                 config.storage,
                 config.executor,
                 config.miner,

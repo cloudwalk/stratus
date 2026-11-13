@@ -11,7 +11,7 @@ use crate::eth::executor::TransactionExecutionResult;
 use crate::eth::follower::importer::BlockchainClient;
 use crate::eth::follower::importer::fetch_with_retry;
 use crate::eth::follower::importer::fetchers::DataFetcher;
-use crate::eth::rpc::pagination::ResponseFormat;
+use crate::eth::follower::importer::importers::blockchain_client::BlockAndReceiptsResponse;
 use crate::eth::types::Address;
 use crate::eth::types::Block;
 use crate::eth::types::BlockInfo;
@@ -26,15 +26,14 @@ use crate::eth::types::Size;
 use crate::eth::types::TransactionInput;
 use crate::eth::types::TransactionMined;
 
-/// Block with receipts fetched from the leader, in either supported response format.
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone)]
-pub enum FetchedBlockWithReceipts {
-    /// Legacy alloy format: block and receipts as separate alloy RPC types.
-    Alloy { block: ExternalBlock, receipts: Vec<ExternalReceipt> },
+/// Origin of an imported block, decided by the wire format the leader answered in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockOrigin {
+    /// Answered in the stratus-native format.
+    Stratus,
 
-    /// Stratus-native format: block with receipts embedded, deserialized from the storage DTO.
-    Stratus(Block),
+    /// Answered in the legacy alloy format, so the execution results are leader reported.
+    Alloy,
 }
 
 /// Block imported from the leader, normalized to the stratus-native format.
@@ -43,8 +42,8 @@ pub struct ImportedBlock {
     /// Block in the stratus-native format.
     pub block: Block,
 
-    /// Legacy alloy receipts, present only when the leader answered in the legacy alloy format.
-    pub legacy_receipts: Option<Vec<ExternalReceipt>>,
+    /// Wire format the leader answered in.
+    pub origin: BlockOrigin,
 }
 
 impl ImportedBlock {
@@ -54,6 +53,7 @@ impl ImportedBlock {
         let block_number = block.number();
         let block_timestamp = block.timestamp();
         let block_hash = block.hash();
+        let block_gas_used = block.0.header.gas_used;
 
         let BlockTransactions::Full(mut transactions) = block.0.transactions else {
             bail!("expected full transactions, got hashes or uncle");
@@ -104,7 +104,6 @@ impl ImportedBlock {
 
         let mut transactions_mined = Vec::with_capacity(transactions.len());
         let mut first_log_index = Index::ZERO;
-        let mut gas_used = Gas::ZERO;
         for (tx, receipt) in transactions.into_iter().zip(receipts.iter()) {
             let tx_input: TransactionInput = tx.try_into()?;
             let tx_index = receipt.0.transaction_index.ok_or(anyhow!("missing transaction index"))?;
@@ -135,7 +134,6 @@ impl ImportedBlock {
 
             let execution = TransactionExecution::new(tx_input.transaction_info, tx_input.signature, execution_input, output);
 
-            gas_used += execution.output.gas_used;
             let logs_len = execution.output.logs.len() as u64;
             transactions_mined.push(TransactionMined::from_execution(execution, block_hash, Index(tx_index as u64), first_log_index));
             first_log_index += Index(logs_len);
@@ -144,12 +142,12 @@ impl ImportedBlock {
         let mut block = Block::new(block_number, block_timestamp);
         block.header.hash = block_hash;
         block.header.size = Size::from(transactions_mined.len() as u64);
-        block.header.gas_used = gas_used;
+        block.header.gas_used = Gas::from(block_gas_used);
         block.transactions = transactions_mined;
 
         Ok(Self {
             block,
-            legacy_receipts: Some(receipts),
+            origin: BlockOrigin::Alloy,
         })
     }
 
@@ -166,18 +164,16 @@ impl ImportedBlock {
 
 pub struct BlockWithReceiptsFetcher {
     pub chain: Arc<BlockchainClient>,
-    pub response_format: ResponseFormat,
 }
 
 impl DataFetcher for BlockWithReceiptsFetcher {
-    type FetchedType = FetchedBlockWithReceipts;
+    type FetchedType = BlockAndReceiptsResponse;
     type PostProcessType = ImportedBlock;
 
     async fn fetch(&self, block_number: BlockNumber) -> Self::FetchedType {
         let fetch_fn = |bn| {
             let chain = Arc::clone(&self.chain);
-            let response_format = self.response_format;
-            async move { chain.fetch_block_and_receipts(bn, response_format).await }
+            async move { chain.fetch_block_and_receipts(bn).await }
         };
 
         fetch_with_retry(block_number, fetch_fn, "block and receipts").await
@@ -185,8 +181,9 @@ impl DataFetcher for BlockWithReceiptsFetcher {
 
     async fn post_process(&self, data: Self::FetchedType) -> anyhow::Result<Self::PostProcessType> {
         match data {
-            FetchedBlockWithReceipts::Alloy { block, receipts } => ImportedBlock::from_alloy(block, receipts),
-            FetchedBlockWithReceipts::Stratus(block) => {
+            BlockAndReceiptsResponse::Alloy(response) => ImportedBlock::from_alloy(response.block, response.receipts),
+            BlockAndReceiptsResponse::Stratus(block) => {
+                let block: Block = (*block).into();
                 for window in block.transactions.windows(2) {
                     let tx_index = window[0].mined_data.index.0;
                     let next_tx_index = window[1].mined_data.index.0;
@@ -195,7 +192,10 @@ impl DataFetcher for BlockWithReceiptsFetcher {
                     }
                 }
 
-                Ok(ImportedBlock { block, legacy_receipts: None })
+                Ok(ImportedBlock {
+                    block,
+                    origin: BlockOrigin::Stratus,
+                })
             }
         }
     }
