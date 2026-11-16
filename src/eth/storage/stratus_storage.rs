@@ -144,8 +144,7 @@ impl StratusStorage {
         self.temp.set_pending_header(number, timestamp);
     }
 
-    /// Replays the journaled blocks left by a previous run in order, committing each to permanent storage, then starts
-    /// journaling the pending block.
+    /// Replays the journaled blocks left by a previous run in order
     pub fn recover_transaction_journal(&self, executor: &Executor, miner: &Miner) -> anyhow::Result<()> {
         let mined = self.read_mined_block_number();
         for journal in TransactionJournal::journaled_blocks()? {
@@ -163,8 +162,6 @@ impl StratusStorage {
             miner.mine_local_and_commit()?;
             journal.retire()?;
         }
-
-        self.temp.start_journal();
         Ok(())
     }
 
