@@ -29,15 +29,17 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     // Init executor
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
-    storage
-        .recover_transaction_journal(&executor, &miner)
-        .inspect_err(|err| {
-            tracing::error!(
-                ?err,
-                "failed to recover transaction journal, journal files have been moved to /unrecovered on the data dir. Proceeding with startup"
-            );
-        })
-        .ok();
+    if config.leader {
+        storage
+            .recover_transaction_journal(&executor, &miner)
+            .inspect_err(|err| {
+                tracing::error!(
+                    ?err,
+                    "failed to recover transaction journal, journal files have been moved to /unrecovered on the data dir. Proceeding with startup"
+                );
+            })
+            .ok();
+    }
 
     storage.temp.start_journal();
 
