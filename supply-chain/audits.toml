@@ -890,6 +890,12 @@ criteria = "safe-to-deploy"
 delta = "0.1.4 -> 0.2.0"
 notes = "API refactor from eager to lazy evaluation: MacroString now wraps an Expr with deferred .eval()/.error() methods and added Clone derives; no new unsafe/FFI/network/build.rs/runtime fs-env access introduced. Only new import is std::fmt::Display. MSRV bump (1.61→1.71) and syn clone-impls feature are non-security churn; trybuild dev-dep bump is test-only. Existing include!/env! evaluation logic (fs_r"
 
+[[audits.memmap2]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
+criteria = "safe-to-deploy"
+version = "0.9.12"
+notes = "Full review of 0.9.12 (~3.5k LOC src: unix.rs/windows.rs/lib.rs/advice.rs/stub.rs). Direct dep only (stratus); single runtime dep libc (unix). build=false, no proc-macros, no network/fs/env/process access, no telemetry. All unsafe is mmap-family syscall wrapping under #![deny(unsafe_op_in_unsafe_fn)] with accurate SAFETY comments: slice length capped to isize::MAX (32-bit), mmap params page-aligned with zero-len workaround (1-byte mapping, documented), Drop munmaps via as_mmap_params round-trip, file_len wraps fd in ManuallyDrop File so the fd is never closed, mremap swaps ownership with mem::replace+forget, page_size cached in a Relaxed AtomicUsize (benign race). flush/flush_async bounds-check offset+len against self.len-offset — the RUSTSEC-2026-0186 unchecked-offset fix (fixed 0.9.11, present here); advise_range checks offset<=len so pointer math stays inside the mapping (residual len-vs-len-offset looseness can only yield a syscall error, not UB), and UB-capable madvise values are confined to UncheckedAdvice behind unsafe fns. map_if_safe (new in 0.9.x) uses read-only fcntl/ioctl (F_GET_SEALS, FS_IOC_MEASURE_VERITY with a 4-byte MaybeUninit struct). Send/Sync impls match std mmap semantics; file-backed map constructors are correctly marked unsafe with documented invariants. Windows path is the standard CreateFileMappingW/MapViewOfFile/VirtualProtect flow. Safe to deploy."
+
 [[audits.nanoid]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.3)"
 criteria = "safe-to-deploy"
