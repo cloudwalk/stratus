@@ -19,7 +19,7 @@ pub struct RecordFile {
 }
 
 impl RecordFile {
-    /// Creates the file at `path`, replacing the file left there
+    /// Creates the file at `path`, replacing an existing file
     pub fn create(path: &Path) -> io::Result<Self> {
         let file = OpenOptions::new().create(true).truncate(true).read(true).write(true).open(path)?;
         file.set_len(INITIAL_CAPACITY as u64)?;
