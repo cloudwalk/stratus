@@ -1,5 +1,8 @@
 //! In-memory storage implementations.
 
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+
 use parking_lot::RwLock;
 use parking_lot::RwLockUpgradableReadGuard;
 #[cfg(not(feature = "dev"))]
@@ -14,7 +17,6 @@ use crate::eth::executor::types::state::CompleteValue;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
 use crate::eth::storage::temporary::journal::JournalRecord;
-use crate::eth::storage::temporary::journal::TransactionJournal;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::BlockInfo;
@@ -38,13 +40,16 @@ use crate::eth::types::Wei;
 pub struct InmemoryTransactionTemporaryStorage {
     pub pending_block: RwLock<InMemoryTemporaryStorageState>,
     pub latest_block: RwLock<Option<InMemoryTemporaryStorageState>>,
+    /// Whether new pending blocks open a journal
+    with_journal: AtomicBool,
 }
 
 impl InmemoryTransactionTemporaryStorage {
     pub fn new(block_number: BlockNumber) -> Self {
         Self {
-            pending_block: RwLock::new(InMemoryTemporaryStorageState::new(block_number)),
+            pending_block: RwLock::new(InMemoryTemporaryStorageState::new(block_number, false)),
             latest_block: RwLock::new(None),
+            with_journal: AtomicBool::new(false),
         }
     }
 
@@ -96,9 +101,11 @@ impl InmemoryTransactionTemporaryStorage {
         self.pending_block.read().block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
     }
 
-    /// Removes the journal handle from the pending block, leaving its file on disk.
-    pub fn take_pending_journal(&self) -> Option<TransactionJournal> {
-        self.pending_block.write().journal.take()
+    /// Starts journaling the pending block and every block after it
+    pub fn start_journal(&self) {
+        let mut pending_block = self.pending_block.write();
+        self.with_journal.store(true, Ordering::Relaxed);
+        pending_block.journal = InMemoryTemporaryStorageState::create_journal(pending_block.block.header);
     }
 
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {
@@ -116,12 +123,12 @@ impl InmemoryTransactionTemporaryStorage {
             (finished_block, pending_block.state.clone())
         };
 
-        let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number());
+        let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number(), self.with_journal.load(Ordering::Relaxed));
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
         let mut latest = self.latest_block.write();
 
-        *latest = Some(std::mem::replace(&mut *pending_block, next_state));
+        let retired = latest.replace(std::mem::replace(&mut *pending_block, next_state));
 
         drop(pending_block);
 
@@ -133,6 +140,11 @@ impl InmemoryTransactionTemporaryStorage {
             let latest_state = latest.as_ref().expect("latest should be Some after finishing the pending block");
             (latest_state.block.clone(), latest_state.state.clone())
         };
+        #[cfg(feature = "dev")]
+        drop(latest);
+
+        // dropping the retired state removes its journal file and unmaps it, so it happens after the locks are released
+        drop(retired);
 
         (finished_block, state)
     }
@@ -259,9 +271,11 @@ impl InmemoryTransactionTemporaryStorage {
     pub fn reset(&self) {
         let mut pending = self.pending_block.write();
         pending.reset();
-        pending.journal = TransactionJournal::open(pending.block.header)
-            .inspect_err(|err| tracing::error!(?err, "journal failed to open after reset"))
-            .ok();
+        pending.journal = self
+            .with_journal
+            .load(Ordering::Relaxed)
+            .then(|| InMemoryTemporaryStorageState::create_journal(pending.block.header))
+            .flatten();
         *self.latest_block.write() = None;
     }
 }

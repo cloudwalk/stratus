@@ -115,8 +115,8 @@ describe("Journal recovery", () => {
                 "transaction-journal",
                 `${BigInt(pendingNumber).toString().padStart(20, "0")}.journal`,
             );
-            const journal = readFileSync(journalPath, "utf8");
-            const header = JSON.parse(journal.slice(0, journal.indexOf("}") + 1));
+            // the first line is the header
+            const header = JSON.parse(readFileSync(journalPath, "utf8").split("\n")[0]);
             expect(BigInt(header.number)).to.equal(BigInt(pendingNumber));
 
             await stop("SIGKILL");
