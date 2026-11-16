@@ -7,8 +7,8 @@ use std::time::UNIX_EPOCH;
 use anyhow::Context;
 use serde::Deserialize;
 
-use super::record_file::RecordFile;
 use crate::eth::storage::StorageError;
+use crate::eth::storage::temporary::journal::record_file::RecordFile;
 use crate::eth::types::BlockInfo;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::TransactionInput;

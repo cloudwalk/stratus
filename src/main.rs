@@ -35,7 +35,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
             tracing::error!(
                 ?err,
                 "failed to recover transaction journal, journal files have been moved to /unrecovered on the data dir. Proceeding with startup"
-            )
+            );
         })
         .ok();
 
