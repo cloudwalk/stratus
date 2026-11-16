@@ -48,16 +48,8 @@ impl ImporterWorker for ReexecutionWorker {
             }
         }
 
-        let (mined_block, changes) = match self.miner.mine_imported(block.clone()) {
-            Ok((mined_block, changes)) => {
-                tracing::info!(number = %mined_block.number(), "mined imported block");
-                (mined_block, changes)
-            }
-            Err(e) => {
-                let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine imported block");
-                return log_and_err!(reason = e, message);
-            }
-        };
+        let (mined_block, changes) = self.miner.mine_local();
+        tracing::info!(number = %mined_block.number(), "mined imported block");
 
         if let Err(e) = compare_with_imported(&mined_block, &block) {
             let message = GlobalState::shutdown_from(TASK_NAME, "imported block mismatch between leader and follower");
@@ -82,6 +74,18 @@ impl ImporterWorker for ReexecutionWorker {
 
 /// Compares the re-executed block against the execution results imported from the leader.
 fn compare_with_imported(mined_block: &Block, imported: &Block) -> anyhow::Result<()> {
+    if mined_block.number() != imported.number() || mined_block.header.timestamp != imported.header.timestamp || mined_block.hash() != imported.hash() {
+        return log_and_err!(format!(
+            "mismatching block info | mined number={} timestamp={} hash={} imported number={} timestamp={} hash={}",
+            mined_block.number(),
+            mined_block.header.timestamp,
+            mined_block.hash(),
+            imported.number(),
+            imported.header.timestamp,
+            imported.hash()
+        ));
+    }
+
     let block_number = mined_block.number();
 
     for (mined_tx, imported_tx) in mined_block.transactions.iter().zip(&imported.transactions) {
@@ -96,9 +100,9 @@ fn compare_with_imported(mined_block: &Block, imported: &Block) -> anyhow::Resul
         if !results_match || mined_tx.mined_data != imported_tx.mined_data {
             let json_mined = to_json_string(mined_result);
             let json_imported = to_json_string(imported_result);
+            let tx_hash = mined_tx.execution.info.hash;
             return log_and_err!(format!(
-                "reexecution mismatch between leader and follower | block_number={} tx_hash={} mined={} imported={}",
-                block_number, mined_tx.execution.info.hash, json_mined, json_imported
+                "reexecution mismatch between leader and follower | block_number={block_number} tx_hash={tx_hash} mined={json_mined} imported={json_imported}"
             ));
         }
     }

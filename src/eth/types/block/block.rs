@@ -19,7 +19,6 @@ use crate::eth::types::Size;
 use crate::eth::types::TransactionMined;
 use crate::eth::types::UnixTime;
 use crate::ext::to_json_value;
-use crate::log_and_err;
 
 #[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize)]
 #[cfg_attr(test, derive(fake::Dummy))]
@@ -90,28 +89,6 @@ impl Block {
             let transactions_hashes: Vec<B256> = self.transactions.iter().map(|x| x.info.hash).map(B256::from).collect();
             self.header.transactions_root = ordered_trie_root(&transactions_hashes).into();
         }
-    }
-
-    pub fn apply_imported(&mut self, imported_block: &Block) -> anyhow::Result<()> {
-        if *self.header.timestamp != *imported_block.header.timestamp {
-            return log_and_err!(format!(
-                "mismatching block timestamp | local={} imported={}",
-                self.header.timestamp, imported_block.header.timestamp
-            ));
-        }
-
-        self.header.hash = imported_block.hash();
-        for transaction in self.transactions.iter_mut() {
-            if transaction.input.block_timestamp != self.header.timestamp {
-                return log_and_err!(format!(
-                    "mismatching transaction timestamp | transaction={} block={}",
-                    transaction.input.block_timestamp, self.header.timestamp
-                ));
-            }
-            transaction.mined_data.block_hash = imported_block.hash();
-        }
-
-        Ok(())
     }
 }
 
