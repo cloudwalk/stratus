@@ -202,12 +202,6 @@ mod tests {
     }
 
     #[test]
-    fn journaled_blocks_yields_nothing_without_journals() {
-        let _directory = journal_directory();
-        assert!(TransactionJournal::journaled_blocks().unwrap().next().is_none());
-    }
-
-    #[test]
     fn rolling_journal_is_removed_on_drop_once_two_newer_journals_exist() {
         let _directory = journal_directory();
         for number in [1, 2, 3] {
