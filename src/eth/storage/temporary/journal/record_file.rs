@@ -9,7 +9,7 @@ use std::path::Path;
 use memmap2::MmapMut;
 
 /// Size a file is preallocated to; files double in size when their records outgrow them
-const INITIAL_CAPACITY: usize = 16 * 1024 * 1024;
+pub(super) const INITIAL_CAPACITY: usize = 16 * 1024 * 1024;
 
 #[derive(Debug)]
 pub struct RecordFile {
@@ -65,61 +65,5 @@ impl Read for RecordFile {
         buf[..read].copy_from_slice(&unread[..read]);
         self.cursor += read;
         Ok(read)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::fs;
-    use std::io::Read;
-    use std::path::Path;
-    use std::path::PathBuf;
-
-    use super::INITIAL_CAPACITY;
-    use super::RecordFile;
-
-    fn path() -> PathBuf {
-        tempfile::tempdir().unwrap().keep().join("records")
-    }
-
-    fn read_records(path: &Path) -> Vec<u8> {
-        let mut records = Vec::new();
-        RecordFile::open(path).unwrap().read_to_end(&mut records).unwrap();
-        records
-    }
-
-    #[test]
-    fn records_are_written_in_order() {
-        let path = path();
-        let mut file = RecordFile::create(&path).unwrap();
-        file.append(b"first").unwrap();
-        file.append(b"second").unwrap();
-        drop(file);
-
-        assert_eq!(read_records(&path), b"first\nsecond\n");
-    }
-
-    #[test]
-    fn create_replaces_the_file_left_there() {
-        let path = path();
-        fs::write(&path, b"left by a previous run\n").unwrap();
-        let mut file = RecordFile::create(&path).unwrap();
-        file.append(b"first").unwrap();
-        drop(file);
-
-        assert_eq!(read_records(&path), b"first\n");
-    }
-
-    #[test]
-    fn file_grows_past_initial_capacity() {
-        let path = path();
-        let mut file = RecordFile::create(&path).unwrap();
-        let large = vec![0xab; INITIAL_CAPACITY];
-        file.append(&large).unwrap();
-        file.append(b"small").unwrap();
-        drop(file);
-
-        let expected = [large.as_slice(), b"\nsmall\n"].concat();
-        assert_eq!(read_records(&path), expected);
     }
 }
