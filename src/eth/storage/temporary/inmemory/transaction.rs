@@ -1,8 +1,9 @@
 //! In-memory storage implementations.
 
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
-use parking_lot::Mutex;
 use parking_lot::RwLock;
 use parking_lot::RwLockUpgradableReadGuard;
 #[cfg(not(feature = "dev"))]
@@ -18,7 +19,6 @@ use crate::eth::storage::StorageError;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
 use crate::eth::storage::temporary::journal::JournalTurn;
 use crate::eth::storage::temporary::journal::PendingJournal;
-use crate::eth::storage::temporary::journal::TransactionJournal;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::BlockInfo;
@@ -44,15 +44,17 @@ pub struct InmemoryTransactionTemporaryStorage {
     pub latest_block: RwLock<Option<InMemoryTemporaryStorageState>>,
     /// Journal of the pending block, also held by the pending state so finished blocks keep theirs until retired.
     pending_journal: PendingJournal,
+    /// Whether new pending blocks open a journal, set once journal recovery finishes.
+    journaling: AtomicBool,
 }
 
 impl InmemoryTransactionTemporaryStorage {
     pub fn new(block_number: BlockNumber) -> Self {
-        let pending_block = InMemoryTemporaryStorageState::new(block_number);
         Self {
-            pending_journal: Arc::new(Mutex::new(pending_block.journal.clone())),
-            pending_block: RwLock::new(pending_block),
+            pending_journal: Arc::default(),
+            pending_block: RwLock::new(InMemoryTemporaryStorageState::new(block_number, false)),
             latest_block: RwLock::new(None),
+            journaling: AtomicBool::new(false),
         }
     }
 
@@ -103,11 +105,12 @@ impl InmemoryTransactionTemporaryStorage {
         self.pending_block.read().block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
     }
 
-    /// Removes the journal handle from the pending block, leaving its file on disk.
-    pub fn take_pending_journal(&self) -> Option<Arc<TransactionJournal>> {
+    /// Starts journaling the pending block and every block after it.
+    pub fn start_journal(&self) {
         let mut pending_block = self.pending_block.write();
-        self.pending_journal.lock().take();
-        pending_block.journal.take()
+        self.journaling.store(true, Ordering::Relaxed);
+        pending_block.journal = InMemoryTemporaryStorageState::create_journal(pending_block.block.header);
+        *self.pending_journal.lock() = pending_block.journal.clone();
     }
 
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {
@@ -125,7 +128,7 @@ impl InmemoryTransactionTemporaryStorage {
             (finished_block, pending_block.state.clone())
         };
 
-        let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number());
+        let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number(), self.journaling.load(Ordering::Relaxed));
 
         // waits for the records of the finishing block to be appended
         *self.pending_journal.lock() = next_state.journal.clone();
@@ -271,10 +274,11 @@ impl InmemoryTransactionTemporaryStorage {
     pub fn reset(&self) {
         let mut pending = self.pending_block.write();
         pending.reset();
-        pending.journal = TransactionJournal::open(pending.block.header)
-            .inspect_err(|err| tracing::error!(?err, "journal failed to open after reset"))
-            .ok()
-            .map(Arc::new);
+        pending.journal = self
+            .journaling
+            .load(Ordering::Relaxed)
+            .then(|| InMemoryTemporaryStorageState::create_journal(pending.block.header))
+            .flatten();
         *self.pending_journal.lock() = pending.journal.clone();
         *self.latest_block.write() = None;
     }

@@ -144,37 +144,27 @@ impl StratusStorage {
         self.temp.set_pending_header(number, timestamp);
     }
 
-    /// Replays every journaled block left by a previous run, committing them to permanent storage.
+    /// Replays the journaled blocks left by a previous run in order, committing each to permanent storage, then starts
+    /// journaling the pending block.
     pub fn recover_transaction_journal(&self, executor: &Executor, miner: &Miner) -> anyhow::Result<()> {
         let mined = self.read_mined_block_number();
-        for number in TransactionJournal::journaled_blocks()? {
-            // every listed journal already exists, so the fresh timestamp is discarded
-            let mut journal = TransactionJournal::open(BlockInfo::new_at_now(number))?;
-            if mined >= number {
+        for journal in TransactionJournal::journaled_blocks()? {
+            let mut journal = journal?;
+            if journal.number() <= mined {
                 journal.retire()?;
                 continue;
             }
 
-            let Some(journal_block) = journal.block()? else {
-                continue;
-            };
-
-            if journal_block.transactions.is_empty() && journal.is_live() {
-                // An empty live journal belongs to the pending block being built, so there is nothing to recover.
-                continue;
-            }
-
-            // Re-executing the transactions re-appends them to the journal file; removing the journal handle
-            // from the pending state keeps the file as-is.
-            let _pending_journal = self.temp.take_pending_journal();
-            self.set_pending_header(journal_block.header.number, *journal_block.header.timestamp);
-            for transaction in journal_block.transactions {
+            let block = journal.block()?;
+            self.set_pending_header(block.header.number, *block.header.timestamp);
+            for transaction in block.transactions {
                 executor.execute_local_transaction(transaction, None)?;
             }
-
             miner.mine_local_and_commit()?;
             journal.retire()?;
         }
+
+        self.temp.start_journal();
         Ok(())
     }
 
