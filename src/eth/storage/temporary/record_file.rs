@@ -8,13 +8,9 @@ use std::path::Path;
 
 use memmap2::MmapMut;
 
-/// Size a file is preallocated to; files double in size when their records outgrow them.
-const INITIAL_CAPACITY: usize = 64 * 1024 * 1024;
+/// Size a file is preallocated to; files double in size when their records outgrow them
+const INITIAL_CAPACITY: usize = 16 * 1024 * 1024;
 
-/// Appending copies bytes into the mapping, which lands them in the kernel page cache, so records outlive a crash
-/// of the process.
-///
-/// The file is preallocated with zeros, so the records end at the first zero byte.
 #[derive(Debug)]
 pub struct RecordFile {
     file: File,

@@ -146,41 +146,16 @@ impl StratusStorage {
 
     /// Replays the journaled blocks left by a previous run in order, committing each to permanent storage, then starts
     /// journaling the pending block.
-    ///
-    /// Each recovered block is committed on top of the previous one, so recovery stops at the first missing or
-    /// unreadable journal and sets that journal and every later one aside for review.
     pub fn recover_transaction_journal(&self, executor: &Executor, miner: &Miner) -> anyhow::Result<()> {
-        let mined = self.read_mined_block_number();
-        let mut expected = mined.next_block_number();
-        let journaled = TransactionJournal::journaled_blocks()?;
-
-        for (position, &number) in journaled.iter().enumerate() {
-            if number <= mined {
-                TransactionJournal::remove(number)?;
-                continue;
-            }
-
-            let journal_block = if number == expected {
-                TransactionJournal::read(number)?
-            } else {
-                tracing::error!(%number, %expected, "journal of the next block is missing");
-                None
-            };
-            let Some(journal_block) = journal_block else {
-                for &unrecovered in &journaled[position..] {
-                    let destination = TransactionJournal::set_aside(unrecovered)?;
-                    tracing::error!(number = %unrecovered, ?destination, "journal set aside for review, stopping recovery");
-                }
-                break;
-            };
-
-            self.set_pending_header(journal_block.header.number, *journal_block.header.timestamp);
-            for transaction in journal_block.transactions {
+        for journal in TransactionJournal::journaled_blocks(self.read_mined_block_number()) {
+            let mut journal = journal?;
+            let block = journal.block()?;
+            self.set_pending_header(block.header.number, *block.header.timestamp);
+            for transaction in block.transactions {
                 executor.execute_local_transaction(transaction, None)?;
             }
             miner.mine_local_and_commit()?;
-            TransactionJournal::remove(number)?;
-            expected = number.next_block_number();
+            journal.retire()?;
         }
 
         self.temp.start_journal();

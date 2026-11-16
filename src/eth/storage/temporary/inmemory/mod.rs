@@ -12,7 +12,7 @@ use crate::eth::storage::stratus_storage::label;
 use crate::eth::storage::temporary::compute_pending_block_number;
 use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTemporaryStorage;
 use crate::eth::storage::temporary::journal::JournalRecord;
-use crate::eth::storage::temporary::journal::TransactionJournal;
+use crate::eth::storage::temporary::journal::RollingJournal;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::BlockInfo;
@@ -126,13 +126,13 @@ pub struct InMemoryTemporaryStorageState {
     /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
     pub state: State<Complete>,
 
-    pub journal: Option<TransactionJournal>,
+    pub journal: Option<RollingJournal>,
 }
 
 impl InMemoryTemporaryStorageState {
     pub fn new(block_number: BlockNumber, with_journal: bool) -> Self {
         let block = PendingBlock::new_at_now(block_number);
-        let journal = with_journal.then(|| Self::open_journal(block.header)).flatten();
+        let journal = with_journal.then(|| Self::create_journal(block.header)).flatten();
 
         Self {
             block,
@@ -141,9 +141,9 @@ impl InMemoryTemporaryStorageState {
         }
     }
 
-    pub fn open_journal(header: BlockInfo) -> Option<TransactionJournal> {
-        TransactionJournal::open(header)
-            .inspect_err(|err| tracing::error!(?err, "journal failed to open, temp state will be created without it"))
+    pub fn create_journal(header: BlockInfo) -> Option<RollingJournal> {
+        RollingJournal::create(header)
+            .inspect_err(|err| tracing::error!(?err, "journal failed to create, temp state will be created without it"))
             .ok()
     }
 

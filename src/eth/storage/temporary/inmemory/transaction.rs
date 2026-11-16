@@ -105,7 +105,7 @@ impl InmemoryTransactionTemporaryStorage {
     pub fn start_journal(&self) {
         let mut pending_block = self.pending_block.write();
         self.with_journal.store(true, Ordering::Relaxed);
-        pending_block.journal = InMemoryTemporaryStorageState::open_journal(pending_block.block.header);
+        pending_block.journal = InMemoryTemporaryStorageState::create_journal(pending_block.block.header);
     }
 
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {
@@ -274,7 +274,7 @@ impl InmemoryTransactionTemporaryStorage {
         pending.journal = self
             .with_journal
             .load(Ordering::Relaxed)
-            .then(|| InMemoryTemporaryStorageState::open_journal(pending.block.header))
+            .then(|| InMemoryTemporaryStorageState::create_journal(pending.block.header))
             .flatten();
         *self.latest_block.write() = None;
     }
