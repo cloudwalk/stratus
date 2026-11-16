@@ -83,7 +83,7 @@ futures-channel = "=0.3.31"
 
 # ethereum / rpc
 alloy-consensus = { version = "=2.3.0", features = ["k256"] }
-alloy-eips = "=2.3.0"
+alloy-eips = "=2.5.0"
 alloy-primitives = { version = "=1.6.1", features = ["rand"] }
 alloy-rpc-types-eth = "=2.3.0"
 alloy-rpc-types-trace = "=2.3.0"
