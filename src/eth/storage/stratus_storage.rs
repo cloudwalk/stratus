@@ -148,20 +148,25 @@ impl StratusStorage {
     pub fn recover_transaction_journal(&self, executor: &Executor, miner: &Miner) -> anyhow::Result<()> {
         let mined = self.read_mined_block_number();
         for journal in TransactionJournal::journaled_blocks()? {
-            let mut journal = journal?;
+            let journal = journal?;
             if journal.number() <= mined {
                 journal.retire()?;
                 continue;
             }
 
-            let block = journal.block()?;
-            self.set_pending_header(block.header.number, *block.header.timestamp);
-            for transaction in block.transactions {
-                executor.execute_local_transaction(transaction, None)?;
-            }
-            miner.mine_local_and_commit()?;
-            journal.retire()?;
+            self.replay_journal_block(executor, miner, journal)?;
         }
+        Ok(())
+    }
+
+    fn replay_journal_block(&self, executor: &Executor, miner: &Miner, mut journal: TransactionJournal) -> anyhow::Result<()> {
+        let block = journal.block()?;
+        self.set_pending_header(block.header.number, *block.header.timestamp);
+        for transaction in block.transactions {
+            executor.execute_local_transaction(transaction, None)?;
+        }
+        miner.mine_local_and_commit()?;
+        journal.retire()?;
         Ok(())
     }
 

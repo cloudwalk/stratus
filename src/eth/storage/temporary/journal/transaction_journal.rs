@@ -37,12 +37,10 @@ const JOURNAL_DIRECTORY: &str = "transaction-journal";
 pub(super) const UNRECOVERED_DIRECTORY: &str = "unrecovered";
 
 pub(super) fn journal_directory() -> PathBuf {
-    // permanent storage sets the database directory during its init, so this only fails
-    // when a journal is opened before the permanent storage exists
     #[allow(clippy::expect_used)]
     DATABASE_PATH
         .get()
-        .expect("database directory must be anchored by permanent storage init")
+        .expect("permanent storage sets the database directory during its init")
         .join(JOURNAL_DIRECTORY)
 }
 
