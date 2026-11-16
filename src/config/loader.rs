@@ -243,7 +243,7 @@ fn unknown_field_paths(table: &Table, prefix: &str, known: &HashSet<String>) -> 
     unknown
 }
 
-/// Looks up a dotted path in a TOML table, e.g. `storage.permanent.path_prefix`.
+/// Looks up a dotted path in a TOML table, e.g. `storage.permanent.shutdown_timeout`.
 fn table_lookup<'a>(table: &'a Table, path: &str) -> Option<&'a Value> {
     let segments: Vec<&str> = path.split('.').collect();
     let (last, parents) = segments.split_last()?;
@@ -326,6 +326,20 @@ mod tests {
     }
 
     #[test]
+    fn test_database_path_default_file_and_cli_override() {
+        let file = "leader = true\n[executor]\nchain_id = 2008\n";
+        let config = load_with(&[], file).unwrap();
+        assert_eq!(config.storage.perm_storage.database_path, std::path::Path::new("data"));
+
+        let file = format!("{file}\n[storage.permanent]\ndatabase_path = 'node-data'\n");
+        let config = load_with(&[], &file).unwrap();
+        assert_eq!(config.storage.perm_storage.database_path, std::path::Path::new("node-data"));
+
+        let config = load_with(&["--database-path", "override-data"], &file).unwrap();
+        assert_eq!(config.storage.perm_storage.database_path, std::path::Path::new("override-data"));
+    }
+
+    #[test]
     fn test_validate_config_is_cli_only() {
         let file = r#"
             leader = true
@@ -393,7 +407,7 @@ mod tests {
             slot_history_cache_capacity = 400000
 
             [storage.permanent]
-            path_prefix = "temp_3001"
+            database_path = "node-data"
             shutdown_timeout = "1m"
             disable_sync_write = true
             cf_size_metrics_interval = "30s"
@@ -598,7 +612,7 @@ mod tests {
             slot_history_cache_capacity = 400000
 
             [storage.permanent]
-            path_prefix = "temp_3001"
+            database_path = "node-data"
             shutdown_timeout = "1m"
             disable_sync_write = true
             cf_size_metrics_interval = "30s"
@@ -685,7 +699,7 @@ mod tests {
         assert_eq!(config.miner.block_mode, MinerMode::Interval(std::time::Duration::from_secs(1)));
         assert_eq!(config.exporter.async_threads, 2);
         assert_eq!(config.exporter.blocking_threads, 32);
-        assert_eq!(config.storage.perm_storage.rocks_path_prefix.as_deref(), Some("temp_3001"));
+        assert_eq!(config.storage.perm_storage.rocks_shutdown_timeout, std::time::Duration::from_secs(60));
         assert_eq!(config.storage.perm_storage.rocks_file_descriptors_limit, 1024);
         assert_eq!(config.storage.perm_storage.rocks_cf_cache.accounts, 1000);
         #[cfg(feature = "dev")]
