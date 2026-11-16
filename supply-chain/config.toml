@@ -1257,7 +1257,7 @@ version = "0.3.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.rustls]]
-version = "0.23.31"
+version = "0.23.46"
 criteria = "safe-to-deploy"
 
 [[exemptions.rustls-native-certs]]
