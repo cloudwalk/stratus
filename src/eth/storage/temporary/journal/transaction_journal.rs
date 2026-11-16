@@ -116,16 +116,10 @@ impl TransactionJournal {
 
     /// Iterates over the journals on disk from the lowest block up to the first block without a journal.
     pub fn journaled_blocks() -> anyhow::Result<JournalIter> {
-        let entries = match fs::read_dir(journal_directory()) {
-            Ok(entries) => entries,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(JournalIter { next: BlockNumber::ZERO }),
-            Err(err) => return Err(err.into()),
-        };
-        // with no journal on disk, the iterator starts at a block without a journal and yields nothing
-        let lowest = entries
+        let lowest = fs::read_dir(journal_directory())?
             .filter_map(|entry| Self::file_block_number(&entry.ok()?.path()))
             .min()
-            .unwrap_or_default();
+            .ok_or(anyhow::anyhow!("no journals found"))?;
         Ok(JournalIter { next: lowest })
     }
 
