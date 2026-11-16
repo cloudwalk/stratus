@@ -845,9 +845,10 @@ describe("JSON-RPC", () => {
 
                 await new Promise((resolve) => setTimeout(resolve, 2000));
 
-                // Get pending block timestamp
-                const pendingTimestamp = await contract.getCurrentTimestamp({ blockTag: "pending" });
-                expect(pendingTimestamp).to.be.gt(0);
+                // Timestamp of the last mined block. The transactions below land in a new block
+                // mined on top of it, so the recorded timestamps must be greater than this.
+                const minedTimestamp = (await latest()).timestamp;
+                expect(minedTimestamp).to.be.gt(0);
 
                 // Wait 2 seconds
                 await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -889,10 +890,9 @@ describe("JSON-RPC", () => {
                 const records = await contract.getRecords();
                 expect(records.length).to.equal(2);
 
-                // Verify that the pending block timestamp matches the final block timestamp and transaction timestamps
-                expect(pendingTimestamp).to.equal(blockTimestamp);
-                expect(pendingTimestamp).to.equal(recordedTimestamp1);
-                expect(pendingTimestamp).to.equal(recordedTimestamp2);
+                // Verify that the block containing the transactions was mined after the snapshot,
+                // so a transaction executed with the mined block timestamp would fail the checks below
+                expect(blockTimestamp).to.be.gt(minedTimestamp);
 
                 // Verify that the stored records in the contract match the event data
                 expect(records[0].timestamp).to.equal(recordedTimestamp1);
@@ -905,8 +905,9 @@ describe("JSON-RPC", () => {
                 expect(recordedTimestamp2).to.equal(blockTimestamp);
 
                 // Verify that time is advancing
-                const finalTimestamp = await contract.getCurrentTimestamp({ blockTag: "pending" });
-                expect(finalTimestamp).to.be.gt(pendingTimestamp);
+                await sendEvmMine();
+                const finalTimestamp = await contract.getCurrentTimestamp();
+                expect(finalTimestamp).to.be.gt(blockTimestamp);
             });
 
             it("eth_call on latest executes with latest mined block timestamp", async () => {

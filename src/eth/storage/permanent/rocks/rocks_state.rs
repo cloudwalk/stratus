@@ -12,6 +12,7 @@ use anyhow::bail;
 use itertools::Itertools;
 use rocksdb::DB;
 use rocksdb::Direction;
+#[cfg(feature = "metrics")]
 use rocksdb::Options;
 use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;

@@ -6,7 +6,6 @@ use crate::alias::JsonValue;
 use crate::eth::rpc::BlockTimestampFilter;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::Hash;
-use crate::eth::types::PointInTime;
 
 #[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, Hash)]
 #[cfg_attr(test, derive(fake::Dummy))]
@@ -40,16 +39,6 @@ impl Display for BlockFilter {
             BlockFilter::Hash(block_hash) => write!(f, "{block_hash}"),
             BlockFilter::Number(block_number) => write!(f, "{block_number}"),
             BlockFilter::Timestamp(timestamp) => write!(f, "{timestamp:?}"),
-        }
-    }
-}
-
-impl From<PointInTime> for BlockFilter {
-    fn from(point_in_time: PointInTime) -> Self {
-        match point_in_time {
-            PointInTime::Latest => Self::Latest,
-            PointInTime::Pending => Self::Pending,
-            PointInTime::Past(number) => Self::Number(number),
         }
     }
 }

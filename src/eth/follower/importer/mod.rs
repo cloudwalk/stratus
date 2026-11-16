@@ -58,7 +58,7 @@ static LATEST_FETCHED_BLOCK_TIME: AtomicU64 = AtomicU64::new(0);
 /// Only sets the external RPC current block number if it is equals or greater than the current one.
 fn set_external_rpc_current_block(new_number: BlockNumber) {
     LATEST_FETCHED_BLOCK_TIME.store(chrono::Utc::now().timestamp() as u64, Ordering::Relaxed);
-    let _ = EXTERNAL_RPC_CURRENT_BLOCK.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current_number| {
+    let _ = EXTERNAL_RPC_CURRENT_BLOCK.try_update(Ordering::Relaxed, Ordering::Relaxed, |current_number| {
         Some(current_number.max(new_number.as_u64()))
     });
 }
@@ -284,7 +284,6 @@ mod tests {
     use crate::eth::follower::importer::importers::replication::ReplicationWorker;
     use crate::eth::miner::Miner;
     use crate::eth::miner::MinerMode;
-    use crate::eth::storage::ExecutionKind;
     use crate::eth::storage::StratusStorage;
     use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
     use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
@@ -294,7 +293,6 @@ mod tests {
     use crate::eth::types::Address;
     use crate::eth::types::Block;
     use crate::eth::types::BlockNumber;
-    use crate::eth::types::PointInTime;
     use crate::eth::types::UnixTime;
     use crate::eth::types::Wei;
 
@@ -389,7 +387,7 @@ mod tests {
         // Block 3 did not change B.balance, so the committed value must equal block 3's pre-state
         // (block 2 = 200). Completing at import time (perm caught up) yields 200; completing at
         // post-process time (perm behind) would yield the stale 100.
-        let (account, _) = storage.read_account(address, ExecutionKind::RPC(PointInTime::Latest)).expect("read account");
+        let (account, _) = storage.read_account(address, crate::eth::types::TargetState::Latest).expect("read account");
         assert_eq!(
             account.balance,
             Wei::from(200u64),

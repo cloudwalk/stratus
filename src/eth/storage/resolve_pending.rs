@@ -1,13 +1,12 @@
 use stratus_metrics::MetricLabelValue;
 
-use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::types::entity::EntityRead;
 use crate::eth::storage::types::state_lock::LatestStateReadGuard;
 use crate::eth::types::Account;
 use crate::eth::types::BlockNumber;
-use crate::eth::types::PointInTime;
 use crate::eth::types::Slot;
+use crate::eth::types::TargetState;
 
 /// Prevents construction of [`MinedPointInTime`] outside this module.
 /// `Seal` is public (so the enum variants can be pattern-matched) but cannot be constructed
@@ -59,13 +58,13 @@ pub(super) enum Resolved<'a, T> {
 
 /// Pending-state resolution, generic over the entity being read.
 pub(super) trait Resolve: EntityRead {
-    fn resolve(s: &StratusStorage, key: Self::Key, kind: ExecutionKind) -> Resolved<'_, Self> {
-        if kind.point_in_time() == PointInTime::Pending
+    fn resolve(s: &StratusStorage, key: Self::Key, target_state: TargetState) -> Resolved<'_, Self> {
+        if target_state == TargetState::Pending
             && let Some(value) = Self::read_temp(s, key)
         {
             return Resolved::Temp(value);
         }
-        Resolved::Miss(s.resolve_mined_point(kind))
+        Resolved::Miss(s.resolve_mined_point(target_state))
     }
 }
 
@@ -84,11 +83,11 @@ impl StratusStorage {
     }
 
     /// Determines the mined point-in-time for a read.
-    fn resolve_mined_point(&self, kind: ExecutionKind) -> MinedPointInTime<'_> {
-        match kind {
-            ExecutionKind::RPC(PointInTime::Past(number)) | ExecutionKind::CallPast(number) => MinedPointInTime::past(number),
-            ExecutionKind::CallLatest(block_number) => self.resolve_call_point(block_number),
-            ExecutionKind::Transaction | ExecutionKind::RPC(_) | ExecutionKind::AccessList => MinedPointInTime::latest(None),
+    fn resolve_mined_point(&self, target_state: TargetState) -> MinedPointInTime<'_> {
+        match target_state {
+            TargetState::Past(number) => MinedPointInTime::past(number),
+            TargetState::LatestPinned(block_number) => self.resolve_call_point(block_number),
+            TargetState::Latest | TargetState::Pending => MinedPointInTime::latest(None),
         }
     }
 }
@@ -98,11 +97,11 @@ mod tests {
     use super::super::StratusStorage;
     use super::Resolve;
     use crate::eth::executor::State;
-    use crate::eth::storage::ExecutionKind;
     use crate::eth::types::Address;
     use crate::eth::types::BlockNumber;
     use crate::eth::types::Slot;
     use crate::eth::types::SlotIndex;
+    use crate::eth::types::TargetState;
 
     #[test]
     fn mined_full_call_downgrades_to_minedpast_block_not_prev() {
@@ -114,7 +113,7 @@ mod tests {
         // Mined Full call: block_number = 5, mined = 5 → valid (b >= mined).
         let call_block = BlockNumber::from(5u64);
 
-        let kind = ExecutionKind::CallLatest(call_block);
+        let kind = TargetState::LatestPinned(call_block);
 
         let resolved = Slot::resolve(&storage, (address, index), kind);
         match resolved {

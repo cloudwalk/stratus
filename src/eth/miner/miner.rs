@@ -18,6 +18,7 @@ use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::types::state::Complete;
 use crate::eth::miner::MinerMode;
+use crate::eth::storage::JournalRecord;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::Block;
@@ -209,8 +210,13 @@ impl Miner {
         }
     }
 
-    /// Persists a transaction execution.
-    pub fn save_execution(&self, tx_execution: TransactionExecution, state: State<Complete>) -> Result<(), StratusError> {
+    /// Persists a transaction execution, appending its journal record to the pending block journal when provided.
+    pub fn save_execution(
+        &self,
+        tx_execution: TransactionExecution,
+        state: State<Complete>,
+        journal_record: Option<&JournalRecord>,
+    ) -> Result<(), StratusError> {
         let tx_hash = tx_execution.info.hash;
 
         // track
@@ -224,7 +230,7 @@ impl Miner {
         let _save_execution_lock = if is_automine { Some(self.locks.save_execution.lock()) } else { None };
 
         // save execution to temporary storage
-        self.storage.save_execution(tx_execution, state)?;
+        self.storage.save_execution(tx_execution, state, journal_record)?;
 
         // notify
         if self.has_pending_tx_subscribers() {
