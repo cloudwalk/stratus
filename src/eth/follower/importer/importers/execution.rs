@@ -4,8 +4,6 @@ use stratus_metrics::timed;
 
 use crate::GlobalState;
 use crate::eth::executor::Executor;
-use crate::eth::follower::importer::fetchers::block_with_receipts::BlockOrigin;
-use crate::eth::follower::importer::fetchers::block_with_receipts::ImportedBlock;
 use crate::eth::follower::importer::importers::ImportData;
 use crate::eth::follower::importer::importers::ImporterWorker;
 use crate::eth::follower::importer::importers::reexecute_imported_transactions;
@@ -28,29 +26,29 @@ pub struct ReexecutionWorker {
 
 impl ImportData for <ReexecutionWorker as ImporterWorker>::DataType {
     fn block_number(&self) -> BlockNumber {
-        self.block_number()
+        self.number()
     }
 }
 
 impl ImporterWorker for ReexecutionWorker {
-    type DataType = ImportedBlock;
+    type DataType = Block;
 
     #[timed(import_online_mined_block)]
-    async fn import(&self, block: ImportedBlock) -> anyhow::Result<usize> {
+    async fn import(&self, block: Block) -> anyhow::Result<usize> {
         const TASK_NAME: &str = "block-executor";
 
-        let receipts_len = block.receipts_len();
+        let receipts_len = block.transactions.len();
 
-        tracing::info!(block_number = %block.block.number(), "reexecuting imported block");
+        tracing::info!(block_number = %block.number(), "reexecuting imported block");
 
-        for result in reexecute_imported_transactions(self.storage.as_ref(), self.executor.as_ref(), &block.block) {
+        for result in reexecute_imported_transactions(self.storage.as_ref(), self.executor.as_ref(), &block) {
             if let Err(e) = result {
                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute imported block");
                 return log_and_err!(reason = e, message);
             }
         }
 
-        let (mined_block, changes) = match self.miner.mine_imported(block.block.clone()) {
+        let (mined_block, changes) = match self.miner.mine_imported(block.clone()) {
             Ok((mined_block, changes)) => {
                 tracing::info!(number = %mined_block.number(), "mined imported block");
                 (mined_block, changes)
@@ -83,22 +81,17 @@ impl ImporterWorker for ReexecutionWorker {
 }
 
 /// Compares the re-executed block against the execution results imported from the leader.
-fn compare_with_imported(mined_block: &Block, imported: &ImportedBlock) -> anyhow::Result<()> {
+fn compare_with_imported(mined_block: &Block, imported: &Block) -> anyhow::Result<()> {
     let block_number = mined_block.number();
 
-    for (mined_tx, imported_tx) in mined_block.transactions.iter().zip(&imported.block.transactions) {
+    for (mined_tx, imported_tx) in mined_block.transactions.iter().zip(&imported.transactions) {
         let mined_result = &mined_tx.execution.output;
         let imported_result = &imported_tx.execution.output;
 
-        let results_match = match imported.origin {
-            BlockOrigin::Stratus => mined_result == imported_result,
-            // the alloy receipt carries no revert reason and no return output, so those are not comparable
-            BlockOrigin::Alloy =>
-                mined_result.result.is_success() == imported_result.result.is_success()
-                    && mined_result.logs == imported_result.logs
-                    && mined_result.gas_used == imported_result.gas_used
-                    && mined_result.deployed_contract_address == imported_result.deployed_contract_address,
-        };
+        let results_match = mined_result.result.is_success() == imported_result.result.is_success()
+            && mined_result.logs == imported_result.logs
+            && mined_result.gas_used == imported_result.gas_used
+            && mined_result.deployed_contract_address == imported_result.deployed_contract_address;
 
         if !results_match || mined_tx.mined_data != imported_tx.mined_data {
             let json_mined = to_json_string(mined_result);

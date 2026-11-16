@@ -24,7 +24,7 @@ pub struct FakeLeaderWorker {
 
 impl ImportData for <FakeLeaderWorker as ImporterWorker>::DataType {
     fn block_number(&self) -> crate::eth::types::BlockNumber {
-        self.0.block_number()
+        self.0.number()
     }
 }
 
@@ -33,7 +33,7 @@ impl ImporterWorker for FakeLeaderWorker {
 
     #[timed(import_online_mined_block)]
     async fn import(&self, (fetched, (expected_block, expected_changes)): Self::DataType) -> anyhow::Result<usize> {
-        let block = fetched.block;
+        let block = fetched;
 
         let block_tx_len = block.transactions.len();
 
