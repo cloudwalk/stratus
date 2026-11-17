@@ -103,6 +103,13 @@ impl StratusStorage {
         Ok(this)
     }
 
+    /// Stops the permanent storage background tasks, flushes RocksDB and waits for its background compactions.
+    pub async fn shutdown(&self) {
+        tracing::info!("shutting down storage");
+        self.perm.shutdown().await;
+        tracing::info!("storage shut down");
+    }
+
     /// Returns whether the genesis block exists
     pub fn has_genesis(&self) -> Result<bool, StorageError> {
         self.perm.has_genesis()

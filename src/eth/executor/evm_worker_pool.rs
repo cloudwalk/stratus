@@ -3,7 +3,6 @@ use std::sync::Arc;
 use alloy_rpc_types_trace::geth::GethTrace;
 use stratus_metrics as metrics;
 
-use crate::GlobalState;
 use crate::eth::executor::ExecutionMetrics;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::ExecutorError;
@@ -51,10 +50,6 @@ impl EvmWorkerPool {
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
-                if GlobalState::is_shutdown_warn(task_name) {
-                    return;
-                }
-
                 let _guard = kind.mark_executor_pool_busy();
                 if let Err(StratusError::Executor(ExecutorError::Panic { err: panic_err })) = task.execute(&mut evm) {
                     tracing::error!(?panic_err, "executor panicked; recreating EVM");

@@ -96,6 +96,13 @@ impl Executor {
         }
     }
 
+    /// Stops the transaction worker after it executes the queued transactions and waits for it to finish.
+    pub fn shutdown(&self) {
+        tracing::info!("shutting down executor");
+        self.transaction_worker.shutdown();
+        tracing::info!("executor shut down");
+    }
+
     // -------------------------------------------------------------------------
     // External transactions
     // -------------------------------------------------------------------------

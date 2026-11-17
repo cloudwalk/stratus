@@ -1,13 +1,14 @@
 use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
 use std::sync::Arc;
+use std::thread::JoinHandle;
 use std::time::Duration;
 
 use anyhow::anyhow;
+use parking_lot::Mutex;
 use stratus_metrics::timed;
 use tracing::Span;
 
-use crate::GlobalState;
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;
 use crate::eth::executor::EvmKind;
@@ -30,6 +31,7 @@ use crate::eth::types::StratusError;
 use crate::eth::types::TransactionInput;
 use crate::eth::types::UnexpectedError;
 use crate::ext::spawn_thread;
+use crate::infra::tracing::warn_task_cancellation;
 use crate::infra::tracing::warn_task_tx_closed;
 
 const TASK_NAME: &str = "evm-tx-1";
@@ -40,38 +42,63 @@ type LocalTransactionResponse = (Duration, LocalTransactionResult);
 
 /// Serial worker that owns the transaction EVM and executes transaction tasks.
 pub struct TransactionWorker {
-    task_tx: crossbeam_channel::Sender<TransactionTask>,
+    /// Task queue. `None` stops the worker after the tasks queued before it.
+    task_tx: crossbeam_channel::Sender<Option<TransactionTask>>,
+
+    /// Worker thread, joined by [`Self::shutdown`].
+    thread: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl TransactionWorker {
     pub fn spawn(storage: Arc<StratusStorage>, miner: Arc<Miner>, config: &ExecutorConfig) -> Self {
-        let (task_tx, task_rx) = crossbeam_channel::bounded::<TransactionTask>(4096);
+        let (task_tx, task_rx) = crossbeam_channel::bounded::<Option<TransactionTask>>(4096);
         let config = *config;
 
-        spawn_thread(TASK_NAME, move || {
+        let thread = spawn_thread(TASK_NAME, move || {
             let mut evm = Evm::new(Arc::clone(&storage), &config, EvmKind::Transaction);
 
-            while let Ok(task) = task_rx.recv() {
-                if GlobalState::is_shutdown_warn(TASK_NAME) {
-                    return;
-                }
-
+            loop {
+                let task = match task_rx.recv() {
+                    Ok(Some(task)) => task,
+                    Ok(None) => {
+                        warn_task_cancellation(TASK_NAME);
+                        return;
+                    }
+                    Err(_) => {
+                        warn_task_tx_closed(TASK_NAME);
+                        return;
+                    }
+                };
                 if let Err(StratusError::Executor(ExecutorError::Panic { err: panic_err })) = task.execute(&storage, &miner, &mut evm) {
                     tracing::error!(?panic_err, "executor panicked; recreating EVM");
                     evm = Evm::new(Arc::clone(&storage), &config, EvmKind::Transaction);
                 }
             }
-            warn_task_tx_closed(TASK_NAME);
         });
 
-        Self { task_tx }
+        Self {
+            task_tx,
+            thread: Mutex::new(Some(thread)),
+        }
+    }
+
+    /// Stops the worker after it executes the queued tasks and waits for it to finish.
+    ///
+    /// Tasks sent afterwards fail with a closed channel error.
+    pub fn shutdown(&self) {
+        let _ = self.task_tx.send(None);
+        if let Some(thread) = self.thread.lock().take()
+            && let Err(e) = thread.join()
+        {
+            tracing::error!(reason = ?e, "transaction worker panicked");
+        }
     }
 
     /// Reexecutes and persists an external transaction.
     pub fn execute_external_transaction(&self, tx: ExternalTransaction, receipt: ExternalReceipt, block_number: BlockNumber) -> ExternalTransactionResult {
         let (response_tx, response_rx) = oneshot::channel();
         self.task_tx
-            .send(TransactionTask::external(tx, receipt, block_number, response_tx))
+            .send(Some(TransactionTask::external(tx, receipt, block_number, response_tx)))
             .map_err(StratusError::from)?;
         match response_rx.recv() {
             Ok(result) => result,
@@ -88,7 +115,7 @@ impl TransactionWorker {
     )]
     pub fn execute_local_transaction(&self, tx_input: TransactionInput) -> LocalTransactionResult {
         let (response_tx, response_rx) = oneshot::channel();
-        self.task_tx.send(TransactionTask::local(tx_input, response_tx))?;
+        self.task_tx.send(Some(TransactionTask::local(tx_input, response_tx)))?;
         let Ok((execution_duration, result)) = response_rx.recv() else {
             return Err(UnexpectedError::ChannelClosed { channel: "evm" }.into());
         };

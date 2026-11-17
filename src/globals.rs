@@ -218,12 +218,6 @@ impl GlobalState {
         STRATUS_SHUTDOWN_SIGNAL.cancelled().await;
     }
 
-    /// Waits until a shutdown is signalled. Emits an warning with the task name when it is.
-    pub async fn wait_shutdown_warn(task_name: &str) {
-        Self::wait_shutdown().await;
-        warn_task_cancellation(task_name);
-    }
-
     // -------------------------------------------------------------------------
     // Importer Shutdown
     // -------------------------------------------------------------------------

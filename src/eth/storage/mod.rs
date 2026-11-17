@@ -85,7 +85,8 @@ mod tests {
     use crate::eth::types::Wei;
 
     impl StratusStorage {
-        pub fn mine_block_with_mock_execution(&self, state: State<Complete>) -> BlockNumber {
+        /// Builds a successful execution for the current pending block.
+        pub fn mock_execution(&self) -> TransactionExecution {
             let header = self.read_pending_block_header();
             let evm_input = TransactionExecutionInput::create(&TransactionInput::default(), header);
 
@@ -94,8 +95,11 @@ mod tests {
                 ..Default::default()
             };
 
-            let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
-            self.save_execution(tx, state).expect("save execution");
+            TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result)
+        }
+
+        pub fn mine_block_with_mock_execution(&self, state: State<Complete>) -> BlockNumber {
+            self.save_execution(self.mock_execution(), state).expect("save execution");
 
             let (block, block_changes) = self.finish_pending_block();
             let block_number = block.header.number;
