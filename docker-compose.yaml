@@ -1,33 +1,10 @@
 version: "2"
 services:
-
-  # ----------------------------------------------------------------------------
-  # PostgreSQL
-  # ----------------------------------------------------------------------------
-  postgres:
-    image: postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123
-      POSTGRES_DB: stratus
-    ports:
-      - 5432:5432
-    volumes:
-      - "./static/schema/001-schema-external-rpc.sql:/docker-entrypoint-initdb.d/001-schema.sql"
-
-  postgres-persistent:
-    extends:
-      service: postgres
-    volumes:
-      - "postgres-data:/var/lib/postgresql/data"
-    profiles:
-      - manual
-
   # ----------------------------------------------------------------------------
   # Prometheus
   # ----------------------------------------------------------------------------
   prometheus:
-    image: prom/prometheus
+    image: prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06
     volumes:
       - ./static/prometheus.yaml:/etc/prometheus/prometheus.yaml
     ports:
@@ -51,7 +28,7 @@ services:
   # Kafka
   # ----------------------------------------------------------------------------
   kafka:
-    image: confluentinc/cp-kafka:7.4.1
+    image: confluentinc/cp-kafka:7.4.1@sha256:d3acff0466ec26c8048b75c7185dbc9c9d718cb1111f0cc00d535df073d71103
     hostname: kafka
     container_name: kafka
     ports:
@@ -76,7 +53,7 @@ services:
   # Grafana Stack
   # ----------------------------------------------------------------------------
   grafana:
-    image: grafana/grafana:12.0.2
+    image: grafana/grafana:12.0.2@sha256:b5b59bfc7561634c2d7b136c4543d702ebcc94a3da477f21ff26f89ffd4214fa
     ports:
       - 3005:3000
     volumes:
@@ -92,7 +69,7 @@ services:
       - grafana-stack
 
   loki:
-    image: grafana/loki:3.4.4
+    image: grafana/loki:3.4.4@sha256:60d1149816084144eb92e4df1e2e5ee1f5eeea0310c0c7795b87c296bd9c939f
     ports:
       - 3100:3100
     command: -config.file=/etc/loki/local-config.yaml

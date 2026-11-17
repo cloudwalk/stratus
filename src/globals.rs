@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
+use std::path::PathBuf;
 use std::sync::LazyLock;
+use std::sync::OnceLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering;
@@ -128,6 +130,9 @@ impl NodeMode {
 
 pub static STRATUS_SHUTDOWN_SIGNAL: LazyLock<CancellationToken> = LazyLock::new(CancellationToken::new);
 
+/// Filesystem path of the directory holding the node databases, set once when the permanent storage opens.
+pub static DATABASE_PATH: OnceLock<PathBuf> = OnceLock::new();
+
 /// Importer is running or being shut-down?
 static IMPORTER_SHUTDOWN: AtomicBool = AtomicBool::new(true);
 
@@ -216,12 +221,6 @@ impl GlobalState {
     /// Waits until a shutdown is signalled.
     pub async fn wait_shutdown() {
         STRATUS_SHUTDOWN_SIGNAL.cancelled().await;
-    }
-
-    /// Waits until a shutdown is signalled. Emits an warning with the task name when it is.
-    pub async fn wait_shutdown_warn(task_name: &str) {
-        Self::wait_shutdown().await;
-        warn_task_cancellation(task_name);
     }
 
     // -------------------------------------------------------------------------

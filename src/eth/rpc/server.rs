@@ -41,6 +41,8 @@ use tokio::runtime::Handle;
 use tokio::select;
 use tokio::sync::Semaphore;
 use tokio::sync::SemaphorePermit;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tower_http::cors::Any;
 use tower_http::cors::CorsLayer;
 use tracing::Instrument;
@@ -110,6 +112,7 @@ use crate::ext::InfallibleExt;
 use crate::ext::WatchReceiverExt;
 use crate::ext::not;
 use crate::ext::parse_duration;
+use crate::ext::spawn;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::infra::build_info;
@@ -137,58 +140,106 @@ pub struct Server {
     pub chain_id: ChainId,
 }
 
-impl Server {
-    pub async fn serve(self) -> Result<()> {
-        let this = Arc::new(self);
-        this.update_health().await;
+/// Running JSON-RPC server, stopped by [`Self::shutdown`].
+pub struct RpcServerHandle {
+    shutdown: CancellationToken,
+    serve_task: JoinHandle<()>,
+    health_worker: JoinHandle<()>,
+}
 
+impl RpcServerHandle {
+    /// Stops accepting requests and waits up to `rpc.shutdown_timeout` for the in-flight ones to finish.
+    pub async fn shutdown(self) {
+        tracing::info!("shutting down rpc server");
+        self.shutdown.cancel();
+        if let Err(e) = self.serve_task.await {
+            tracing::error!(reason = ?e, "rpc server task failed");
+        }
+        if let Err(e) = self.health_worker.await {
+            tracing::error!(reason = ?e, "health worker task failed");
+        }
+        tracing::info!("rpc server shut down");
+    }
+}
+
+impl Server {
+    /// Starts serving JSON-RPC requests, restarting the server whenever it becomes unhealthy.
+    pub async fn start(self: &Arc<Self>) -> Result<RpcServerHandle> {
+        self.update_health().await;
+        let (server, subscriptions) = self._serve().await?;
+
+        let shutdown = CancellationToken::new();
+        let health_worker = spawn("rpc::health-worker", Arc::clone(self).health_worker(shutdown.clone()));
+        let serve_task = spawn("rpc-server", Arc::clone(self).serve(server, subscriptions, shutdown.clone()));
+        Ok(RpcServerHandle {
+            shutdown,
+            serve_task,
+            health_worker,
+        })
+    }
+
+    /// Serves requests until `shutdown` is cancelled, then stops accepting requests and waits up to
+    /// `rpc.shutdown_timeout` for the in-flight ones to finish.
+    async fn serve(self: Arc<Self>, mut server: ServerHandle, mut subscriptions: RpcSubscriptionsHandles, shutdown: CancellationToken) {
         const TASK_NAME: &str = "rpc-server";
-        let health_worker_handle = tokio::task::spawn({
-            let this = Arc::clone(&this);
-            async move {
-                this.health_worker().await;
-            }
-        });
-        this.update_health().await;
         let mut health = GlobalState::get_health_receiver();
         health.mark_unchanged();
-        let (server_handle, subscriptions) = loop {
-            let (server_handle, subscriptions) = this._serve().await?;
-            let server_handle_watch = server_handle.clone();
 
-            // await for cancellation or jsonrpsee to stop (should not happen) or health changes
+        loop {
             select! {
-                // If the server stop unexpectedly, shutdown stratus and break the loop
-                _ = server_handle_watch.stopped() => {
+                _ = shutdown.cancelled() => break,
+                _ = server.clone().stopped() => {
                     GlobalState::shutdown_from(TASK_NAME, "finished unexpectedly");
-                    break (server_handle, subscriptions);
+                    break;
                 },
-                // If a shutdown is requested, stop the server and break the loop
-                _ = GlobalState::wait_shutdown_warn(TASK_NAME) => {
-                    let _ = server_handle.stop();
-                    break (server_handle, subscriptions);
-                },
-                // If the health state changes to unhealthy, stop the server and subscriptions and recreate them (causing all connections to be dropped)
+                // If the health state changes to unhealthy, recreate the server and subscriptions, dropping all connections
                 _ = health.wait_for_change(|healthy| GlobalState::restart_on_unhealthy() && !healthy) => {
                     tracing::info!("health state changed to unhealthy, restarting the rpc server");
                     metrics::inc_rpc_server_restarts();
-                    let _ = server_handle.stop();
+                    let _ = server.stop();
                     subscriptions.abort();
-                    join!(server_handle.stopped(), subscriptions.stopped());
+                    join!(server.clone().stopped(), subscriptions.stopped());
+                    match self._serve().await {
+                        Ok(restarted) => (server, subscriptions) = restarted,
+                        Err(e) => {
+                            tracing::error!(reason = ?e, "failed to restart rpc server");
+                            GlobalState::shutdown_from(TASK_NAME, "failed to restart");
+                            return;
+                        }
+                    }
                 }
             }
-        };
-        let res = join!(server_handle.stopped(), subscriptions.stopped(), health_worker_handle);
-        res.2?;
-
-        if let Some(importer_runtime) = this.take_importer_runtime() {
-            importer_runtime.shutdown().await?;
         }
 
-        if let Some(exporter_runtime) = this.take_exporter_runtime() {
-            exporter_runtime.shutdown().await?;
+        let timeout = self.rpc_config.rpc_shutdown_timeout;
+        let _ = server.stop();
+        if tokio::time::timeout(timeout, server.stopped()).await.is_err() {
+            tracing::error!(?timeout, "timed out waiting for in-flight rpc requests to finish");
         }
-        Ok(())
+        subscriptions.abort();
+        subscriptions.stopped().await;
+    }
+
+    /// Shuts down the exporter runtime.
+    pub async fn shutdown_exporter(&self) {
+        tracing::info!("shutting down exporter");
+        if let Some(exporter_runtime) = self.take_exporter_runtime()
+            && let Err(e) = exporter_runtime.shutdown().await
+        {
+            tracing::error!(reason = ?e, "failed to shutdown exporter runtime");
+        }
+        tracing::info!("exporter shut down");
+    }
+
+    /// Shuts down the importer runtime.
+    pub async fn shutdown_importer(&self) {
+        tracing::info!("shutting down importer");
+        if let Some(importer_runtime) = self.take_importer_runtime()
+            && let Err(e) = importer_runtime.shutdown().await
+        {
+            tracing::error!(reason = ?e, "failed to shutdown importer runtime");
+        }
+        tracing::info!("importer shut down");
     }
 
     /// Starts JSON-RPC server.
@@ -247,19 +298,13 @@ impl Server {
         Ok((handle_rpc_server, subs.handles))
     }
 
-    pub async fn health_worker(&self) {
-        // Create an interval that ticks at the configured interval
-        let mut interval = tokio::time::interval(std::time::Duration::from_millis(self.rpc_config.health_check_interval_ms));
-
-        // Enter an infinite loop to periodically run the health check
+    /// Updates the health status at the configured interval until `shutdown` is cancelled.
+    async fn health_worker(self: Arc<Self>, shutdown: CancellationToken) {
+        let mut interval = tokio::time::interval(Duration::from_millis(self.rpc_config.health_check_interval_ms));
         loop {
-            // Call the health function and ignore its result
-            self.update_health().await;
-
-            // Wait for the next tick
-            interval.tick().await;
-            if GlobalState::is_shutdown() {
-                break;
+            select! {
+                _ = interval.tick() => self.update_health().await,
+                _ = shutdown.cancelled() => return,
             }
         }
     }
@@ -341,7 +386,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_enableTransactions", stratus_enable_transactions)?;
     module.register_method("stratus_disableTransactions", stratus_disable_transactions)?;
     module.register_method("stratus_enableMiner", stratus_enable_miner)?;
-    module.register_method("stratus_disableMiner", stratus_disable_miner)?;
+    module.register_blocking_method("stratus_disableMiner", stratus_disable_miner)?;
     module.register_method("stratus_enableUnknownClients", stratus_enable_unknown_clients)?;
     module.register_method("stratus_disableUnknownClients", stratus_disable_unknown_clients)?;
     module.register_method("stratus_blockClient", stratus_block_client)?;
@@ -843,9 +888,9 @@ fn stratus_enable_miner(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) -> Re
     Ok(true)
 }
 
-fn stratus_disable_miner(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) -> Result<bool, StratusError> {
+fn stratus_disable_miner(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<bool, StratusError> {
     ext.authentication().auth_admin()?;
-    ctx.server.miner.pause();
+    ctx.server.miner.pause()?;
     Ok(false)
 }
 

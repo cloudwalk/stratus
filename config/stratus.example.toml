@@ -59,6 +59,8 @@
 # health_check_interval_ms = 100
 # JSON-RPC server max batch request limit.
 # batch_request_limit = 500
+# Maximum time to wait for in-flight requests to finish when shutting down.
+# shutdown_timeout = "30s"
 # Debug trace endpoints that return only unsuccessful transactions for the given client apps.
 # debug_trace_unsuccessful_only = ["blockscout"]
 
@@ -100,8 +102,8 @@ chain_id = 2008
 # slot_history_cache_capacity = 100000
 
 [storage.permanent]
-# RocksDB storage path prefix to execute multiple local Stratus instances.
-# path_prefix = ""
+# Directory containing rocksdb/ and transaction-journal/, relative to the node working directory.
+# database_path = "data"
 # Maximum time to wait for the RocksDB `wait_for_compaction` shutdown call.
 # shutdown_timeout = "4m"
 # Disables sync write for RocksDB (improves performance but reduces durability).

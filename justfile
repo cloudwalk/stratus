@@ -9,7 +9,6 @@ export CARGO_COMMAND := env("CARGO_COMMAND", "")
 nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly-2026-05-08" } else { "" }
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 profile_flag := if env("STRATUS_PROFILE", "") != "" { "--profile " + env("STRATUS_PROFILE", "") } else { "" }
-database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
 kafka_bootstrap_servers := env("E2E_KAFKA_BOOTSTRAP_SERVERS", "localhost:29092")
 kafka_managed_externally := env("KAFKA_MANAGED_EXTERNALLY", "")
 
@@ -20,13 +19,13 @@ default:
 # Project: Run project setup
 setup:
     @just _log "Installing Cargo killport"
-    cargo install killport
+    cargo install killport --version 2.0.2 --locked
 
     @just _log "Installing Cargo wait-service"
-    cargo install wait-service
+    cargo install wait-service --version 0.4.0 --locked
 
     @just _log "Installing Cargo flamegraph"
-    cargo install flamegraph
+    cargo install flamegraph --version 0.6.15 --locked
 
     @just _log "Cloning Solidity repositories"
     just contracts-clone
@@ -51,7 +50,7 @@ check:
 
 # Stratus: Check all features individually using cargo hack
 check-features *args="":
-    command -v cargo-hack >/dev/null 2>&1 || { cargo install cargo-hack; }
+    command -v cargo-hack >/dev/null 2>&1 || { cargo install cargo-hack --version 0.6.46 --locked; }
     cargo hack check --each-feature --keep-going {{args}}
 
 # Stratus: Clean build artifacts
@@ -73,7 +72,7 @@ lint-check nightly-version="" clippy-flags="-D warnings -A clippy::unwrap_used -
 # Stratus: Check for dependencies major updates
 outdated:
     #!/bin/bash
-    command -v cargo-outdated >/dev/null 2>&1 || { cargo install cargo-outdated; }
+    command -v cargo-outdated >/dev/null 2>&1 || { cargo install cargo-outdated --version 0.19.0 --locked; }
     cargo outdated --root-deps-only --ignore-external-rel
 
 # Stratus: Check for unused dependencies
@@ -87,15 +86,6 @@ update:
     cargo update stratus
 
 # ------------------------------------------------------------------------------
-# Database tasks
-# ------------------------------------------------------------------------------
-
-# Database: Compile SQLx queries
-db-compile:
-    SQLX_OFFLINE=true cargo sqlx prepare --database-url {{database_url}} -- --all-targets
-alias sqlx := db-compile
-
-# ------------------------------------------------------------------------------
 # Additional binaries
 # ------------------------------------------------------------------------------
 
@@ -106,13 +96,7 @@ stratus *args="":
 
 # Bin: Stratus main service as leader
 stratus-test *args="":
-    #!/bin/bash
-    source <(just coverage-env)
-    echo "leader features: dev"
-    cargo build {{profile_flag}} --features dev
-    just _wait_for_rocksdb_lock "$@" || exit 1
-    cargo run {{profile_flag}} --bin stratus --features dev -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
-    just _wait_for_stratus
+    just _start_test_node leader 3000 stratus.log config/stratus.local.toml {{args}}
 
 # Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
 # To produce a flamegraph of the memory usage use jeprof:
@@ -127,24 +111,11 @@ stratus-follower *args="":
 
 # Bin: Stratus main service as follower
 stratus-follower-test *args="":
-    #!/bin/bash
-    source <(just coverage-env)
-    echo "follower features: dev"
-    cargo build {{profile_flag}} --features dev
-    just _wait_for_rocksdb_lock "$@" || exit 1
-    cargo run {{profile_flag}} --bin stratus --features dev -- --config config/stratus-follower.toml --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
-    just _wait_for_stratus 3001
+    just _start_test_node follower 3001 stratus_follower.log config/stratus-follower.toml {{args}}
 
 # Bin: Stratus main service as fake leader (imports blocks like a follower, executes/mines locally like a leader)
 stratus-fake-leader-test *args="":
-    #!/bin/bash
-    source <(just coverage-env)
-    FEATURES="dev"
-    echo "fake-leader features: " $FEATURES
-    cargo build {{profile_flag}} --features $FEATURES
-    just _wait_for_rocksdb_lock "$@" || exit 1
-    cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --config config/stratus-follower.toml --fake-leader --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_fake_leader.log &
-    just _wait_for_stratus 3001
+    just _start_test_node fake-leader 3001 stratus_fake_leader.log config/stratus-follower.toml {{args}}
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -316,7 +287,7 @@ e2e-leader *extra-args="":
     echo "starting e2e-leader"
     # Leader doesn't need block changes flag, only follower does
     unset ENABLE_BLOCK_CHANGES_REPLICATION
-    RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s --rocks-path-prefix=temp_3000 {{extra-args}}
+    RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s {{extra-args}}
 
 e2e-follower test="brlc" use_block_changes_replication="false":
     #!/bin/bash
@@ -337,9 +308,9 @@ e2e-follower test="brlc" use_block_changes_replication="false":
             wait-service --tcp 0.0.0.0:29092 -- echo
             docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
         fi
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 $replication_flag --kafka-bootstrap-servers {{kafka_bootstrap_servers}} --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test $replication_flag --kafka-bootstrap-servers {{kafka_bootstrap_servers}} --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
     else
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 $replication_flag
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test $replication_flag
     fi
 
 
@@ -498,7 +469,9 @@ e2e-leader-follower-down:
     fi
 
     # Delete data contents
-    rm -rf ./temp_*
+    just _wait_for_stratus_finish 3000
+    just _wait_for_stratus_finish 3001
+    rm -rf ./test-nodes
 
     # Delete zeppelin directory
     rm -rf ./e2e/cloudwalk-contracts/integration/.openzeppelin
@@ -506,7 +479,7 @@ e2e-leader-follower-down:
 # E2E: Fake Leader (imports from leader, executes/mines locally)
 e2e-fake-leader test="fake-leader":
     #!/bin/bash
-    RUST_BACKTRACE=1 RUST_LOG=info just stratus-fake-leader-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
+    RUST_BACKTRACE=1 RUST_LOG=info just stratus-fake-leader-test -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
 
 _e2e-leader-fake-leader-up-impl test="fake-leader":
     #!/bin/bash
