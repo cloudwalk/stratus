@@ -4,18 +4,22 @@ use stratus_metrics::timed;
 use tracing::Span;
 
 use crate::eth::executor::AccessListOutput;
+use crate::eth::executor::Executor;
 use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::types::state::AccountOriginalsReader;
 use crate::eth::executor::types::state::Complete;
 #[cfg(feature = "dev")]
 use crate::eth::genesis::GenesisConfig;
+use crate::eth::miner::Miner;
 use crate::eth::rpc::BlockFilter;
 use crate::eth::rpc::LogFilter;
 use crate::eth::storage::InMemoryTemporaryStorage;
+use crate::eth::storage::JournalRecord;
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StorageCache;
 use crate::eth::storage::StorageError;
+use crate::eth::storage::TransactionJournal;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::storage::resolve_pending;
@@ -140,6 +144,32 @@ impl StratusStorage {
         self.temp.set_pending_header(number, timestamp);
     }
 
+    /// Replays the journaled blocks left by a previous run in order
+    pub fn recover_transaction_journal(&self, executor: &Executor, miner: &Miner) -> anyhow::Result<()> {
+        let mined = self.read_mined_block_number();
+        for journal in TransactionJournal::journaled_blocks()? {
+            let journal = journal?;
+            if journal.number() <= mined {
+                journal.retire()?;
+                continue;
+            }
+
+            self.replay_journal_block(executor, miner, journal)?;
+        }
+        Ok(())
+    }
+
+    fn replay_journal_block(&self, executor: &Executor, miner: &Miner, mut journal: TransactionJournal) -> anyhow::Result<()> {
+        let block = journal.block()?;
+        self.set_pending_header(block.header.number, *block.header.timestamp);
+        for transaction in block.transactions {
+            executor.execute_local_transaction(transaction, None)?;
+        }
+        miner.mine_local_and_commit()?;
+        journal.retire()?;
+        Ok(())
+    }
+
     pub fn set_mined_block_number(&self, block_number: BlockNumber) {
         self.perm.set_mined_block_number(block_number);
     }
@@ -225,7 +255,7 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     #[timed(storage_save_execution, labels(success = result.is_ok()))]
-    pub fn save_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
+    pub fn save_execution(&self, tx: TransactionExecution, state: State<Complete>, journal_record: Option<&JournalRecord>) -> Result<(), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.info.hash).entered();
 
@@ -238,7 +268,7 @@ impl StratusStorage {
             }
         }
 
-        self.temp.save_pending_execution(tx, state)
+        self.temp.save_pending_execution(tx, state, journal_record)
     }
 
     /// Retrieves pending transactions being mined.

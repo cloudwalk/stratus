@@ -5,7 +5,7 @@ use crate::eth::types::BlockNumber;
 use crate::eth::types::UnixTimeNow;
 
 /// Block information used on evm executions
-#[derive(DebugAsJson, Clone, Copy, Default, serde::Serialize)]
+#[derive(DebugAsJson, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
 pub struct BlockInfo {
     pub number: BlockNumber,
     pub timestamp: UnixTimeNow,
