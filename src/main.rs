@@ -5,6 +5,7 @@ use stratus::GlobalServices;
 use stratus::GlobalState;
 use stratus::config::StratusConfig;
 use stratus::eth::miner::MinerMode;
+use stratus::eth::rpc::RpcServerHandle;
 use stratus::eth::rpc::Server;
 #[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
 use tikv_jemallocator::Jemalloc;
@@ -69,9 +70,9 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let exporter_runtime = Arc::new(RwLock::new(Some(exporter_runtime)));
 
     // Init RPC server
-    Server::new(
+    let server = Arc::new(Server::new(
         // Services
-        Arc::clone(&storage),
+        storage,
         executor,
         miner,
         consensus,
@@ -81,12 +82,23 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         config.clone(),
         config.rpc_server,
         config.executor.executor_chain_id.into(),
-    )
-    .serve()
-    .await?;
+    ));
+    let rpc = server.start().await?;
 
-    // Explicitly block the `main` thread to drop the storage.
-    drop(storage);
+    GlobalState::wait_shutdown().await;
+    shutdown(&server, rpc).await;
 
     Ok(())
+}
+
+/// Stops the components in reverse start order, so each one stops after everything that uses it.
+async fn shutdown(server: &Server, rpc: RpcServerHandle) {
+    tracing::info!("shutting down stratus");
+    rpc.shutdown().await;
+    server.shutdown_exporter().await;
+    server.shutdown_importer().await;
+    server.executor.shutdown();
+    server.miner.shutdown().await;
+    server.storage.shutdown().await;
+    tracing::info!("stratus shut down");
 }

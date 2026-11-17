@@ -385,6 +385,7 @@ mod tests {
             max_subscriptions = 10
             health_check_interval_ms = 200
             batch_request_limit = 50
+            shutdown_timeout = "10s"
             debug_trace_unsuccessful_only = ["blockscout"]
 
             [executor]
@@ -586,6 +587,7 @@ mod tests {
             max_subscriptions = 10
             health_check_interval_ms = 200
             batch_request_limit = 50
+            shutdown_timeout = "10s"
             debug_trace_unsuccessful_only = ["blockscout"]
 
             [executor]
