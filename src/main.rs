@@ -4,6 +4,7 @@ use parking_lot::RwLock;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use stratus::config::StratusConfig;
+use stratus::eth::miner::MinerMode;
 use stratus::eth::rpc::RpcServerHandle;
 use stratus::eth::rpc::Server;
 #[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
@@ -24,10 +25,28 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let storage = config.storage.init()?;
 
     // Init miner
-    let miner = config.miner.init(Arc::clone(&storage)).await?;
+    let miner = config.miner.init(Arc::clone(&storage));
 
     // Init executor
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
+
+    if config.leader {
+        storage
+            .recover_transaction_journal(&executor, &miner)
+            .inspect_err(|err| {
+                tracing::error!(
+                    ?err,
+                    "failed to recover transaction journal, journal files have been moved to /unrecovered on the data dir. Proceeding with startup"
+                );
+            })
+            .ok();
+    }
+
+    storage.temp.start_journal();
+
+    if let MinerMode::Interval(block_time) = miner.mode() {
+        miner.start_interval_mining(block_time).await;
+    }
 
     let (consensus, importer_runtime) = if let Some(importer_config) = &config.importer {
         tracing::info!(?importer_config, "creating importer");

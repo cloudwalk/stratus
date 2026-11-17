@@ -4,8 +4,10 @@ pub use self::rocks::RocksStorageState;
 
 pub mod rocks;
 
+use std::path::PathBuf;
 use std::time::Duration;
 
+use anyhow::anyhow;
 use clap::Parser;
 use display_json::DebugAsJson;
 
@@ -15,6 +17,7 @@ use crate::config::GenesisFileConfig;
 use crate::ext::duration_serde;
 use crate::ext::option_duration_serde;
 use crate::ext::parse_duration;
+use crate::globals::DATABASE_PATH;
 
 // -----------------------------------------------------------------------------
 // Config
@@ -23,10 +26,9 @@ use crate::ext::parse_duration;
 /// Permanent storage configuration.
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct PermanentStorageConfig {
-    /// RocksDB storage path prefix to execute multiple local Stratus instances.
-    #[arg(id = "storage.permanent.path_prefix", long = "rocks-path-prefix")]
-    #[serde(rename = "path_prefix")]
-    pub rocks_path_prefix: Option<String>,
+    /// Directory containing RocksDB and transaction journals.
+    #[arg(id = "storage.permanent.database_path", long = "database-path", default_value = "data")]
+    pub database_path: PathBuf,
 
     /// The maximum time to wait for the RocksDB `wait_for_compaction` shutdown call.
     #[arg(
@@ -80,7 +82,7 @@ pub struct PermanentStorageConfig {
 impl Default for PermanentStorageConfig {
     fn default() -> Self {
         Self {
-            rocks_path_prefix: None,
+            database_path: PathBuf::from("data"),
             rocks_shutdown_timeout: Duration::from_secs(4 * 60),
             rocks_cf_cache: RocksCfCacheConfig::default(),
             rocks_disable_sync_write: false,
@@ -103,12 +105,19 @@ impl PermanentStorageConfig {
 
 impl PermanentStorageConfig {
     const DEFAULT_FILE_DESCRIPTORS_LIMIT: &'static str = if cfg!(feature = "dev") { "65536" } else { "1048576" };
+
     /// Initializes permanent storage implementation.
     pub fn init(&self) -> anyhow::Result<RocksPermanentStorage> {
         tracing::info!(config = ?self, "creating permanent storage");
 
+        let data_directory = self.database_path.clone();
+        DATABASE_PATH.set(data_directory.clone()).map_err(|_| anyhow!("DATABASE_PATH is already set"))?;
+
+        let db_path = data_directory.join("rocksdb").to_string_lossy().into_owned();
+        tracing::info!(?db_path, "starting rocksdb storage");
+
         RocksPermanentStorage::new(
-            self.rocks_path_prefix.clone(),
+            db_path,
             self.rocks_shutdown_timeout,
             self.rocks_cf_cache.clone(),
             !self.rocks_disable_sync_write,
