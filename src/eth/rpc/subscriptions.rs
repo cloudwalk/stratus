@@ -16,9 +16,7 @@ use tokio::sync::RwLock;
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
-use tokio::time::timeout;
 
-use crate::GlobalState;
 use crate::eth::rpc::LogFilter;
 use crate::eth::rpc::LogFilterInput;
 use crate::eth::rpc::RpcClientApp;
@@ -42,9 +40,6 @@ const CLEANING_FREQUENCY: Duration = Duration::from_secs(10);
 /// Timeout used when sending notifications to subscribers.
 const NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Max wait since last checked shutdown in notifier.
-const NOTIFIER_SHUTDOWN_CHECK_INTERVAL: Duration = Duration::from_secs(2);
-
 #[cfg(feature = "metrics")]
 mod label {
     pub(super) const PENDING_TXS: &str = "newPendingTransactions";
@@ -64,8 +59,8 @@ impl RpcSubscriptions {
     pub fn spawn(rx_pending_txs: broadcast::Receiver<Hash>, rx_blocks: broadcast::Receiver<BlockHeader>, rx_logs: broadcast::Receiver<LogMessage>) -> Self {
         let connected = Arc::new(RpcSubscriptionsConnected::default());
 
-        Self::spawn_subscriptions_cleaner(Arc::clone(&connected));
         let handles = RpcSubscriptionsHandles {
+            cleaner: Self::spawn_subscriptions_cleaner(Arc::clone(&connected)),
             new_pending_txs: Self::spawn_new_pending_txs_notifier(Arc::clone(&connected), rx_pending_txs),
             new_heads: Self::spawn_new_heads_notifier(Arc::clone(&connected), rx_blocks),
             logs: Self::spawn_logs_notifier(Arc::clone(&connected), rx_logs),
@@ -79,10 +74,6 @@ impl RpcSubscriptions {
         const TASK_NAME: &str = "rpc::sub::cleaner";
         spawn(TASK_NAME, async move {
             loop {
-                if GlobalState::is_shutdown_warn(TASK_NAME) {
-                    return Ok(());
-                }
-
                 // store here which subscriptions were cleaned to later log them
                 let mut pending_txs_subs_cleaned = Vec::<RpcClientApp>::new();
                 let mut new_heads_subs_cleaned = Vec::<RpcClientApp>::new();
@@ -160,14 +151,9 @@ impl RpcSubscriptions {
         const TASK_NAME: &str = "rpc::sub::newPendingTransactions";
         spawn(TASK_NAME, async move {
             loop {
-                if GlobalState::is_shutdown_warn(TASK_NAME) {
-                    return Ok(());
-                }
-
-                let tx_hash = match timeout(NOTIFIER_SHUTDOWN_CHECK_INTERVAL, rx_tx_hash.recv()).await {
-                    Ok(Ok(tx)) => tx,
-                    Ok(Err(_channel_closed)) => break,
-                    Err(_timed_out) => continue,
+                let tx_hash = match rx_tx_hash.recv().await {
+                    Ok(tx) => tx,
+                    Err(_channel_closed) => break,
                 };
 
                 let interested_subs = subs.pending_txs.read().await;
@@ -209,14 +195,9 @@ impl RpcSubscriptions {
         const TASK_NAME: &str = "rpc::sub::newHeads";
         spawn(TASK_NAME, async move {
             loop {
-                if GlobalState::is_shutdown_warn(TASK_NAME) {
-                    return Ok(());
-                }
-
-                let block_header = match timeout(NOTIFIER_SHUTDOWN_CHECK_INTERVAL, rx_block.recv()).await {
-                    Ok(Ok(block)) => block,
-                    Ok(Err(_channel_closed)) => break,
-                    Err(_timed_out) => continue,
+                let block_header = match rx_block.recv().await {
+                    Ok(block) => block,
+                    Err(_channel_closed) => break,
                 };
 
                 let interested_subs = subs.new_heads.read().await;
@@ -259,14 +240,9 @@ impl RpcSubscriptions {
         const TASK_NAME: &str = "rpc::sub::logs";
         spawn(TASK_NAME, async move {
             loop {
-                if GlobalState::is_shutdown_warn(TASK_NAME) {
-                    return Ok(());
-                }
-
-                let log = match timeout(NOTIFIER_SHUTDOWN_CHECK_INTERVAL, rx_log_mined.recv()).await {
-                    Ok(Ok(log)) => log,
-                    Ok(Err(_channel_closed)) => break,
-                    Err(_timed_out) => continue,
+                let log = match rx_log_mined.recv().await {
+                    Ok(log) => log,
+                    Err(_channel_closed) => break,
                 };
 
                 let interested_subs = subs.logs.read().await;
@@ -372,6 +348,7 @@ impl RpcSubscriptions {
 /// Handles of subscription background tasks.
 #[derive(Debug)]
 pub struct RpcSubscriptionsHandles {
+    cleaner: JoinHandle<anyhow::Result<()>>,
     new_pending_txs: JoinHandle<anyhow::Result<()>>,
     new_heads: JoinHandle<anyhow::Result<()>>,
     logs: JoinHandle<anyhow::Result<()>>,
@@ -379,10 +356,11 @@ pub struct RpcSubscriptionsHandles {
 
 impl RpcSubscriptionsHandles {
     pub async fn stopped(self) {
-        let _ = join!(self.new_pending_txs, self.new_heads, self.logs);
+        let _ = join!(self.cleaner, self.new_pending_txs, self.new_heads, self.logs);
     }
 
     pub fn abort(&self) {
+        self.cleaner.abort();
         self.new_pending_txs.abort();
         self.new_heads.abort();
         self.logs.abort();
