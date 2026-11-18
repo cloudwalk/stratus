@@ -29,7 +29,7 @@
         "fast-uri": "3.1.9",
         "immutable": "4.3.8",
         "lodash": "4.17.23",
-        "qs": "6.14.2",
+        "qs": "6.16.1",
         "minimatch": "11.0.5",
         "glob": "14.0.4",
         "hardhat": {
