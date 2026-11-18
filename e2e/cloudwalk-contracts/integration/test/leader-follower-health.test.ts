@@ -1,12 +1,13 @@
 import { expect } from "chai";
 import { WebSocketProvider } from "ethers";
 
-import { sendAndGetFullResponse, sendWithRetry, updateProviderUrl } from "./helpers/rpc";
+import { sendAndGetFullResponse, sendWithRetry, updateProviderUrl, waitForHealthy } from "./helpers/rpc";
 
 it("Test follower health is based on getting new blocks", async function () {
     updateProviderUrl("stratus-follower");
-    var healthyResponse = await sendWithRetry("stratus_health", []);
-    expect(healthyResponse).to.equal(true);
+    // the follower can take a while to import its first blocks after startup, so wait for it to
+    // come back within the allowed lag window instead of assuming it is healthy right away
+    expect(await waitForHealthy()).to.equal(true);
 
     let ws = new WebSocketProvider("ws://localhost:3001");
     // check that ws is connected
@@ -31,15 +32,13 @@ it("Test follower health is based on getting new blocks", async function () {
 
     await new Promise((resolve) => setTimeout(resolve, 5000));
 
-    var healthyResponse = await sendWithRetry("stratus_health", []);
-
-    expect(healthyResponse).to.equal(true);
+    // the follower must catch up with the restarted leader before it is healthy again
+    expect(await waitForHealthy()).to.equal(true);
 });
 
 it("stratus_disableRestartOnUnhealthy should not close connection", async function () {
     updateProviderUrl("stratus-follower");
-    var healthyResponse = await sendWithRetry("stratus_health", []);
-    expect(healthyResponse).to.equal(true);
+    expect(await waitForHealthy()).to.equal(true);
 
     await sendWithRetry("stratus_disableRestartOnUnhealthy", []);
 
@@ -66,7 +65,6 @@ it("stratus_disableRestartOnUnhealthy should not close connection", async functi
 
     await new Promise((resolve) => setTimeout(resolve, 5000));
 
-    var healthyResponse = await sendWithRetry("stratus_health", []);
-
-    expect(healthyResponse).to.equal(true);
+    // the follower must catch up with the restarted leader before it is healthy again
+    expect(await waitForHealthy()).to.equal(true);
 });
