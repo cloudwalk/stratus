@@ -11,6 +11,7 @@ use crate::eth::types::Block;
 use crate::eth::types::BlockHeader;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::Hash;
+use crate::eth::types::Index;
 use crate::eth::types::TransactionMined;
 
 #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]
@@ -70,10 +71,16 @@ impl From<BlockRocksdb> for Block {
             total_difficulty: item.header.total_difficulty.into(),
             nonce: item.header.nonce.into(),
         };
+
+        let mut log_index = Index::ZERO;
         let transactions = item
             .transactions
             .into_iter()
-            .map(|tx| TransactionMined::from_rocks_primitives(tx, header.number.into(), header.hash.into()))
+            .map(|tx| {
+                let first_log_index = log_index;
+                log_index += Index(tx.logs.len() as u64);
+                TransactionMined::from_rocks_primitives(tx, header.number.into(), header.hash.into(), first_log_index)
+            })
             .collect();
         Block { header, transactions }
     }
@@ -99,17 +106,18 @@ mod tests {
     fn sample_block() -> Block {
         let mut block = fake_first::<Block>();
         block.header.number = BlockNumber::from(1u32);
-        block.transactions = fake_list::<TransactionMined>(3);
-        // give every transaction exactly two logs at a small, stable first log index, like the
-        // leader does, so mined data round-trips without depending on random fixture values
+        block.transactions = fake_list::<TransactionMined>(4);
+        // give the first three transactions two logs each, leave the last one logless, and set the
+        // running log-index accumulator the leader uses when mining (`From<PendingBlock> for
+        // Block`), so mined data round-trips without depending on random fixture values, including
+        // for transactions without logs
         for (transaction_index, transaction) in block.transactions.iter_mut().enumerate() {
-            let transaction_index = (transaction_index as u64) * 2;
-            let first_log_index = Index::from(transaction_index * 10);
-            transaction.mined_data.index = Index::from(transaction_index);
-            transaction.mined_data.first_log_index = first_log_index;
+            transaction.mined_data.index = Index::from(transaction_index as u64);
+            transaction.mined_data.first_log_index = Index::from((transaction_index as u64) * 2);
             let log = fake_first::<Log>();
             transaction.execution.output.logs = vec![log.clone(), log];
         }
+        block.transactions.last_mut().expect("sample has four transactions").execution.output.logs = vec![];
         block
     }
 
