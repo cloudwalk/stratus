@@ -33,7 +33,6 @@ use crate::eth::types::BlockInfo;
 use crate::eth::types::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::types::Bytes;
-use crate::eth::types::ExternalBlock;
 use crate::eth::types::Hash;
 use crate::eth::types::LogMessage;
 #[cfg(feature = "dev")]
@@ -141,10 +140,6 @@ impl StratusStorage {
 
     pub fn read_mined_block_number(&self) -> BlockNumber {
         self.perm.read_mined_block_number()
-    }
-
-    pub fn set_pending_from_external(&self, block: &ExternalBlock) {
-        self.temp.set_pending_header(block.number(), block.timestamp());
     }
 
     pub fn set_pending_header(&self, number: BlockNumber, timestamp: UnixTime) {
@@ -356,6 +351,16 @@ impl StratusStorage {
 
         self.perm
             .read_block(filter)
+            .inspect_err(|err| tracing::error!(reason = ?err, "failed to read block"))
+    }
+
+    #[timed(storage_read_block, labels(storage = label::PERM, success = result.is_ok()))]
+    pub fn read_block_rocksdb(&self, filter: BlockFilter) -> Result<Option<BlockRocksdb>, StorageError> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::read_block", %filter).entered();
+
+        self.perm
+            .read_block_rocksdb(filter)
             .inspect_err(|err| tracing::error!(reason = ?err, "failed to read block"))
     }
 

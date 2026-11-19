@@ -59,6 +59,7 @@ use crate::eth::types::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::types::Bytes;
 use crate::eth::types::Hash;
+use crate::eth::types::Index;
 use crate::eth::types::LogMessage;
 #[cfg(feature = "dev")]
 use crate::eth::types::Nonce;
@@ -268,12 +269,25 @@ impl RocksStorageState {
         };
         let block = block.into_inner();
 
-        let transaction = block.transactions.into_iter().find(|tx| Hash::from(tx.input.hash) == tx_hash);
+        let mut transaction = None;
+        let mut first_log_index = Index::ZERO;
+        for tx in block.transactions {
+            if Hash::from(tx.input.hash) == tx_hash {
+                transaction = Some(tx);
+                break;
+            }
+            first_log_index += Index(tx.logs.len() as u64);
+        }
 
         match transaction {
             Some(tx) => {
                 tracing::trace!(%tx_hash, "transaction found");
-                Ok(Some(TransactionMined::from_rocks_primitives(tx, block_number.into_inner(), block.header.hash)))
+                Ok(Some(TransactionMined::from_rocks_primitives(
+                    tx,
+                    block_number.into_inner(),
+                    block.header.hash,
+                    first_log_index,
+                )))
             }
             None => log_and_err!("rocks error, transaction wasn't found in block where the index pointed at")
                 .with_context(|| format!("block_number = {block_number:?} tx_hash = {tx_hash}")),

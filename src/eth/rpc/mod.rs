@@ -47,13 +47,52 @@ mod tests {
     use super::pagination::PaginationEnvelope;
     use super::pagination::PaginationParams;
     use super::pagination::Reassembler;
+    use super::pagination::ResponseFormat;
     use super::pagination::is_envelope;
     use super::pagination::parse_envelope;
     use super::pagination::parse_request;
+    use super::pagination::request_params;
     use super::pagination::respond;
     use super::types::RpcError;
     use crate::eth::types::StratusError;
     use crate::ext::InfallibleExt;
+
+    #[test]
+    fn parse_request_without_format_decodes_like_before() {
+        // compatibility: the wire format without the format field must decode exactly as before
+        let params = jsonrpsee::types::Params::new(Some(r#"["0x1", {"offset": 5}]"#));
+        let mut sequence = params.sequence();
+        sequence.optional_next::<String>().expect("parse first").expect("present");
+        let pagination = parse_request(sequence).expect("parse request").expect("present");
+        assert_eq!(pagination.offset, 5);
+        assert_eq!(pagination.format, None);
+    }
+
+    #[test]
+    fn parse_request_parses_format_when_present() {
+        let params = jsonrpsee::types::Params::new(Some(r#"["0x1", {"offset": 5, "format": "stratus"}]"#));
+        let mut sequence = params.sequence();
+        sequence.optional_next::<String>().expect("parse first").expect("present");
+        let pagination = parse_request(sequence).expect("parse request").expect("present");
+        assert_eq!(pagination.offset, 5);
+        assert_eq!(pagination.format, Some(ResponseFormat::Stratus));
+    }
+
+    #[test]
+    fn parse_request_rejects_invalid_format() {
+        let params = jsonrpsee::types::Params::new(Some(r#"["0x1", {"offset": 5, "format": "yaml"}]"#));
+        let mut sequence = params.sequence();
+        sequence.optional_next::<String>().expect("parse first").expect("present");
+        assert!(matches!(parse_request(sequence), Err(RpcError::ParameterDecodeError { .. })));
+    }
+
+    #[test]
+    fn request_params_wire_format() {
+        // without a format the wire parameter is unchanged, so old leaders see the same bytes
+        assert_eq!(request_params(5, None), json!({"offset": 5}));
+        // with a format the field rides the pagination parameter for endpoints that support it
+        assert_eq!(request_params(5, Some(ResponseFormat::Stratus)), json!({"offset": 5, "format": "stratus"}));
+    }
 
     #[test]
     fn respond_without_pagination_is_byte_identical() {
@@ -65,14 +104,14 @@ mod tests {
     #[test]
     fn respond_with_fitting_response_returns_full() {
         let value = json!({"block": "abc"});
-        let raw = respond(value.clone(), Some(PaginationParams { offset: 0 }), 1024).expect("respond");
+        let raw = respond(value.clone(), Some(PaginationParams { offset: 0, format: None }), 1024).expect("respond");
         assert_eq!(raw.get(), serde_json::to_string(&value).expect_infallible());
     }
 
     #[test]
     fn respond_with_oversized_response_returns_envelope() {
         let value = json!({"block": "a somewhat long value that will not fit"});
-        let raw = respond(value.clone(), Some(PaginationParams { offset: 0 }), MARGIN + 16).expect("respond");
+        let raw = respond(value.clone(), Some(PaginationParams { offset: 0, format: None }), MARGIN + 16).expect("respond");
 
         let full = serde_json::to_string(&value).expect_infallible();
         assert!(is_envelope(raw.get()));
@@ -91,7 +130,7 @@ mod tests {
         let mut reassembler = Reassembler::new(0);
         let mut offset = 0;
         while offset < full.len() as u64 {
-            let raw = respond(value.clone(), Some(PaginationParams { offset }), limit).expect("respond");
+            let raw = respond(value.clone(), Some(PaginationParams { offset, format: None }), limit).expect("respond");
             assert!(is_envelope(raw.get()), "expected envelope at offset {offset}");
             let envelope = parse_envelope(raw.get()).expect("parse envelope");
             assert!(
@@ -116,7 +155,7 @@ mod tests {
         let value = json!({"block": "some content"});
         let full = serde_json::to_string(&value).expect("serialize");
 
-        let result = respond(value, Some(PaginationParams { offset: 0 }), full.len() as u32 + MARGIN).expect("should respond");
+        let result = respond(value, Some(PaginationParams { offset: 0, format: None }), full.len() as u32 + MARGIN).expect("should respond");
         assert_eq!(result.get(), full);
         assert!(!is_envelope(result.get()));
     }
@@ -124,7 +163,7 @@ mod tests {
     #[test]
     fn respond_with_offset_beyond_response_fails() {
         let value = json!({"block": "abc"});
-        let error = respond(value, Some(PaginationParams { offset: 100 }), MARGIN + 8).expect_err("should fail");
+        let error = respond(value, Some(PaginationParams { offset: 100, format: None }), MARGIN + 8).expect_err("should fail");
         assert!(matches!(error, StratusError::RPC(RpcError::ParameterInvalid)));
     }
 
@@ -141,7 +180,15 @@ mod tests {
             .expect("multi-byte char");
         assert!(!full.is_char_boundary(misaligned));
 
-        let raw = respond(value, Some(PaginationParams { offset: misaligned as u64 }), MARGIN + 8).expect("should respond");
+        let raw = respond(
+            value,
+            Some(PaginationParams {
+                offset: misaligned as u64,
+                format: None,
+            }),
+            MARGIN + 8,
+        )
+        .expect("should respond");
         assert!(is_envelope(raw.get()));
 
         let envelope = parse_envelope(raw.get()).expect("parse envelope");
@@ -279,16 +326,21 @@ mod wire_tests {
     use serde_json::json;
 
     use super::pagination::MAX_REASSEMBLY_TOTAL;
+    use super::pagination::ResponseFormat;
     use super::pagination::parse_request;
     use super::pagination::respond;
     use super::parser::next_rpc_param;
     use super::types::BlockFilter;
     use crate::alias::JsonValue;
+    use crate::eth::follower::importer::BlockAndReceiptsResponse;
     use crate::eth::follower::importer::BlockchainClient;
+    use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
+    use crate::eth::types::Block;
     use crate::eth::types::BlockNumber;
     use crate::eth::types::ExternalBlockWithReceipts;
     use crate::eth::types::ExternalReceipt;
     use crate::eth::types::StratusError;
+    use crate::eth::types::TransactionMined;
     use crate::ext::to_json_value;
     use crate::utils::test_utils::fake_first;
     use crate::utils::test_utils::fake_list;
@@ -344,7 +396,11 @@ mod wire_tests {
         let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
 
         let fetched = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect("fetch block");
-        assert_eq!(fetched.expect("block present"), expected);
+        let BlockAndReceiptsResponse::Alloy(response) = fetched.expect("block present") else {
+            panic!("expected alloy response");
+        };
+        assert_eq!(response.block, expected.block);
+        assert_eq!(response.receipts, expected.receipts);
     }
 
     #[tokio::test]
@@ -374,6 +430,40 @@ mod wire_tests {
 
         let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
         assert!(error.to_string().contains("failed to fetch block with receipts"));
+    }
+
+    #[tokio::test]
+    async fn stratus_format_against_old_leader_parses_alloy_response_transparently() {
+        // old leader: ignores the format parameter, answers with the legacy alloy shape
+        let mut expected = fake_first::<ExternalBlockWithReceipts>();
+        expected.receipts.clear();
+        let storage = Arc::new(RwLock::new(to_json_value(expected.clone())));
+
+        let server = Server::builder().build("127.0.0.1:0").await.expect("build server");
+        let addr = server.local_addr().expect("server addr");
+
+        let mut module = RpcModule::new(Arc::clone(&storage));
+        module
+            .register_method("net_listening", |_, _, _| Ok::<_, StratusError>(true))
+            .expect("register net_listening");
+        module
+            .register_method("stratus_getBlockAndReceipts", |_, storage, _| {
+                let value = storage.read().expect("read storage").clone();
+                Ok(value) as Result<JsonValue, StratusError>
+            })
+            .expect("register stratus_getBlockAndReceipts");
+        let _server_handle = server.start(module);
+
+        let url = format!("http://{addr}");
+        let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
+
+        // the follower requests the stratus format; the legacy alloy answer is handled transparently
+        let fetched = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect("fetch block");
+        let BlockAndReceiptsResponse::Alloy(response) = fetched.expect("block present") else {
+            panic!("expected alloy response");
+        };
+        assert_eq!(response.block, expected.block);
+        assert_eq!(response.receipts, expected.receipts);
     }
 
     #[tokio::test]
@@ -468,5 +558,46 @@ mod wire_tests {
 
         let error = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect_err("fetch should fail");
         assert!(format!("{error:?}").contains("expected paginated chunk but got normal response"));
+    }
+
+    #[tokio::test]
+    async fn stratus_format_response_round_trips_and_format_rides_every_chunk() {
+        // a big block in the stratus-native format, above the response limits
+        let mut block = fake_first::<Block>();
+        block.header.number = BlockNumber::from(1u32);
+        block.transactions = fake_list::<TransactionMined>(200);
+        let expected_rocks = BlockRocksdb::from(block);
+        let storage = Arc::new(RwLock::new(to_json_value(expected_rocks.clone())));
+
+        // leader with a tiny response limit, using the same handler shape as the real stratus branch
+        let server_config = jsonrpsee::server::ServerConfig::builder().max_response_body_size(MAX_RESPONSE_BYTES).build();
+        let server = Server::builder().set_config(server_config).build("127.0.0.1:0").await.expect("build server");
+        let addr = server.local_addr().expect("server addr");
+
+        let mut module = RpcModule::new(Arc::clone(&storage));
+        module
+            .register_method("net_listening", |_, _, _| Ok::<_, StratusError>(true))
+            .expect("register net_listening");
+        module
+            .register_method("stratus_getBlockAndReceipts", |params, storage, _| {
+                let (sequence, _filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+                let pagination = parse_request(sequence)?;
+                // the response format must ride every chunk request so the leader keeps it stable
+                assert_eq!(pagination.as_ref().and_then(|params| params.format), Some(ResponseFormat::Stratus));
+                let value = storage.read().expect("read storage").clone();
+                respond(value, pagination, MAX_RESPONSE_BYTES)
+            })
+            .expect("register stratus_getBlockAndReceipts");
+        let _server_handle = server.start(module);
+
+        // follower with a tiny response limit, like the importer uses
+        let url = format!("http://{addr}");
+        let client = BlockchainClient::new_http(&url, Duration::from_secs(10)).await.expect("build client");
+
+        let fetched = client.fetch_block_and_receipts(BlockNumber::from(1)).await.expect("fetch block");
+        let BlockAndReceiptsResponse::Stratus(fetched_block) = fetched.expect("block present") else {
+            panic!("expected stratus response");
+        };
+        assert_eq!(*fetched_block, expected_rocks);
     }
 }

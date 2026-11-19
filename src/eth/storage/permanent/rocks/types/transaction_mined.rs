@@ -68,9 +68,9 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
 }
 
 impl TransactionMined {
-    pub fn from_rocks_primitives(other: TransactionMinedRocksdb, block_number: BlockNumberRocksdb, block_hash: HashRocksdb) -> Self {
+    pub fn from_rocks_primitives(other: TransactionMinedRocksdb, block_number: BlockNumberRocksdb, block_hash: HashRocksdb, first_log_index: Index) -> Self {
         let mined_data = MinedData {
-            first_log_index: other.logs.first().map(|log| log.index).unwrap_or_default().into(),
+            first_log_index,
             index: other.transaction_index.into(),
             block_hash: block_hash.into(),
         };

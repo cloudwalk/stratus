@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use anyhow::anyhow;
 use parking_lot::Mutex;
 use stratus_metrics::timed;
 use tracing::Span;
@@ -14,7 +13,6 @@ use crate::eth::codegen;
 use crate::eth::executor::EvmKind;
 use crate::eth::executor::ExecutionMetrics;
 use crate::eth::executor::ExecutionResult;
-use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::ExecutorError;
 use crate::eth::executor::TransactionExecution;
@@ -25,9 +23,6 @@ use crate::eth::miner::Miner;
 use crate::eth::storage::JournalRecord;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
-use crate::eth::types::BlockNumber;
-use crate::eth::types::ExternalReceipt;
-use crate::eth::types::ExternalTransaction;
 use crate::eth::types::StratusError;
 use crate::eth::types::TransactionInput;
 use crate::eth::types::UnexpectedError;
@@ -37,7 +32,6 @@ use crate::infra::tracing::warn_task_tx_closed;
 
 const TASK_NAME: &str = "evm-tx-1";
 
-type ExternalTransactionResult = anyhow::Result<()>;
 type LocalTransactionResult = Result<ExecutionMetrics, StratusError>;
 type LocalTransactionResponse = (Duration, LocalTransactionResult);
 
@@ -92,18 +86,6 @@ impl TransactionWorker {
             && let Err(e) = thread.join()
         {
             tracing::error!(reason = ?e, "transaction worker panicked");
-        }
-    }
-
-    /// Reexecutes and persists an external transaction.
-    pub fn execute_external_transaction(&self, tx: ExternalTransaction, receipt: ExternalReceipt, block_number: BlockNumber) -> ExternalTransactionResult {
-        let (response_tx, response_rx) = oneshot::channel();
-        self.task_tx
-            .send(Some(TransactionTask::external(tx, receipt, block_number, response_tx)))
-            .map_err(StratusError::from)?;
-        match response_rx.recv() {
-            Ok(result) => result,
-            Err(_) => Err(StratusError::from(UnexpectedError::ChannelClosed { channel: "evm" }).into()),
         }
     }
 
@@ -179,18 +161,6 @@ struct TransactionTask {
 }
 
 impl TransactionTask {
-    fn external(tx: ExternalTransaction, receipt: ExternalReceipt, block_number: BlockNumber, response_tx: oneshot::Sender<ExternalTransactionResult>) -> Self {
-        Self {
-            span: Span::current(),
-            kind: TransactionTaskKind::External {
-                tx: Box::new(tx),
-                receipt: Box::new(receipt),
-                block_number,
-                response_tx,
-            },
-        }
-    }
-
     fn local(tx_input: TransactionInput, journal_record: Option<JournalRecord>, response_tx: oneshot::Sender<LocalTransactionResponse>) -> Self {
         Self {
             span: Span::current(),
@@ -207,17 +177,6 @@ impl TransactionTask {
         let _enter = span.enter();
 
         catch_unwind(AssertUnwindSafe(|| match kind {
-            TransactionTaskKind::External {
-                tx,
-                receipt,
-                block_number,
-                response_tx,
-            } => {
-                let result = Executor::execute_external_transaction_inner(storage, miner, evm, *tx, *receipt, block_number);
-                if let Err(e) = response_tx.send(result) {
-                    tracing::error!(reason = ?e, "failed to send external transaction execution result");
-                }
-            }
             TransactionTaskKind::Local {
                 tx_input,
                 journal_record,
@@ -231,17 +190,16 @@ impl TransactionTask {
                 }
             }
         }))
-        .map_err(|err| ExecutorError::Panic { err: anyhow!("{err:?}") }.into())
+        .map_err(|err| {
+            ExecutorError::Panic {
+                err: anyhow::anyhow!("{err:?}"),
+            }
+            .into()
+        })
     }
 }
 
 enum TransactionTaskKind {
-    External {
-        tx: Box<ExternalTransaction>,
-        receipt: Box<ExternalReceipt>,
-        block_number: BlockNumber,
-        response_tx: oneshot::Sender<ExternalTransactionResult>,
-    },
     Local {
         tx_input: Box<TransactionInput>,
         journal_record: Option<JournalRecord>,

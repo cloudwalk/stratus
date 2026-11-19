@@ -263,6 +263,21 @@ export function toHex(number: number | bigint): string {
     return "0x" + number.toString(16);
 }
 
+// Waits until the current provider reports stratus_health = true, retrying for a bounded time.
+// Followers can take a while to import their first blocks after startup, or to catch up once a
+// killed leader comes back, and the health check only turns true when they are back within the
+// allowed lag window. The retry loop also handles the RPC server restarting its connections
+// while the node is unhealthy.
+export async function waitForHealthy(maxAttempts = 30, delayMs = 2000) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        if ((await send("stratus_health", [])) === true) {
+            return true;
+        }
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    throw new Error(`Node did not report stratus_health = true after ${maxAttempts} attempts.`);
+}
+
 export async function waitForFollowerToSyncWithLeader() {
     const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

@@ -24,6 +24,7 @@ use crate::alias::JsonValue;
 use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::ExecutorError;
 use crate::eth::rpc::pagination;
+use crate::eth::rpc::pagination::ResponseFormat;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::types::Address;
@@ -38,6 +39,23 @@ use crate::ext::DisplayExt;
 use crate::ext::to_json_value;
 use crate::infra::tracing::TracingExt;
 use crate::log_and_err;
+
+/// Leader response for `stratus_getBlockAndReceipts`, in either wire format.
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+pub enum BlockAndReceiptsResponse {
+    Alloy(Box<ExternalBlockWithReceipts>),
+    Stratus(Box<BlockRocksdb>),
+}
+
+impl std::fmt::Debug for BlockAndReceiptsResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BlockAndReceiptsResponse::Alloy(_) => write!(f, "BlockAndReceiptsResponse::Alloy(..)"),
+            BlockAndReceiptsResponse::Stratus(_) => write!(f, "BlockAndReceiptsResponse::Stratus(..)"),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct BlockchainClient {
@@ -193,22 +211,35 @@ impl BlockchainClient {
     /// Sends the pagination capability parameter so a pagination-aware leader can split
     /// responses that do not fit in a single message (see `eth::rpc::pagination`). Old leaders
     /// ignore the extra parameter and answer normally, which is handled transparently.
-    async fn request_importer_data<T: serde::de::DeserializeOwned>(&self, method: &'static str, block_number: BlockNumber) -> anyhow::Result<Option<T>> {
-        let Some(full) = self.fetch_serialized_response(method, block_number).await? else {
+    async fn request_importer_data<T: serde::de::DeserializeOwned>(
+        &self,
+        method: &'static str,
+        block_number: BlockNumber,
+        format: Option<ResponseFormat>,
+    ) -> anyhow::Result<Option<T>> {
+        let Some(full) = self.fetch_serialized_response(method, block_number, format).await? else {
             return Ok(None); // block not available yet
         };
-        let value = serde_json::from_str(full.get()).with_context(|| format!("failed to deserialize importer data from {method}"))?;
+        let value = match serde_json::from_str::<T>(full.get()) {
+            Ok(value) => value,
+            Err(e) => return Err(e).with_context(|| format!("failed to deserialize importer data from {method}")),
+        };
         Ok(Some(value))
     }
 
     /// Fetches the full serialized response for an importer method, reassembling pagination chunks.
-    async fn fetch_serialized_response(&self, method: &'static str, block_number: BlockNumber) -> anyhow::Result<Option<Box<RawValue>>> {
+    async fn fetch_serialized_response(
+        &self,
+        method: &'static str,
+        block_number: BlockNumber,
+        format: Option<ResponseFormat>,
+    ) -> anyhow::Result<Option<Box<RawValue>>> {
         tracing::debug!(%block_number, method, "fetching importer data");
 
         let number = to_json_value(block_number);
 
         // first request from offset zero
-        let params = [number.clone(), pagination::request_params(0)];
+        let params = [number.clone(), pagination::request_params(0, format)];
         let result = self.http.request::<Option<Box<RawValue>>, _>(method, params).await;
         let raw = match result {
             Ok(Some(raw)) => raw,
@@ -245,7 +276,7 @@ impl BlockchainClient {
             }
 
             // next chunk from the current offset
-            let params = [number.clone(), pagination::request_params(reassembler.next_offset())];
+            let params = [number.clone(), pagination::request_params(reassembler.next_offset(), format)];
             let result = self.http.request::<Box<RawValue>, _>(method, params).await;
             let raw = match result {
                 Ok(raw) => raw,
@@ -264,11 +295,16 @@ impl BlockchainClient {
     }
 
     /// Fetches a block by number with receipts.
-    pub async fn fetch_block_and_receipts(&self, block_number: BlockNumber) -> anyhow::Result<Option<ExternalBlockWithReceipts>> {
+    pub async fn fetch_block_and_receipts(&self, block_number: BlockNumber) -> anyhow::Result<Option<BlockAndReceiptsResponse>> {
         tracing::debug!(%block_number, "fetching block");
 
-        match self.request_importer_data("stratus_getBlockAndReceipts", block_number).await {
-            Ok(block) => Ok(block),
+        const METHOD: &str = "stratus_getBlockAndReceipts";
+
+        match self
+            .request_importer_data::<BlockAndReceiptsResponse>(METHOD, block_number, Some(ResponseFormat::Stratus))
+            .await
+        {
+            Ok(response) => Ok(response),
             Err(e) => log_and_err!(reason = e, "failed to fetch block with receipts"),
         }
     }
@@ -277,7 +313,7 @@ impl BlockchainClient {
     pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<(BlockRocksdb, BlockChangesRocksdb)>> {
         tracing::debug!(%block_number, "fetching block with changes");
 
-        match self.request_importer_data("stratus_getBlockWithChanges", block_number).await {
+        match self.request_importer_data("stratus_getBlockWithChanges", block_number, None).await {
             Ok(block) => Ok(block),
             Err(e) => log_and_err!(reason = e, "failed to fetch block with changes"),
         }

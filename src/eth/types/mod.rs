@@ -15,7 +15,6 @@ pub use error::UnexpectedError;
 pub use external::ExternalBlock;
 pub use external::ExternalBlockWithReceipts;
 pub use external::ExternalReceipt;
-pub use external::ExternalReceipts;
 pub use external::ExternalTransaction;
 pub use primitives::Account;
 pub use primitives::Address;
@@ -72,7 +71,6 @@ mod tests {
     // gen_test_serde!(ExecutionConflictsBuilder);
     // gen_test_serde!(ExternalBlock);
     // gen_test_serde!(ExternalReceipt);
-    // gen_test_serde!(ExternalReceipts);
     // gen_test_serde!(ExternalTransaction);
     // gen_test_serde!(ExternalTransactionExecution);
     // gen_test_serde!(PendingBlock);
@@ -82,7 +80,6 @@ mod tests {
     gen_test_json!(ExternalBlock);
     gen_test_json!(ExternalBlockWithReceipts);
     gen_test_json!(ExternalReceipt);
-    gen_test_json!(ExternalReceipts);
     gen_test_json!(ExternalTransaction);
 
     gen_test_serde!(Account);
