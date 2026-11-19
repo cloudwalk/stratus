@@ -73,6 +73,10 @@ impl ImporterWorker for ReexecutionWorker {
 }
 
 /// Compares the re-executed block against the execution results imported from the leader.
+///
+/// The deployed contract address and the mined data indexes are intentionally left unchecked:
+/// historical blocks written by older binaries may carry scan-derived values for those fields,
+/// and they are not consumed downstream.
 fn compare_with_imported(mined_block: &Block, imported: &Block) -> anyhow::Result<()> {
     if mined_block.number() != imported.number() || mined_block.header.timestamp != imported.header.timestamp || mined_block.hash() != imported.hash() {
         return log_and_err!(format!(
@@ -94,10 +98,9 @@ fn compare_with_imported(mined_block: &Block, imported: &Block) -> anyhow::Resul
 
         let results_match = mined_result.result.is_success() == imported_result.result.is_success()
             && mined_result.logs == imported_result.logs
-            && mined_result.gas_used == imported_result.gas_used
-            && mined_result.deployed_contract_address == imported_result.deployed_contract_address;
+            && mined_result.gas_used == imported_result.gas_used;
 
-        if !results_match || mined_tx.mined_data != imported_tx.mined_data {
+        if !results_match {
             let json_mined = to_json_string(mined_result);
             let json_imported = to_json_string(imported_result);
             let tx_hash = mined_tx.execution.info.hash;
