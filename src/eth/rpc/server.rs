@@ -396,15 +396,6 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("eth_getUncleByBlockHashAndIndex", eth_get_uncle_by_block_hash_and_index)?;
 
     // transactions
-    for method in ["eth_sendRawTransaction", "stratus_sendRawTransactionAndGetReceipt"] {
-        module.register_method(method, |_, _, _| {
-            Err::<JsonValue, _>(jsonrpsee::types::ErrorObjectOwned::owned(
-                -32603,
-                "transaction submissions are handled by RPC middleware",
-                None::<()>,
-            ))
-        })?;
-    }
     module.register_blocking_method("eth_getTransactionByHash", eth_get_transaction_by_hash)?;
     module.register_blocking_method("eth_getTransactionReceipt", eth_get_transaction_receipt)?;
     module.register_blocking_method("eth_estimateGas", eth_estimate_gas)?;
