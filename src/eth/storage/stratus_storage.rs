@@ -4,19 +4,22 @@ use stratus_metrics::timed;
 use tracing::Span;
 
 use crate::eth::executor::AccessListOutput;
+use crate::eth::executor::Executor;
 use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::types::state::AccountOriginalsReader;
 use crate::eth::executor::types::state::Complete;
 #[cfg(feature = "dev")]
 use crate::eth::genesis::GenesisConfig;
+use crate::eth::miner::Miner;
 use crate::eth::rpc::BlockFilter;
 use crate::eth::rpc::LogFilter;
-use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::InMemoryTemporaryStorage;
+use crate::eth::storage::JournalRecord;
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StorageCache;
 use crate::eth::storage::StorageError;
+use crate::eth::storage::TransactionJournal;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::storage::resolve_pending;
@@ -36,10 +39,10 @@ use crate::eth::types::LogMessage;
 #[cfg(feature = "dev")]
 use crate::eth::types::Nonce;
 use crate::eth::types::PendingBlock;
-use crate::eth::types::PointInTime;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::SlotValue;
+use crate::eth::types::TargetState;
 use crate::eth::types::TransactionStage;
 use crate::eth::types::UnixTime;
 #[cfg(feature = "dev")]
@@ -104,6 +107,13 @@ impl StratusStorage {
         Ok(this)
     }
 
+    /// Stops the permanent storage background tasks, flushes RocksDB and waits for its background compactions.
+    pub async fn shutdown(&self) {
+        tracing::info!("shutting down storage");
+        self.perm.shutdown().await;
+        tracing::info!("storage shut down");
+    }
+
     /// Returns whether the genesis block exists
     pub fn has_genesis(&self) -> Result<bool, StorageError> {
         self.perm.has_genesis()
@@ -141,6 +151,32 @@ impl StratusStorage {
         self.temp.set_pending_header(number, timestamp);
     }
 
+    /// Replays the journaled blocks left by a previous run in order
+    pub fn recover_transaction_journal(&self, executor: &Executor, miner: &Miner) -> anyhow::Result<()> {
+        let mined = self.read_mined_block_number();
+        for journal in TransactionJournal::journaled_blocks()? {
+            let journal = journal?;
+            if journal.number() <= mined {
+                journal.retire()?;
+                continue;
+            }
+
+            self.replay_journal_block(executor, miner, journal)?;
+        }
+        Ok(())
+    }
+
+    fn replay_journal_block(&self, executor: &Executor, miner: &Miner, mut journal: TransactionJournal) -> anyhow::Result<()> {
+        let block = journal.block()?;
+        self.set_pending_header(block.header.number, *block.header.timestamp);
+        for transaction in block.transactions {
+            executor.execute_local_transaction(transaction, None)?;
+        }
+        miner.mine_local_and_commit()?;
+        journal.retire()?;
+        Ok(())
+    }
+
     pub fn set_mined_block_number(&self, block_number: BlockNumber) {
         self.perm.set_mined_block_number(block_number);
     }
@@ -165,9 +201,9 @@ impl StratusStorage {
     }
 
     /// Generic read algorithm shared by [`read_account`] and [`read_slot`].
-    fn read<E: resolve_pending::Resolve>(&self, key: E::Key, kind: ExecutionKind) -> Result<(E, FoundAt), StorageError> {
+    fn read<E: resolve_pending::Resolve>(&self, key: E::Key, target_state: TargetState) -> Result<(E, FoundAt), StorageError> {
         let (value, found_at) = 'query: {
-            match E::resolve(self, key, kind) {
+            match E::resolve(self, key, target_state) {
                 resolve_pending::Resolved::Temp(value) => break 'query (value, FoundAt::Temp),
                 resolve_pending::Resolved::Miss(mined_point) => {
                     let found_at = match &mined_point {
@@ -199,28 +235,26 @@ impl StratusStorage {
         // This bug exists for any flow that updates the cache without holding the latest-state lock. We could consider
         // adding the latest block State<Final/Complete> to the cache too. Would requiring some locking but if we're smart
         // about it we can make it so this lock is more relaxed than the latest_state_lock.
+        //
         if matches!(
-            (kind, found_at),
-            (
-                ExecutionKind::CallLatest(_) | ExecutionKind::CallPast(_) | ExecutionKind::AccessList,
-                FoundAt::PermLatest
-            )
+            (target_state, found_at),
+            (TargetState::Latest | TargetState::Past(_) | TargetState::LatestPinned(_), FoundAt::PermLatest)
         ) {
             E::cache_latest_if_missing(self, key, value.clone());
         }
         Ok((value, found_at))
     }
 
-    pub fn read_account(&self, address: Address, kind: ExecutionKind) -> Result<(Account, FoundAt), StorageError> {
+    pub fn read_account(&self, address: Address, target_state: TargetState) -> Result<(Account, FoundAt), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_account", %address).entered();
-        self.read::<Account>(address, kind)
+        self.read::<Account>(address, target_state)
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, kind: ExecutionKind) -> Result<(Slot, FoundAt), StorageError> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, target_state: TargetState) -> Result<(Slot, FoundAt), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_slot", %address, %index).entered();
-        self.read::<Slot>((address, index), kind)
+        self.read::<Slot>((address, index), target_state)
     }
 
     // -------------------------------------------------------------------------
@@ -228,7 +262,7 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     #[timed(storage_save_execution, labels(success = result.is_ok()))]
-    pub fn save_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
+    pub fn save_execution(&self, tx: TransactionExecution, state: State<Complete>, journal_record: Option<&JournalRecord>) -> Result<(), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.info.hash).entered();
 
@@ -241,7 +275,7 @@ impl StratusStorage {
             }
         }
 
-        self.temp.save_pending_execution(tx, state)
+        self.temp.save_pending_execution(tx, state, journal_record)
     }
 
     /// Retrieves pending transactions being mined.
@@ -563,31 +597,27 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     /// Translates a block filter to a specific storage point-in-time indicator.
-    pub fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StorageError> {
+    pub fn translate_to_target_state(&self, block_filter: BlockFilter) -> Result<TargetState, StorageError> {
         match block_filter {
-            BlockFilter::Pending => Ok(PointInTime::Pending),
-            BlockFilter::Latest => Ok(PointInTime::Latest),
-            BlockFilter::Earliest => Ok(PointInTime::Past(BlockNumber::ZERO)),
+            BlockFilter::Pending => Ok(TargetState::Pending),
+            // should we pin the block here, or just later?
+            BlockFilter::Latest => Ok(TargetState::Latest),
+            BlockFilter::Earliest => Ok(TargetState::Past(BlockNumber::ZERO)),
             // if number == latest (/pending) should we return PointInTime::Latest (/Pending) ?
-            BlockFilter::Number(number) => Ok(PointInTime::Past(number)),
+            BlockFilter::Number(number) => Ok(TargetState::Past(number)),
             BlockFilter::Hash(_) | BlockFilter::Timestamp(_) => self
                 .read_block(block_filter)?
-                .map(|b| PointInTime::Past(b.number()))
+                .map(|b| TargetState::Past(b.number()))
                 .ok_or(StorageError::BlockNotFound { filter: block_filter }),
         }
     }
 
-    pub fn translate_to_block_number(&self, block_filter: BlockFilter) -> Result<BlockNumber, StorageError> {
-        match block_filter {
-            BlockFilter::Pending => Ok(self.read_pending_block_header().number),
-            BlockFilter::Latest => Ok(self.read_mined_block_number()),
-            BlockFilter::Hash(_) | BlockFilter::Timestamp(_) => self
-                .read_block(block_filter)?
-                .map(|b| b.number())
-                .ok_or(StorageError::BlockNotFound { filter: block_filter }),
-            BlockFilter::Earliest => Ok(BlockNumber::ZERO),
-            BlockFilter::Number(number) => Ok(number),
-        }
+    pub fn translate_to_pinned_target_state(&self, block_filter: BlockFilter) -> Result<TargetState, StorageError> {
+        let target_state = self.translate_to_target_state(block_filter)?;
+        Ok(match target_state {
+            TargetState::Pending | TargetState::Latest => TargetState::LatestPinned(self.read_mined_block_number()),
+            target => target,
+        })
     }
 
     fn load_slots_to_cache(&self, slots: Vec<(Address, SlotIndex)>) -> Result<(), StorageError> {

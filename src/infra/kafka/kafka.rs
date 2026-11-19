@@ -143,6 +143,7 @@ impl std::fmt::Display for KafkaSecurityProtocol {
 }
 
 impl KafkaConnector {
+    #[allow(clippy::expect_used)]
     pub fn new(config: &KafkaConfig) -> Result<Self> {
         config.validate()?;
 

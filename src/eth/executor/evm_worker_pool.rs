@@ -3,7 +3,6 @@ use std::sync::Arc;
 use alloy_rpc_types_trace::geth::GethTrace;
 use stratus_metrics as metrics;
 
-use crate::GlobalState;
 use crate::eth::executor::ExecutionMetrics;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::ExecutorError;
@@ -11,14 +10,15 @@ use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::EvmKind;
 use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::executor::evm::types::CallExecutionInput;
+use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::InspectorInput;
-use crate::eth::executor::types::EvmRoute;
 use crate::eth::executor::types::EvmTask;
 use crate::eth::executor::types::ExecutionTask;
 use crate::eth::executor::types::InspectionTask;
 use crate::eth::executor::types::Task;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::StratusError;
+use crate::eth::types::TargetState;
 use crate::eth::types::UnexpectedError;
 use crate::ext::spawn_thread;
 use crate::infra::tracing::warn_task_tx_closed;
@@ -50,10 +50,6 @@ impl EvmWorkerPool {
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
-                if GlobalState::is_shutdown_warn(task_name) {
-                    return;
-                }
-
                 let _guard = kind.mark_executor_pool_busy();
                 if let Err(StratusError::Executor(ExecutorError::Panic { err: panic_err })) = task.execute(&mut evm) {
                     tracing::error!(?panic_err, "executor panicked; recreating EVM");
@@ -99,18 +95,18 @@ impl EvmWorkerPool {
     }
 
     /// Executes a transaction in the specified route.
-    pub fn execute<Output>(&self, route: EvmRoute) -> Result<(Output, ExecutionMetrics), StratusError>
+    pub fn execute<Output>(&self, input: CallExecutionInput) -> Result<(Output, ExecutionMetrics), StratusError>
     where
         Output: TryFrom<RevmResultAndState, Error = StratusError>,
     {
         let (execution_tx, execution_rx) = oneshot::channel::<Result<(RevmResultAndState, ExecutionMetrics), StratusError>>();
 
-        match route {
-            EvmRoute::CallPresent(input) => {
+        match input.target_state() {
+            TargetState::Pending | TargetState::Latest | TargetState::LatestPinned(_) => {
                 let task = ExecutionTask::new(input, execution_tx).into();
                 self.call_present.send(task)?;
             }
-            EvmRoute::CallPast(input) => {
+            TargetState::Past(_) => {
                 let task = ExecutionTask::new(input, execution_tx).into();
                 self.call_past.send(task)?;
             }

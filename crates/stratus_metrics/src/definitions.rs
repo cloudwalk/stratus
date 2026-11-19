@@ -18,7 +18,16 @@ metrics! {
         gauge rpc_subscriptions_active{subscription, client},
 
         "Number of times the RPC server was restarted due to unhealthy state."
-        counter rpc_server_restarts{}
+        counter rpc_server_restarts{},
+
+        "Number of HTTP requests identifying client application via HTTP header."
+        counter rpc_client_auth_header{client, header},
+
+        "Number of HTTP requests identifying client application via query parameter."
+        counter rpc_client_auth_query{client, query},
+
+        "Number of HTTP requests identifying client application via URL path."
+        counter rpc_client_auth_path{client, path, is_first_slug}
     },
 
     group: storage_read {
@@ -86,22 +95,22 @@ metrics! {
         counter executor_local_transaction_reverts{contract, function, reason},
 
         "Time executing a transaction received with eth_call or eth_estimateGas."
-        histogram_duration executor_local_call{success, contract, function, kind},
+        histogram_duration executor_local_call{success, contract, function, target_state},
 
         "Number of account reads from one storage location during an EVM execution."
-        counter evm_execution_account_reads{execution_kind, found_at, contract, function},
+        counter evm_execution_account_reads{target_state, found_at, contract, function, execution_kind},
 
         "Total time spent reading accounts from one storage location during an EVM execution, in nanoseconds."
-        counter evm_execution_account_read_time{execution_kind, found_at, contract, function},
+        counter evm_execution_account_read_time{target_state, found_at, contract, function, execution_kind},
 
         "Number of slot reads from one storage location during an EVM execution."
-        counter evm_execution_slot_reads{execution_kind, found_at, contract, function},
+        counter evm_execution_slot_reads{target_state, found_at, contract, function, execution_kind},
 
         "Total time spent reading slots from one storage location during an EVM execution, in nanoseconds."
-        counter evm_execution_slot_read_time{execution_kind, found_at, contract, function},
+        counter evm_execution_slot_read_time{target_state, found_at, contract, function, execution_kind},
 
         "Gas spent during an EVM execution."
-        histogram_counter evm_execution_gas{execution_kind, contract, function},
+        histogram_counter evm_execution_gas{target_state, contract, function, execution_kind},
 
         "Time executing trace_transaction"
         histogram_duration executor_inspect{trace_type},

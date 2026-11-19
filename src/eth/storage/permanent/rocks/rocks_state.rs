@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
 use std::sync::Arc;
+use std::sync::Once;
 use std::sync::atomic::AtomicU32;
 use std::time::Duration;
 use std::time::Instant;
@@ -12,6 +13,7 @@ use anyhow::bail;
 use itertools::Itertools;
 use rocksdb::DB;
 use rocksdb::Direction;
+#[cfg(feature = "metrics")]
 use rocksdb::Options;
 use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
@@ -140,6 +142,7 @@ pub struct RocksStorageState {
     db_options: Options,
     shutdown_timeout: Duration,
     enable_sync_write: bool,
+    closed: Once,
 }
 
 impl RocksStorageState {
@@ -176,6 +179,7 @@ impl RocksStorageState {
             db: Arc::clone(db),
             shutdown_timeout,
             enable_sync_write,
+            closed: Once::new(),
         };
 
         tracing::debug!("opened database successfully");
@@ -707,8 +711,13 @@ impl RocksStorageState {
     }
 }
 
-impl Drop for RocksStorageState {
-    fn drop(&mut self) {
+impl RocksStorageState {
+    /// Flushes the write buffers and waits up to `shutdown_timeout` for the background compactions. Runs once.
+    pub fn shutdown(&self) {
+        self.closed.call_once(|| self.flush_and_wait_for_compaction());
+    }
+
+    fn flush_and_wait_for_compaction(&self) {
         let mut options = WaitForCompactOptions::default();
         // if background jobs are paused, it makes no sense to keep waiting indefinitely
         options.set_abort_on_pause(true);
@@ -721,7 +730,7 @@ impl Drop for RocksStorageState {
         let instant = Instant::now();
 
         // here, waiting for is done to force WAL logs to be processed, to skip replaying most of them when booting
-        // up, which was slowing things down, we are sacrificing a long shutdown for a faster boot
+        // up, which was slowing things down, we are sacrificing a fast shutdown for a faster boot
         let result = self.db.wait_for_compact(&options);
         let waited_for = instant.elapsed();
 
@@ -736,6 +745,12 @@ impl Drop for RocksStorageState {
         } else {
             tracing::info!(?waited_for, "finished rocksdb shutdown");
         }
+    }
+}
+
+impl Drop for RocksStorageState {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }
 
