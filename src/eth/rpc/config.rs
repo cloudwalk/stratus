@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use anyhow::bail;
 use clap::Parser;
@@ -7,6 +8,8 @@ use display_json::DebugAsJson;
 
 use crate::eth::rpc::RpcClientApp;
 use crate::eth::rpc::pagination;
+use crate::ext::duration_serde;
+use crate::ext::parse_duration;
 
 #[derive(Parser, Clone, DebugAsJson, serde::Serialize)]
 pub struct RpcServerConfig {
@@ -43,6 +46,11 @@ pub struct RpcServerConfig {
     #[arg(id = "rpc.batch_request_limit", long = "batch-request-limit", default_value = "500")]
     pub batch_request_limit: u32,
 
+    /// Maximum time to wait for in-flight requests to finish when shutting down.
+    #[arg(id = "rpc.shutdown_timeout", long = "rpc-shutdown-timeout", value_parser = parse_duration, default_value = "30s")]
+    #[serde(rename = "shutdown_timeout", with = "duration_serde")]
+    pub rpc_shutdown_timeout: Duration,
+
     /// Debug trace endpoints that should return only unsuccessful transactions for the given client apps.
     #[arg(
         id = "rpc.debug_trace_unsuccessful_only",
@@ -63,6 +71,7 @@ impl Default for RpcServerConfig {
             rpc_max_subscriptions: 30,
             health_check_interval_ms: 100,
             batch_request_limit: 500,
+            rpc_shutdown_timeout: Duration::from_secs(30),
             rpc_debug_trace_unsuccessful_only: None,
         }
     }

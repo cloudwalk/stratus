@@ -9,8 +9,55 @@ _doc version="":
 _log message:
     @echo "-> [$(date +"%Y-%m-%d %H:%M:%S")] {{message}}" 1>&2;
 
+# Build at the repository root and launch each test node in its own working directory.
+[positional-arguments]
+_start_test_node mode port log config *args:
+    #!/bin/bash
+    set -e
+    mode="$1"; port="$2"; log="$3"; config="$4"
+    shift 4
+    root="{{justfile_directory()}}"
+    source <(just coverage-env)
+    cargo build {{profile_flag}} --features dev --bin stratus
+    target_dir=$(cargo metadata --format-version 1 --no-deps | python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')
+    profile="${STRATUS_PROFILE:-debug}"
+    [ "$profile" != "dev" ] || profile=debug
+    binary="$target_dir/$profile/stratus"
+    directory="$root/test-nodes/$mode"
+    mkdir -p "$directory"
+    just _wait_for_rocksdb_lock "$directory"
+    arguments=()
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --env)
+                [ "$mode" != "leader" ] || config="config/stratus.$2.toml"
+                arguments+=("$1" "$2"); shift 2
+                ;;
+            --env=*)
+                [ "$mode" != "leader" ] || config="config/stratus.${1#*=}.toml"
+                arguments+=("$1"); shift
+                ;;
+            --config|--genesis-path)
+                flag="$1"; value="$2"; shift 2
+                [[ "$value" = /* ]] || value="$root/$value"
+                arguments+=("$flag" "$value")
+                ;;
+            --config=*|--genesis-path=*)
+                flag="${1%%=*}"; value="${1#*=}"; shift
+                [[ "$value" = /* ]] || value="$root/$value"
+                arguments+=("$flag=$value")
+                ;;
+            *) arguments+=("$1"); shift ;;
+        esac
+    done
+    (
+        cd "$directory"
+        exec "$binary" "--$mode" --rocks-cf-size-metrics-interval 30s -a "0.0.0.0:$port" --config "$root/$config" "${arguments[@]}"
+    ) > "$root/$log" 2>&1 &
+    just _wait_for_stratus "$port" "$root/$log"
+
 # Wait for Stratus to start.
-_wait_for_stratus port="3000":
+_wait_for_stratus port="3000" log="stratus.log":
     #!/bin/bash
     just _log "Waiting 600 seconds for Stratus on port {{port}} to start"
     wait-service --tcp 0.0.0.0:{{port}} -t 600 -- echo
@@ -18,7 +65,7 @@ _wait_for_stratus port="3000":
         just _log "Stratus on port {{port}} started"
     else
         just _log "Stratus on port {{port}} did not start fast enough"
-        cat stratus.log
+        cat "{{log}}"
         exit 255
     fi
 
@@ -29,18 +76,13 @@ _wait_for_stratus_finish port="3000":
     done
 
 # Wait for a previous Stratus instance to release its RocksDB lock before starting a new one.
-_wait_for_rocksdb_lock *args="":
+_wait_for_rocksdb_lock directory:
     #!/bin/bash
-    prefix=""
-    for arg in "$@"; do
-        case "$arg" in --rocks-path-prefix=*) prefix="${arg#--rocks-path-prefix=}" ;; esac
-    done
-    [ -n "$prefix" ] || exit 0
-    lock_file="${prefix}-rocksdb/LOCK"
+    lock_file="{{directory}}/data/rocksdb/LOCK"
     for attempt in $(seq 1 30); do
         [ ! -e "$lock_file" ] && exit 0
-        python3.12 -c 'import fcntl, os, sys; fd = os.open(sys.argv[1], os.O_RDWR); fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)' "$lock_file" 2>/dev/null && exit 0
-        just _log "Waiting for previous Stratus instance to release ${prefix}-rocksdb (${attempt}/30)"
+        python3 -c 'import fcntl, os, sys; fd = os.open(sys.argv[1], os.O_RDWR); fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)' "$lock_file" 2>/dev/null && exit 0
+        just _log "Waiting for previous Stratus instance to release ${lock_file} (${attempt}/30)"
         sleep 1
     done
     just _log "Error: ${lock_file} still held by a previous Stratus instance"

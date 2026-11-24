@@ -38,11 +38,11 @@ use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm::util::EvmExt;
 use crate::eth::executor::evm::util::create_evm;
 use crate::eth::rpc::BlockFilter;
-use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::MinedData;
 use crate::eth::types::StratusError;
+use crate::eth::types::TargetState;
 
 pub type RevmResultAndState = ExecResultAndState<RevmExecResult>;
 
@@ -50,6 +50,14 @@ pub type RevmResultAndState = ExecResultAndState<RevmExecResult>;
 pub struct Evm {
     evm: GeneralRevm<RevmSession>,
     kind: EvmKind,
+
+    /// Gas limit for executions the EVM was built for: transactions and inspections follow the
+    /// transaction limit, while calls follow the call limit.
+    max_gas_limit: u64,
+
+    /// Transaction gas limit, always: the inspector reexecutes and traces mined transactions, so
+    /// it follows the transaction limit even when running on a call-present EVM.
+    transaction_max_gas_limit: u64,
 }
 
 impl Evm {
@@ -57,12 +65,18 @@ impl Evm {
     pub fn new(storage: Arc<StratusStorage>, config: &ExecutorConfig, kind: EvmKind) -> Self {
         tracing::info!(?config, "creating revm");
 
-        // configure revm
         let chain_id = config.executor_chain_id;
 
+        let max_gas_limit = match kind {
+            EvmKind::Transaction | EvmKind::Inspect => config.evm.transaction_max_gas_limit,
+            EvmKind::CallPast | EvmKind::CallPresent => config.evm.call_max_gas_limit,
+        };
+
         Self {
-            evm: create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage), kind),
+            evm: create_evm(chain_id, config.evm.spec, RevmSession::new(storage), kind),
             kind,
+            max_gas_limit,
+            transaction_max_gas_limit: config.evm.transaction_max_gas_limit,
         }
     }
 
@@ -70,14 +84,12 @@ impl Evm {
     pub fn execute<Input: EvmInput>(&mut self, input: Input) -> Result<(RevmResultAndState, ExecutionMetrics), StratusError> {
         let metrics_context = input.metrics_context();
 
-        // configure session
-        self.evm.journaled_state.database.reset(input.kind());
-        input.fill_env(&mut self.evm);
+        self.evm.journaled_state.database.reset(input.target_state());
+        input.fill_env(&mut self.evm, self.max_gas_limit);
 
         let tx = std::mem::take(&mut self.evm.tx);
         let evm_result = self.evm.transact(tx);
 
-        // extract results
         let session = &mut self.evm.journaled_state.database;
         let storage_metrics = std::mem::take(&mut session.metrics);
 
@@ -89,9 +101,7 @@ impl Evm {
                 (execution, metrics)
             })
     }
-}
 
-impl Evm {
     /// Execute a transaction using a tracer.
     pub fn inspect(&mut self, input: InspectorInput) -> Result<GethTrace, StratusError> {
         let InspectorInput {
@@ -141,7 +151,7 @@ impl Evm {
         };
         let inspect_input: TransactionExecutionInput = tx.input;
         let target = inspect_input.block_number.prev().unwrap_or_default();
-        self.evm.journaled_state.database.reset(ExecutionKind::CallPast(target));
+        self.evm.journaled_state.database.reset(TargetState::Past(target));
 
         let spec = self.evm.cfg.spec;
 
@@ -155,8 +165,7 @@ impl Evm {
             }
             let tx_input: TransactionExecutionInput = tx.execution.input;
 
-            // Configure EVM state
-            evm.fill_env(tx_input);
+            evm.fill_env(tx_input, self.transaction_max_gas_limit);
             let tx = std::mem::take(&mut evm.tx);
             evm.transact_commit(tx)?;
         }
@@ -165,7 +174,7 @@ impl Evm {
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => {
                 let mut inspector = FourByteInspector::default();
                 let mut evm_with_inspector = evm.with_inspector(&mut inspector);
-                evm_with_inspector.fill_env(inspect_input);
+                evm_with_inspector.fill_env(inspect_input, self.transaction_max_gas_limit);
                 let tx = std::mem::take(&mut evm_with_inspector.tx);
                 evm_with_inspector.inspect_tx(tx)?;
                 FourByteFrame::from(&inspector).into()
@@ -174,7 +183,7 @@ impl Evm {
                 let call_config = opts.tracer_config.into_call_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_geth_call_config(&call_config));
                 let mut evm_with_inspector = evm.with_inspector(&mut inspector);
-                evm_with_inspector.fill_env(inspect_input);
+                evm_with_inspector.fill_env(inspect_input, self.transaction_max_gas_limit);
                 let tx = std::mem::take(&mut evm_with_inspector.tx);
                 let res = evm_with_inspector.inspect_tx(tx)?;
                 let mut trace = inspector.geth_builder().geth_call_traces(call_config, res.result.tx_gas_used()).into();
@@ -185,7 +194,7 @@ impl Evm {
                 let prestate_config = opts.tracer_config.into_pre_state_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_geth_prestate_config(&prestate_config));
                 let mut evm_with_inspector = evm.with_inspector(&mut inspector);
-                evm_with_inspector.fill_env(inspect_input);
+                evm_with_inspector.fill_env(inspect_input, self.transaction_max_gas_limit);
                 let tx = std::mem::take(&mut evm_with_inspector.tx);
                 let res = evm_with_inspector.inspect_tx(tx)?;
 
@@ -196,7 +205,7 @@ impl Evm {
                 let mux_config = opts.tracer_config.into_mux_config()?;
                 let mut inspector = MuxInspector::try_from_config(mux_config).map_err(|e| anyhow!(e))?;
                 let mut evm_with_inspector = evm.with_inspector(&mut inspector);
-                evm_with_inspector.fill_env(inspect_input);
+                evm_with_inspector.fill_env(inspect_input, self.transaction_max_gas_limit);
                 let tx = std::mem::take(&mut evm_with_inspector.tx);
                 let res = evm_with_inspector.inspect_tx(tx)?;
                 inspector.try_into_mux_frame(&res, &cache_db, tx_info)?.into()
@@ -205,7 +214,7 @@ impl Evm {
                 let flat_call_config = opts.tracer_config.into_flat_call_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_flat_call_config(&flat_call_config));
                 let mut evm_with_inspector = evm.with_inspector(&mut inspector);
-                evm_with_inspector.fill_env(inspect_input);
+                evm_with_inspector.fill_env(inspect_input, self.transaction_max_gas_limit);
                 let tx = std::mem::take(&mut evm_with_inspector.tx);
                 let res = evm_with_inspector.inspect_tx(tx)?;
                 inspector
@@ -217,7 +226,7 @@ impl Evm {
             GethDebugTracerType::JsTracer(code) => {
                 let mut inspector = JsInspector::new(code, opts.tracer_config.into_json()).map_err(|e| anyhow!(e.to_string()))?;
                 let mut evm_with_inspector = evm.with_inspector(&mut inspector);
-                evm_with_inspector.fill_env(inspect_input);
+                evm_with_inspector.fill_env(inspect_input, self.transaction_max_gas_limit);
                 let tx = std::mem::take(&mut evm_with_inspector.tx);
                 let block = std::mem::take(&mut evm_with_inspector.block);
                 let res = evm_with_inspector.inspect_tx(tx.clone())?;

@@ -1,6 +1,5 @@
 pub mod block;
 mod error;
-pub mod execution_kind;
 pub mod external;
 pub mod primitives;
 pub mod transaction;
@@ -13,11 +12,9 @@ pub use error::ErrorCode;
 pub use error::StateError;
 pub use error::StratusError;
 pub use error::UnexpectedError;
-pub use execution_kind::ExecutionKind;
 pub use external::ExternalBlock;
 pub use external::ExternalBlockWithReceipts;
 pub use external::ExternalReceipt;
-pub use external::ExternalReceipts;
 pub use external::ExternalTransaction;
 pub use primitives::Account;
 pub use primitives::Address;
@@ -36,12 +33,12 @@ pub use primitives::LogTopic;
 pub use primitives::LogsBloom;
 pub use primitives::MinerNonce;
 pub use primitives::Nonce;
-pub use primitives::PointInTime;
 pub use primitives::SignatureComponent;
 pub use primitives::Size;
 pub use primitives::Slot;
 pub use primitives::SlotIndex;
 pub use primitives::SlotValue;
+pub use primitives::TargetState;
 pub use primitives::UnixTime;
 pub use primitives::UnixTimeNow;
 pub use primitives::Wei;
@@ -74,7 +71,6 @@ mod tests {
     // gen_test_serde!(ExecutionConflictsBuilder);
     // gen_test_serde!(ExternalBlock);
     // gen_test_serde!(ExternalReceipt);
-    // gen_test_serde!(ExternalReceipts);
     // gen_test_serde!(ExternalTransaction);
     // gen_test_serde!(ExternalTransactionExecution);
     // gen_test_serde!(PendingBlock);
@@ -84,7 +80,6 @@ mod tests {
     gen_test_json!(ExternalBlock);
     gen_test_json!(ExternalBlockWithReceipts);
     gen_test_json!(ExternalReceipt);
-    gen_test_json!(ExternalReceipts);
     gen_test_json!(ExternalTransaction);
 
     gen_test_serde!(Account);

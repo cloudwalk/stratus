@@ -75,6 +75,49 @@ pub const MAX_REASSEMBLY_TOTAL: u64 = 512 * 1024 * 1024;
 pub struct PaginationParams {
     /// Byte offset of the requested chunk within the serialized response.
     pub offset: u64,
+
+    /// Response format requested from the leader for endpoints that support more than one serialization.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<ResponseFormat>,
+}
+
+/// Response format for importer endpoints that support more than one serialization.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ResponseFormat {
+    /// Alloy JSON-RPC types (legacy).
+    #[default]
+    Alloy,
+    /// Stratus-native storage types.
+    Stratus,
+}
+
+impl std::fmt::Display for ResponseFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for ResponseFormat {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "alloy" => Ok(Self::Alloy),
+            "stratus" => Ok(Self::Stratus),
+            _ => Err(format!("invalid response format {s:?}; expected \"alloy\" or \"stratus\"")),
+        }
+    }
+}
+
+impl ResponseFormat {
+    /// Returns the wire name of the format.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Alloy => "alloy",
+            Self::Stratus => "stratus",
+        }
+    }
 }
 
 /// Extracts the optional [`PaginationParams`] from the remaining request params sequence.
@@ -167,8 +210,12 @@ pub fn respond(value: JsonValue, pagination: Option<PaginationParams>, max_respo
 }
 
 /// Builds pagination request params for the follower side.
-pub fn request_params(offset: u64) -> JsonValue {
-    to_json_value(PaginationParams { offset })
+///
+/// When `format` is `None`, the serialized params are byte-identical to the pre-format wire
+/// format (`{"offset": N}`); when set, the format rides alongside the offset so the leader
+/// serializes every chunk of the response in the requested format.
+pub fn request_params(offset: u64, format: Option<ResponseFormat>) -> JsonValue {
+    to_json_value(PaginationParams { offset, format })
 }
 
 /// Progressive reassembly of a paginated response, with validation against a malicious peer.

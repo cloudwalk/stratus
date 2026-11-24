@@ -2,23 +2,23 @@ use revm::Database;
 
 use crate::eth::executor::evm::GeneralRevm;
 use crate::eth::executor::evm::types::ExecutionMetricsContext;
-use crate::eth::types::ExecutionKind;
+use crate::eth::types::TargetState;
 
 pub mod call_execution;
 pub mod inspector;
 pub mod transaction_execution;
 
 pub trait EvmInput: Default + Clone {
-    fn kind(&self) -> ExecutionKind;
+    fn target_state(&self) -> TargetState;
 
     fn metrics_context(&self) -> ExecutionMetricsContext;
 
-    fn fill_tx_env<DB: Database, I>(self, evm: &mut GeneralRevm<DB, I>);
+    fn fill_tx_env<DB: Database, I>(self, evm: &mut GeneralRevm<DB, I>, gas_limit: u64);
 
     fn fill_block_env<DB: Database, I>(&self, evm: &mut GeneralRevm<DB, I>);
 
-    fn fill_env<DB: Database, I>(self, evm: &mut GeneralRevm<DB, I>) {
+    fn fill_env<DB: Database, I>(self, evm: &mut GeneralRevm<DB, I>, gas_limit: u64) {
         self.fill_block_env(evm);
-        self.fill_tx_env(evm);
+        self.fill_tx_env(evm, gas_limit);
     }
 }

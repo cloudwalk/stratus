@@ -1,5 +1,8 @@
 //! In-memory storage implementations.
 
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+
 use parking_lot::RwLock;
 use parking_lot::RwLockUpgradableReadGuard;
 #[cfg(not(feature = "dev"))]
@@ -13,6 +16,7 @@ use crate::eth::executor::types::state::Complete;
 use crate::eth::executor::types::state::CompleteValue;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
+use crate::eth::storage::temporary::journal::JournalRecord;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::BlockInfo;
@@ -26,6 +30,8 @@ use crate::eth::types::PendingBlock;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::TransactionInput;
+use crate::eth::types::TransactionMined;
+use crate::eth::types::TransactionStage;
 use crate::eth::types::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::types::UnixTimeNow;
@@ -36,16 +42,16 @@ use crate::eth::types::Wei;
 pub struct InmemoryTransactionTemporaryStorage {
     pub pending_block: RwLock<InMemoryTemporaryStorageState>,
     pub latest_block: RwLock<Option<InMemoryTemporaryStorageState>>,
+    /// Whether new pending blocks open a journal
+    with_journal: AtomicBool,
 }
 
 impl InmemoryTransactionTemporaryStorage {
     pub fn new(block_number: BlockNumber) -> Self {
         Self {
-            pending_block: RwLock::new(InMemoryTemporaryStorageState {
-                block: PendingBlock::new_at_now(block_number),
-                state: State::default(),
-            }),
+            pending_block: RwLock::new(InMemoryTemporaryStorageState::new(block_number, false)),
             latest_block: RwLock::new(None),
+            with_journal: AtomicBool::new(false),
         }
     }
 
@@ -64,19 +70,14 @@ impl InmemoryTransactionTemporaryStorage {
         pending_block.block.header
     }
 
-    #[cfg(feature = "dev")]
-    pub fn set_pending_block_header(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError> {
-        self.pending_block.write().block.header.number = block_number;
-        Ok(())
-    }
-
     // -------------------------------------------------------------------------
     // Block and executions
     // -------------------------------------------------------------------------
 
-    pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
-        // check conflicts
+    pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>, journal_record: Option<&JournalRecord>) -> Result<(), StorageError> {
         let pending_block = self.pending_block.upgradable_read();
+
+        // check conflicts
         if tx.input != pending_block.block.header {
             let actual_input = tx.input.clone();
             let tx_input: TransactionInput = tx.into();
@@ -89,9 +90,10 @@ impl InmemoryTransactionTemporaryStorage {
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
+        if let (Some(journal), Some(record)) = (pending_block.journal.as_mut(), journal_record) {
+            let _ = journal.append(record).inspect_err(|err| tracing::error!(?err, "append to journal failed"));
+        }
         pending_block.state.merge(state);
-
-        // save execution
         pending_block.block.push_transaction(tx);
 
         Ok(())
@@ -101,9 +103,11 @@ impl InmemoryTransactionTemporaryStorage {
         self.pending_block.read().block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
     }
 
-    pub fn clone_pending_state(&self) -> InMemoryTemporaryStorageState {
-        let pending_block = self.pending_block.read();
-        (*pending_block).clone()
+    /// Starts journaling the pending block and every block after it
+    pub fn start_journal(&self) {
+        let mut pending_block = self.pending_block.write();
+        self.with_journal.store(true, Ordering::Relaxed);
+        pending_block.journal = InMemoryTemporaryStorageState::create_journal(pending_block.block.header);
     }
 
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {
@@ -121,12 +125,12 @@ impl InmemoryTransactionTemporaryStorage {
             (finished_block, pending_block.state.clone())
         };
 
-        let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number());
+        let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number(), self.with_journal.load(Ordering::Relaxed));
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
         let mut latest = self.latest_block.write();
 
-        *latest = Some(std::mem::replace(&mut *pending_block, next_state));
+        let retired = latest.replace(std::mem::replace(&mut *pending_block, next_state));
 
         drop(pending_block);
 
@@ -138,13 +142,32 @@ impl InmemoryTransactionTemporaryStorage {
             let latest_state = latest.as_ref().expect("latest should be Some after finishing the pending block");
             (latest_state.block.clone(), latest_state.state.clone())
         };
+        #[cfg(feature = "dev")]
+        drop(latest);
+
+        // dropping the retired state removes its journal file and unmaps it, so it happens after the locks are released
+        drop(retired);
 
         (finished_block, state)
     }
 
-    pub fn read_pending_execution(&self, hash: Hash) -> Option<TransactionExecution> {
-        let pending_block = self.pending_block.read();
-        pending_block.block.transactions.get(&hash).cloned()
+    // i think this is used only for eth_transactionByHash and getTransactionReceipt so we dont really need to clone the entire execution
+    pub fn read_transaction(&self, hash: Hash) -> Option<TransactionStage> {
+        let pending = self.pending_block.read();
+        if let Some(execution) = pending.block.transactions.get(&hash) {
+            return Some(TransactionStage::Pending(execution.clone()));
+        }
+
+        let latest = self.latest_block.read();
+        let block = &latest.as_ref()?.block;
+        let (index, _, execution) = block.transactions.get_full(&hash)?;
+        let first_log_index: u64 = block.transactions.values().take(index).map(|tx| tx.logs().len() as u64).sum();
+        Some(TransactionStage::Mined(TransactionMined::from_execution(
+            execution.clone(),
+            block.header.number.hash(),
+            (index as u64).into(),
+            first_log_index.into(),
+        )))
     }
 
     // -------------------------------------------------------------------------
@@ -260,8 +283,15 @@ impl InmemoryTransactionTemporaryStorage {
     // -------------------------------------------------------------------------
     // Global state
     // -------------------------------------------------------------------------
+    #[cfg(feature = "dev")]
     pub fn reset(&self) {
-        self.pending_block.write().reset();
+        let mut pending = self.pending_block.write();
+        pending.reset();
+        pending.journal = self
+            .with_journal
+            .load(Ordering::Relaxed)
+            .then(|| InMemoryTemporaryStorageState::create_journal(pending.block.header))
+            .flatten();
         *self.latest_block.write() = None;
     }
 }

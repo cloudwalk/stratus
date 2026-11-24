@@ -1,16 +1,17 @@
-use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use anyhow::bail;
+#[cfg(feature = "metrics")]
+use parking_lot::Mutex;
 use stratus_metrics::timed;
+#[cfg(feature = "metrics")]
+use tokio::task::JoinHandle;
 
 use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_state::RocksStorageState;
 use super::types::BlockRocksdb;
-use crate::GlobalState;
 use crate::eth::executor::State;
 use crate::eth::executor::types::state::Final;
 use crate::eth::rpc::BlockFilter;
@@ -18,6 +19,7 @@ use crate::eth::rpc::LogFilter;
 use crate::eth::storage::MinedPointInTime;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+#[cfg(feature = "metrics")]
 use crate::eth::storage::stratus_storage::label;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
@@ -35,14 +37,16 @@ use crate::eth::types::SlotValue;
 use crate::eth::types::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
-use crate::ext::SleepReason;
+#[cfg(feature = "metrics")]
 use crate::ext::spawn;
-use crate::ext::traced_sleep;
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
     pub state: Arc<RocksStorageState>,
     block_number: AtomicU32,
+    /// Column family size metrics collector, stopped by [`Self::shutdown`].
+    #[cfg(feature = "metrics")]
+    cf_size_metrics_collector: Mutex<Option<JoinHandle<()>>>,
 }
 
 fn get_current_file_descriptor_limit() -> Result<libc::rlimit, StorageError> {
@@ -58,11 +62,11 @@ fn get_current_file_descriptor_limit() -> Result<libc::rlimit, StorageError> {
 
 impl RocksPermanentStorage {
     pub fn new(
-        db_path_prefix: Option<String>,
+        db_path: String,
         shutdown_timeout: Duration,
         cf_cache_config: RocksCfCacheConfig,
         enable_sync_write: bool,
-        cf_size_metrics_interval: Option<Duration>,
+        #[cfg(feature = "metrics")] cf_size_metrics_interval: Option<Duration>,
         file_descriptors_limit: u64,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
@@ -70,39 +74,39 @@ impl RocksPermanentStorage {
         // Check file descriptor limit before proceeding with RocksDB initialization
         Self::check_file_descriptor_limit(file_descriptors_limit).map_err(|err| anyhow::anyhow!("{err}"))?;
 
-        let path = if let Some(prefix) = db_path_prefix {
-            // run some checks on the given prefix
-            if prefix.is_empty() {
-                bail!("given prefix for RocksDB is empty, try not providing the flag");
-            }
-
-            if Path::new(&prefix).is_dir() || Path::new(&prefix).iter().count() > 1 {
-                tracing::warn!(?prefix, "given prefix for RocksDB might put it in another folder");
-            }
-
-            let path = format!("{prefix}-rocksdb");
-            tracing::info!("starting rocksdb storage - at custom path: '{:?}'", path);
-            path
-        } else {
-            tracing::info!("starting rocksdb storage - at default path: 'data/rocksdb'");
-            "data/rocksdb".to_string()
-        };
-
-        let state = Arc::new(RocksStorageState::new(path, shutdown_timeout, cf_cache_config, enable_sync_write)?);
+        let state = Arc::new(RocksStorageState::new(db_path, shutdown_timeout, cf_cache_config, enable_sync_write)?);
 
         let block_number = state.preload_block_number()?;
 
         // spawn background task for collecting column family size metrics
         #[cfg(feature = "metrics")]
-        if let Some(interval) = cf_size_metrics_interval {
+        let cf_size_metrics_collector = cf_size_metrics_interval.map(|interval| {
             tracing::info!("starting column family size metrics collector with interval {:?}", interval);
             spawn(
                 "rocks::cf_size_metrics_collector",
                 Self::start_cf_size_metrics_collector(Arc::clone(&state), interval),
-            );
-        };
+            )
+        });
 
-        Ok(Self { state, block_number })
+        Ok(Self {
+            state,
+            block_number,
+            #[cfg(feature = "metrics")]
+            cf_size_metrics_collector: Mutex::new(cf_size_metrics_collector),
+        })
+    }
+
+    /// Stops the metrics collector, flushes the write buffers and waits up to `shutdown_timeout` for the background compactions.
+    pub async fn shutdown(&self) {
+        #[cfg(feature = "metrics")]
+        {
+            let collector = self.cf_size_metrics_collector.lock().take();
+            if let Some(collector) = collector {
+                collector.abort();
+                let _ = collector.await;
+            }
+        }
+        self.state.shutdown();
     }
 
     /// Checks the current file descriptor limit and validates it meets the minimum requirement.
@@ -195,6 +199,16 @@ impl RocksPermanentStorage {
         block.map_err(|err| StorageError::RocksError { err })
     }
 
+    pub fn read_block_rocksdb(&self, selection: BlockFilter) -> anyhow::Result<Option<BlockRocksdb>, StorageError> {
+        let block = self.state.read_block_rocks(selection).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to read block in RocksPermanent");
+        });
+        if let Ok(Some(block)) = &block {
+            tracing::trace!(?selection, ?block, "block found");
+        }
+        block.map_err(|err| StorageError::RocksError { err })
+    }
+
     pub fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<(BlockRocksdb, BlockChangesRocksdb)>, StorageError> {
         let result = self.state.read_block_with_changes(selection).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read block with changes in RocksPermanent");
@@ -277,19 +291,13 @@ impl RocksPermanentStorage {
 
     #[cfg(feature = "metrics")]
     /// Starts a background task that collects column family size metrics at regular intervals.
-    async fn start_cf_size_metrics_collector(state: Arc<RocksStorageState>, interval: Duration) -> anyhow::Result<()> {
-        const TASK_NAME: &str = "rocks::cf_size_metrics";
-
+    async fn start_cf_size_metrics_collector(state: Arc<RocksStorageState>, interval: Duration) {
+        let mut ticker = tokio::time::interval(interval);
         loop {
-            if GlobalState::is_shutdown_warn(TASK_NAME) {
-                return Ok(());
-            }
-
+            ticker.tick().await;
             if let Err(e) = state.export_column_family_size_metrics() {
                 tracing::warn!("failed to export column family metrics: {:?}", e);
             }
-
-            traced_sleep(interval, SleepReason::Interval).await;
         }
     }
 

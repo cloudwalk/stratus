@@ -16,9 +16,9 @@ use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::pool_admission::PoolAdmission;
 use crate::eth::executor::pool_admission::PoolPermit;
 use crate::eth::executor::types::error::ExecutorError;
-use crate::eth::types::PointInTime;
 use crate::eth::types::StateError;
 use crate::eth::types::StratusError;
+use crate::eth::types::TargetState;
 
 #[derive(derive_new::new)]
 pub struct ExecutionTask<Input: EvmInput> {
@@ -82,9 +82,9 @@ impl PoolTask {
 /// Returns the pool kind of a call: calls against the latest state and calls against a past state
 /// are admitted by different pool gates.
 fn call_evm_kind(input: &CallExecutionInput) -> EvmKind {
-    match input.kind.point_in_time() {
-        PointInTime::Pending | PointInTime::Latest => EvmKind::CallPresent,
-        PointInTime::Past(_) => EvmKind::CallPast,
+    match input.target_state() {
+        TargetState::Pending | TargetState::Latest | TargetState::LatestPinned(_) => EvmKind::CallPresent,
+        TargetState::Past(_) => EvmKind::CallPast,
     }
 }
 

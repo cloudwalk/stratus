@@ -7,9 +7,12 @@ use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::types::state::Complete;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::permanent::RocksPermanentStorage;
+#[cfg(feature = "metrics")]
 use crate::eth::storage::stratus_storage::label;
 use crate::eth::storage::temporary::compute_pending_block_number;
 use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTemporaryStorage;
+use crate::eth::storage::temporary::journal::JournalRecord;
+use crate::eth::storage::temporary::journal::RollingJournal;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::BlockInfo;
@@ -22,6 +25,7 @@ use crate::eth::types::Nonce;
 use crate::eth::types::PendingBlock;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
+use crate::eth::types::TransactionStage;
 use crate::eth::types::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
@@ -52,21 +56,20 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.read_pending_block_header()
     }
 
-    #[cfg(feature = "dev")]
-    pub fn set_pending_block_header(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError> {
-        self.transaction_storage.set_pending_block_header(block_number)
-    }
-
     pub fn set_pending_header(&self, number: BlockNumber, timestamp: UnixTime) {
         self.transaction_storage.set_pending_header(number, timestamp);
     }
 
-    pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>) -> Result<(), StorageError> {
-        self.transaction_storage.save_pending_execution(tx, state)
+    pub fn save_pending_execution(&self, tx: TransactionExecution, state: State<Complete>, journal_record: Option<&JournalRecord>) -> Result<(), StorageError> {
+        self.transaction_storage.save_pending_execution(tx, state, journal_record)
     }
 
     pub fn read_pending_executions(&self) -> Vec<TransactionExecution> {
         self.transaction_storage.read_pending_executions()
+    }
+
+    pub fn start_journal(&self) {
+        self.transaction_storage.start_journal();
     }
 
     pub fn finish_pending_block(&self) -> (PendingBlock, State<Complete>) {
@@ -74,8 +77,8 @@ impl InMemoryTemporaryStorage {
     }
 
     #[timed(storage_read_transaction, labels(storage = label::TEMP, hit = result.is_some(), success = true))]
-    pub fn read_pending_execution(&self, hash: Hash) -> Option<TransactionExecution> {
-        self.transaction_storage.read_pending_execution(hash)
+    pub fn read_transaction(&self, hash: Hash) -> Option<TransactionStage> {
+        self.transaction_storage.read_transaction(hash)
     }
 
     pub fn read_account(&self, address: Address) -> Option<Account> {
@@ -116,21 +119,33 @@ impl InMemoryTemporaryStorage {
 // Inner State
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct InMemoryTemporaryStorageState {
     /// Block that is being mined.
     pub block: PendingBlock,
 
     /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
     pub state: State<Complete>,
+
+    pub journal: Option<RollingJournal>,
 }
 
 impl InMemoryTemporaryStorageState {
-    pub fn new(block_number: BlockNumber) -> Self {
+    pub fn new(block_number: BlockNumber, with_journal: bool) -> Self {
+        let block = PendingBlock::new_at_now(block_number);
+        let journal = with_journal.then(|| Self::create_journal(block.header)).flatten();
+
         Self {
-            block: PendingBlock::new_at_now(block_number),
+            block,
             state: State::default(),
+            journal,
         }
+    }
+
+    pub fn create_journal(header: BlockInfo) -> Option<RollingJournal> {
+        RollingJournal::create(header)
+            .inspect_err(|err| tracing::error!(?err, "journal failed to create, temp state will be created without it"))
+            .ok()
     }
 
     pub fn reset(&mut self) {

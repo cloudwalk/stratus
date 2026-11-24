@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
 use std::sync::Arc;
+use std::sync::Once;
 use std::sync::atomic::AtomicU32;
 use std::time::Duration;
 use std::time::Instant;
@@ -12,6 +13,7 @@ use anyhow::bail;
 use itertools::Itertools;
 use rocksdb::DB;
 use rocksdb::Direction;
+#[cfg(feature = "metrics")]
 use rocksdb::Options;
 use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
@@ -57,6 +59,7 @@ use crate::eth::types::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::types::Bytes;
 use crate::eth::types::Hash;
+use crate::eth::types::Index;
 use crate::eth::types::LogMessage;
 #[cfg(feature = "dev")]
 use crate::eth::types::Nonce;
@@ -140,6 +143,7 @@ pub struct RocksStorageState {
     db_options: Options,
     shutdown_timeout: Duration,
     enable_sync_write: bool,
+    closed: Once,
 }
 
 impl RocksStorageState {
@@ -176,6 +180,7 @@ impl RocksStorageState {
             db: Arc::clone(db),
             shutdown_timeout,
             enable_sync_write,
+            closed: Once::new(),
         };
 
         tracing::debug!("opened database successfully");
@@ -264,12 +269,25 @@ impl RocksStorageState {
         };
         let block = block.into_inner();
 
-        let transaction = block.transactions.into_iter().find(|tx| Hash::from(tx.input.hash) == tx_hash);
+        let mut transaction = None;
+        let mut first_log_index = Index::ZERO;
+        for tx in block.transactions {
+            if Hash::from(tx.input.hash) == tx_hash {
+                transaction = Some(tx);
+                break;
+            }
+            first_log_index += Index(tx.logs.len() as u64);
+        }
 
         match transaction {
             Some(tx) => {
                 tracing::trace!(%tx_hash, "transaction found");
-                Ok(Some(TransactionMined::from_rocks_primitives(tx, block_number.into_inner(), block.header.hash)))
+                Ok(Some(TransactionMined::from_rocks_primitives(
+                    tx,
+                    block_number.into_inner(),
+                    block.header.hash,
+                    first_log_index,
+                )))
             }
             None => log_and_err!("rocks error, transaction wasn't found in block where the index pointed at")
                 .with_context(|| format!("block_number = {block_number:?} tx_hash = {tx_hash}")),
@@ -707,8 +725,13 @@ impl RocksStorageState {
     }
 }
 
-impl Drop for RocksStorageState {
-    fn drop(&mut self) {
+impl RocksStorageState {
+    /// Flushes the write buffers and waits up to `shutdown_timeout` for the background compactions. Runs once.
+    pub fn shutdown(&self) {
+        self.closed.call_once(|| self.flush_and_wait_for_compaction());
+    }
+
+    fn flush_and_wait_for_compaction(&self) {
         let mut options = WaitForCompactOptions::default();
         // if background jobs are paused, it makes no sense to keep waiting indefinitely
         options.set_abort_on_pause(true);
@@ -721,7 +744,7 @@ impl Drop for RocksStorageState {
         let instant = Instant::now();
 
         // here, waiting for is done to force WAL logs to be processed, to skip replaying most of them when booting
-        // up, which was slowing things down, we are sacrificing a long shutdown for a faster boot
+        // up, which was slowing things down, we are sacrificing a fast shutdown for a faster boot
         let result = self.db.wait_for_compact(&options);
         let waited_for = instant.elapsed();
 
@@ -736,6 +759,12 @@ impl Drop for RocksStorageState {
         } else {
             tracing::info!(?waited_for, "finished rocksdb shutdown");
         }
+    }
+}
+
+impl Drop for RocksStorageState {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }
 

@@ -6,64 +6,109 @@ use crate::GlobalState;
 use crate::eth::executor::Executor;
 use crate::eth::follower::importer::importers::ImportData;
 use crate::eth::follower::importer::importers::ImporterWorker;
+use crate::eth::follower::importer::importers::reexecute_imported_transactions;
 use crate::eth::follower::importer::send_block_to_kafka;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::CommitItem;
-use crate::eth::types::ExternalBlock;
-use crate::eth::types::ExternalReceipt;
-use crate::eth::types::ExternalReceipts;
+use crate::eth::storage::StratusStorage;
+use crate::eth::types::Block;
+use crate::eth::types::BlockNumber;
+use crate::ext::to_json_string;
 use crate::infra::kafka::KafkaConnector;
 use crate::log_and_err;
 
 pub struct ReexecutionWorker {
     pub executor: Arc<Executor>,
     pub miner: Arc<Miner>,
+    pub storage: Arc<StratusStorage>,
     pub kafka_connector: Option<KafkaConnector>,
 }
 
 impl ImportData for <ReexecutionWorker as ImporterWorker>::DataType {
-    fn block_number(&self) -> crate::eth::types::BlockNumber {
-        self.0.number()
+    fn block_number(&self) -> BlockNumber {
+        self.number()
     }
 }
 
 impl ImporterWorker for ReexecutionWorker {
-    type DataType = (ExternalBlock, Vec<ExternalReceipt>);
+    type DataType = Block;
 
     #[timed(import_online_mined_block)]
-    async fn import(&self, (block, receipts): Self::DataType) -> anyhow::Result<usize> {
+    async fn import(&self, block: Block) -> anyhow::Result<usize> {
         const TASK_NAME: &str = "block-executor";
 
-        let receipts_len = receipts.len();
+        let receipts_len = block.transactions.len();
 
-        if let Err(e) = self.executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts)) {
-            let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
-            return log_and_err!(reason = e, message);
-        };
+        tracing::info!(block_number = %block.number(), "reexecuting imported block");
 
-        let (mined_block, changes) = match self.miner.mine_external(block) {
-            Ok((mined_block, changes)) => {
-                tracing::info!(number = %mined_block.number(), "mined external block");
-                (mined_block, changes)
-            }
-            Err(e) => {
-                let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
+        for result in reexecute_imported_transactions(self.storage.as_ref(), self.executor.as_ref(), &block) {
+            if let Err(e) = result {
+                let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute imported block");
                 return log_and_err!(reason = e, message);
             }
-        };
+        }
+
+        let (mined_block, changes) = self.miner.mine_local();
+        tracing::info!(number = %mined_block.number(), "mined imported block");
+
+        if let Err(e) = compare_with_imported(&mined_block, &block) {
+            let message = GlobalState::shutdown_from(TASK_NAME, "imported block mismatch between leader and follower");
+            return log_and_err!(reason = e, message);
+        }
 
         send_block_to_kafka(&self.kafka_connector, &mined_block).await?;
 
         match self.miner.commit(CommitItem::Block(mined_block), changes) {
             Ok(_) => {
-                tracing::info!("committed external block");
+                tracing::info!("committed imported block");
             }
             Err(e) => {
-                let message = GlobalState::shutdown_from(TASK_NAME, "failed to commit external block");
+                let message = GlobalState::shutdown_from(TASK_NAME, "failed to commit imported block");
                 return log_and_err!(reason = e, message);
             }
         }
 
         Ok(receipts_len)
     }
+}
+
+/// Compares the re-executed block against the execution results imported from the leader.
+///
+/// The deployed contract address and the mined data indexes are intentionally left unchecked:
+/// historical blocks written by older binaries may carry scan-derived values for those fields,
+/// and they are not consumed downstream.
+fn compare_with_imported(mined_block: &Block, imported: &Block) -> anyhow::Result<()> {
+    if mined_block.number() != imported.number() || mined_block.header.timestamp != imported.header.timestamp || mined_block.hash() != imported.hash() {
+        return log_and_err!(format!(
+            "mismatching block info | mined number={} timestamp={} hash={} imported number={} timestamp={} hash={}",
+            mined_block.number(),
+            mined_block.header.timestamp,
+            mined_block.hash(),
+            imported.number(),
+            imported.header.timestamp,
+            imported.hash()
+        ));
+    }
+
+    let block_number = mined_block.number();
+
+    for (mined_tx, imported_tx) in mined_block.transactions.iter().zip(&imported.transactions) {
+        let mined_result = &mined_tx.execution.output;
+        let imported_result = &imported_tx.execution.output;
+
+        let results_match = mined_result.result.is_success() == imported_result.result.is_success()
+            && mined_result.logs == imported_result.logs
+            && mined_result.gas_used == imported_result.gas_used;
+
+        if !results_match {
+            let json_mined = to_json_string(mined_result);
+            let json_imported = to_json_string(imported_result);
+            let tx_hash = mined_tx.execution.info.hash;
+            return log_and_err!(format!(
+                "reexecution mismatch between leader and follower | block_number={block_number} tx_hash={tx_hash} mined={json_mined} imported={json_imported}"
+            ));
+        }
+    }
+
+    Ok(())
 }

@@ -41,6 +41,8 @@ use tokio::runtime::Handle;
 use tokio::select;
 use tokio::sync::Semaphore;
 use tokio::sync::SemaphorePermit;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tower_http::cors::Any;
 use tower_http::cors::CorsLayer;
 use tracing::Instrument;
@@ -82,10 +84,10 @@ use crate::eth::rpc::middleware::decode_input_arguments;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::pagination;
+use crate::eth::rpc::pagination::ResponseFormat;
 use crate::eth::rpc::parser::RpcExtensionsExt;
 use crate::eth::rpc::parser::parse_rpc_rlp;
 use crate::eth::rpc::subscriptions::RpcSubscriptionsHandles;
-use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::Address;
@@ -96,12 +98,12 @@ use crate::eth::types::DecodeInputError;
 use crate::eth::types::Hash;
 #[cfg(feature = "dev")]
 use crate::eth::types::Nonce;
-use crate::eth::types::PointInTime;
 use crate::eth::types::SlotIndex;
 #[cfg(feature = "dev")]
 use crate::eth::types::SlotValue;
 use crate::eth::types::StateError;
 use crate::eth::types::StratusError;
+use crate::eth::types::TargetState;
 use crate::eth::types::TransactionInput;
 use crate::eth::types::TransactionStage;
 use crate::eth::types::UnexpectedError;
@@ -111,6 +113,7 @@ use crate::ext::InfallibleExt;
 use crate::ext::WatchReceiverExt;
 use crate::ext::not;
 use crate::ext::parse_duration;
+use crate::ext::spawn;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::infra::build_info;
@@ -138,58 +141,106 @@ pub struct Server {
     pub chain_id: ChainId,
 }
 
-impl Server {
-    pub async fn serve(self) -> Result<()> {
-        let this = Arc::new(self);
-        this.update_health().await;
+/// Running JSON-RPC server, stopped by [`Self::shutdown`].
+pub struct RpcServerHandle {
+    shutdown: CancellationToken,
+    serve_task: JoinHandle<()>,
+    health_worker: JoinHandle<()>,
+}
 
+impl RpcServerHandle {
+    /// Stops accepting requests and waits up to `rpc.shutdown_timeout` for the in-flight ones to finish.
+    pub async fn shutdown(self) {
+        tracing::info!("shutting down rpc server");
+        self.shutdown.cancel();
+        if let Err(e) = self.serve_task.await {
+            tracing::error!(reason = ?e, "rpc server task failed");
+        }
+        if let Err(e) = self.health_worker.await {
+            tracing::error!(reason = ?e, "health worker task failed");
+        }
+        tracing::info!("rpc server shut down");
+    }
+}
+
+impl Server {
+    /// Starts serving JSON-RPC requests, restarting the server whenever it becomes unhealthy.
+    pub async fn start(self: &Arc<Self>) -> Result<RpcServerHandle> {
+        self.update_health().await;
+        let (server, subscriptions) = self._serve().await?;
+
+        let shutdown = CancellationToken::new();
+        let health_worker = spawn("rpc::health-worker", Arc::clone(self).health_worker(shutdown.clone()));
+        let serve_task = spawn("rpc-server", Arc::clone(self).serve(server, subscriptions, shutdown.clone()));
+        Ok(RpcServerHandle {
+            shutdown,
+            serve_task,
+            health_worker,
+        })
+    }
+
+    /// Serves requests until `shutdown` is cancelled, then stops accepting requests and waits up to
+    /// `rpc.shutdown_timeout` for the in-flight ones to finish.
+    async fn serve(self: Arc<Self>, mut server: ServerHandle, mut subscriptions: RpcSubscriptionsHandles, shutdown: CancellationToken) {
         const TASK_NAME: &str = "rpc-server";
-        let health_worker_handle = tokio::task::spawn({
-            let this = Arc::clone(&this);
-            async move {
-                this.health_worker().await;
-            }
-        });
-        this.update_health().await;
         let mut health = GlobalState::get_health_receiver();
         health.mark_unchanged();
-        let (server_handle, subscriptions) = loop {
-            let (server_handle, subscriptions) = this._serve().await?;
-            let server_handle_watch = server_handle.clone();
 
-            // await for cancellation or jsonrpsee to stop (should not happen) or health changes
+        loop {
             select! {
-                // If the server stop unexpectedly, shutdown stratus and break the loop
-                _ = server_handle_watch.stopped() => {
+                _ = shutdown.cancelled() => break,
+                _ = server.clone().stopped() => {
                     GlobalState::shutdown_from(TASK_NAME, "finished unexpectedly");
-                    break (server_handle, subscriptions);
+                    break;
                 },
-                // If a shutdown is requested, stop the server and break the loop
-                _ = GlobalState::wait_shutdown_warn(TASK_NAME) => {
-                    let _ = server_handle.stop();
-                    break (server_handle, subscriptions);
-                },
-                // If the health state changes to unhealthy, stop the server and subscriptions and recreate them (causing all connections to be dropped)
+                // If the health state changes to unhealthy, recreate the server and subscriptions, dropping all connections
                 _ = health.wait_for_change(|healthy| GlobalState::restart_on_unhealthy() && !healthy) => {
                     tracing::info!("health state changed to unhealthy, restarting the rpc server");
                     metrics::inc_rpc_server_restarts();
-                    let _ = server_handle.stop();
+                    let _ = server.stop();
                     subscriptions.abort();
-                    join!(server_handle.stopped(), subscriptions.stopped());
+                    join!(server.clone().stopped(), subscriptions.stopped());
+                    match self._serve().await {
+                        Ok(restarted) => (server, subscriptions) = restarted,
+                        Err(e) => {
+                            tracing::error!(reason = ?e, "failed to restart rpc server");
+                            GlobalState::shutdown_from(TASK_NAME, "failed to restart");
+                            return;
+                        }
+                    }
                 }
             }
-        };
-        let res = join!(server_handle.stopped(), subscriptions.stopped(), health_worker_handle);
-        res.2?;
-
-        if let Some(importer_runtime) = this.take_importer_runtime() {
-            importer_runtime.shutdown().await?;
         }
 
-        if let Some(exporter_runtime) = this.take_exporter_runtime() {
-            exporter_runtime.shutdown().await?;
+        let timeout = self.rpc_config.rpc_shutdown_timeout;
+        let _ = server.stop();
+        if tokio::time::timeout(timeout, server.stopped()).await.is_err() {
+            tracing::error!(?timeout, "timed out waiting for in-flight rpc requests to finish");
         }
-        Ok(())
+        subscriptions.abort();
+        subscriptions.stopped().await;
+    }
+
+    /// Shuts down the exporter runtime.
+    pub async fn shutdown_exporter(&self) {
+        tracing::info!("shutting down exporter");
+        if let Some(exporter_runtime) = self.take_exporter_runtime()
+            && let Err(e) = exporter_runtime.shutdown().await
+        {
+            tracing::error!(reason = ?e, "failed to shutdown exporter runtime");
+        }
+        tracing::info!("exporter shut down");
+    }
+
+    /// Shuts down the importer runtime.
+    pub async fn shutdown_importer(&self) {
+        tracing::info!("shutting down importer");
+        if let Some(importer_runtime) = self.take_importer_runtime()
+            && let Err(e) = importer_runtime.shutdown().await
+        {
+            tracing::error!(reason = ?e, "failed to shutdown importer runtime");
+        }
+        tracing::info!("importer shut down");
     }
 
     /// Starts JSON-RPC server.
@@ -248,19 +299,13 @@ impl Server {
         Ok((handle_rpc_server, subs.handles))
     }
 
-    pub async fn health_worker(&self) {
-        // Create an interval that ticks at the configured interval
-        let mut interval = tokio::time::interval(std::time::Duration::from_millis(self.rpc_config.health_check_interval_ms));
-
-        // Enter an infinite loop to periodically run the health check
+    /// Updates the health status at the configured interval until `shutdown` is cancelled.
+    async fn health_worker(self: Arc<Self>, shutdown: CancellationToken) {
+        let mut interval = tokio::time::interval(Duration::from_millis(self.rpc_config.health_check_interval_ms));
         loop {
-            // Call the health function and ignore its result
-            self.update_health().await;
-
-            // Wait for the next tick
-            interval.tick().await;
-            if GlobalState::is_shutdown() {
-                break;
+            select! {
+                _ = interval.tick() => self.update_health().await,
+                _ = shutdown.cancelled() => return,
             }
         }
     }
@@ -342,7 +387,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_enableTransactions", stratus_enable_transactions)?;
     module.register_method("stratus_disableTransactions", stratus_disable_transactions)?;
     module.register_method("stratus_enableMiner", stratus_enable_miner)?;
-    module.register_method("stratus_disableMiner", stratus_disable_miner)?;
+    module.register_blocking_method("stratus_disableMiner", stratus_disable_miner)?;
     module.register_method("stratus_enableUnknownClients", stratus_enable_unknown_clients)?;
     module.register_method("stratus_disableUnknownClients", stratus_disable_unknown_clients)?;
     module.register_method("stratus_blockClient", stratus_block_client)?;
@@ -844,9 +889,9 @@ fn stratus_enable_miner(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) -> Re
     Ok(true)
 }
 
-fn stratus_disable_miner(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) -> Result<bool, StratusError> {
+fn stratus_disable_miner(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<bool, StratusError> {
     ext.authentication().auth_admin()?;
-    ctx.server.miner.pause();
+    ctx.server.miner.pause()?;
     Ok(false)
 }
 
@@ -978,21 +1023,29 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     let (sequence, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
     let pagination = pagination::parse_request(sequence)?;
 
-    // track
-    tracing::info!(%filter, "reading block and receipts");
+    let response_format = pagination.as_ref().and_then(|params| params.format).unwrap_or_default();
 
-    let Some(block) = ctx.server.storage.read_block(filter)? else {
+    // track
+    tracing::info!(%filter, %response_format, "reading block and receipts");
+
+    // serialize in the requested format, reading the stored shape directly when possible
+    let Some(value) = (match response_format {
+        ResponseFormat::Stratus => ctx.server.storage.read_block_rocksdb(filter)?.map(|block| {
+            tracing::info!(%filter, "block with transactions found");
+            to_json_value(block)
+        }),
+        ResponseFormat::Alloy => ctx.server.storage.read_block(filter)?.map(|block| {
+            tracing::info!(%filter, "block with transactions found");
+            let receipts = block.transactions.iter().cloned().map(AlloyReceipt::from).collect::<Vec<_>>();
+            json!({
+                "block": block.to_json_rpc_with_full_transactions(),
+                "receipts": receipts,
+            })
+        }),
+    }) else {
         tracing::info!(%filter, "block not found");
         return Ok(to_raw_value(&JsonValue::Null).expect_infallible());
     };
-
-    tracing::info!(%filter, "block with transactions found");
-    let receipts = block.transactions.iter().cloned().map(AlloyReceipt::from).collect::<Vec<_>>();
-
-    let value = json!({
-        "block": block.to_json_rpc_with_full_transactions(),
-        "receipts": receipts,
-    });
 
     pagination::respond(value, pagination, ctx.server.rpc_config.rpc_max_response_size_bytes)
 }
@@ -1222,9 +1275,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     if let Some(to_address) = call.to
         && !call.data.is_empty()
     {
-        ctx.server
-            .executor
-            .validate_to_is_contract(to_address, ExecutionKind::RPC(PointInTime::Latest))?;
+        ctx.server.executor.validate_to_is_contract(to_address, TargetState::Latest)?;
     }
 
     let block_number = ctx.server.storage.read_mined_block_number();
@@ -1232,7 +1283,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     match ctx
         .server
         .executor
-        .execute_local_call::<CallExecutionOutput>(call, ExecutionKind::call_from_pit(PointInTime::Latest, block_number))
+        .execute_local_call::<CallExecutionOutput>(call, TargetState::LatestPinned(block_number))
     {
         // result is success
         Ok(result) if result.success => {
@@ -1269,17 +1320,15 @@ fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<CallExecutionOut
     tracing::info!(%filter, "executing eth_call");
 
     // execute
-    let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
-    let block_number = ctx.server.storage.translate_to_block_number(filter)?;
+    let target_state = ctx.server.storage.translate_to_pinned_target_state(filter)?;
 
     if let Some(to_address) = call.to
         && !call.data.is_empty()
     {
-        ctx.server.executor.validate_to_is_contract(to_address, ExecutionKind::RPC(point_in_time))?;
+        ctx.server.executor.validate_to_is_contract(to_address, target_state)?;
     }
-    ctx.server
-        .executor
-        .execute_local_call(call, ExecutionKind::call_from_pit(point_in_time, block_number))
+
+    ctx.server.executor.execute_local_call(call, target_state)
 }
 
 fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
@@ -1382,14 +1431,12 @@ fn stratus_access_list(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
     if let Some(to_address) = call.to
         && !call.data.is_empty()
     {
-        ctx.server
-            .executor
-            .validate_to_is_contract(to_address, ExecutionKind::RPC(PointInTime::Latest))?;
+        ctx.server.executor.validate_to_is_contract(to_address, TargetState::Latest)?;
     }
 
     ctx.server
         .executor
-        .execute_local_call::<AccessListOutput>(call, ExecutionKind::AccessList)
+        .execute_local_call::<AccessListOutput>(call, TargetState::Latest)
         .map(to_json_value)
         .inspect(|_| tracing::info!("executed stratus_accessList with success"))
         .inspect_err(|e| tracing::warn!(reason = ?e, "failed to execute stratus_accessList"))
@@ -1399,6 +1446,7 @@ pub fn eth_send_raw_transaction<'a>(
     mut request: Request<'a>,
     ctx: Arc<RpcContext>,
     span: Span,
+    with_receipt: bool,
 ) -> Result<(BoxFuture<'a, MethodResponse>, Option<TransactionTracingIdentifiers>), StratusError> {
     let enter = span.enter();
     let params = request.params();
@@ -1421,7 +1469,7 @@ pub fn eth_send_raw_transaction<'a>(
     let ext_clone = ext.clone();
 
     let future = {
-        let prepared_handle = tokio::task::spawn_blocking(move || _prepare_eth_send_raw_transaction(input, data, access_list, ctx, ext));
+        let prepared_handle = tokio::task::spawn_blocking(move || _prepare_eth_send_raw_transaction(input, data, access_list, ctx, ext, with_receipt));
         async move {
             let prepared = prepared_handle.await;
 
@@ -1433,10 +1481,14 @@ pub fn eth_send_raw_transaction<'a>(
                     data,
                     access_list,
                 })) => {
-                    let result = importer.forward_to_leader(tx_hash, data, access_list).await.map(hex_data).into_response();
-                    MethodResponse::response(id, result, usize::MAX)
+                    let result = if with_receipt {
+                        importer.forward_and_get_receipt(tx_hash, data, access_list).await.map(to_json_value)
+                    } else {
+                        importer.forward(tx_hash, data, access_list).await.map(|hash| to_json_value(hex_data(hash)))
+                    };
+                    MethodResponse::response(id, result.into_response(), usize::MAX)
                 }
-                Ok(Err(err)) => MethodResponse::response(id, Err::<String, _>(err).into_response(), usize::MAX),
+                Ok(Err(err)) => MethodResponse::response(id, Err::<JsonValue, _>(err).into_response(), usize::MAX),
                 Err(err) => {
                     tracing::error!("Join error for blocking RPC method: {:?}", err);
                     MethodResponse::error(
@@ -1454,7 +1506,7 @@ pub fn eth_send_raw_transaction<'a>(
 }
 
 enum PreparedRawTransaction {
-    Complete(Result<String, StratusError>),
+    Complete(Result<JsonValue, StratusError>),
     Forward {
         importer: Arc<ImporterConsensus>,
         tx_hash: Hash,
@@ -1469,11 +1521,13 @@ fn _prepare_eth_send_raw_transaction(
     access_list: Option<AccessListOutput>,
     ctx: Arc<RpcContext>,
     ext: Extensions,
+    with_receipt: bool,
 ) -> Result<PreparedRawTransaction, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!(
         "rpc::eth_sendRawTransaction",
+        with_receipt,
         tx_hash = field::Empty,
         tx_from = field::Empty,
         tx_to = field::Empty,
@@ -1496,24 +1550,37 @@ fn _prepare_eth_send_raw_transaction(
         return Err(StateError::TransactionsDisabled.into());
     }
 
-    // validate that the target account is a contract before acquiring the executor lock or forwarding to the
-    // leader, so calls to non-contract accounts are rejected early
+    // Validate the target account before executing or forwarding the transaction.
     if let Some(to_address) = tx.execution_info.to
         && !tx.execution_info.input.is_empty()
     {
-        ctx.server.executor.validate_to_is_contract(to_address, ExecutionKind::Transaction)?;
+        ctx.server.executor.validate_to_is_contract(to_address, TargetState::Pending)?;
     };
 
     // Execute locally, or prepare synchronous access-list work before forwarding asynchronously.
     match GlobalState::get_node_mode() {
         NodeMode::Leader | NodeMode::FakeLeader => {
-            let result = match ctx.server.executor.execute_local_transaction(tx, access_list) {
-                Ok(_) => Ok(hex_data(tx_hash)),
-                Err(e) => {
-                    tracing::warn!(reason = ?e, ?tx_hash, "failed to execute eth_sendRawTransaction");
-                    Err(e)
-                }
-            };
+            let result = if with_receipt {
+                ctx.server.executor.execute_local_transaction(tx, access_list).and_then(|()| {
+                    ctx.server
+                        .storage
+                        .read_transaction(tx_hash)?
+                        .map(AlloyReceipt::from)
+                        .map(to_json_value)
+                        .ok_or_else(|| {
+                            StorageError::Unexpected {
+                                msg: format!("executed transaction {tx_hash} must have a stored receipt"),
+                            }
+                            .into()
+                        })
+                })
+            } else {
+                ctx.server
+                    .executor
+                    .execute_local_transaction(tx, access_list)
+                    .map(|()| to_json_value(hex_data(tx_hash)))
+            }
+            .inspect_err(|e| tracing::warn!(reason = ?e, ?tx_hash, with_receipt, "failed to execute transaction submission"));
             Ok(PreparedRawTransaction::Complete(result))
         }
         NodeMode::Follower => match ctx.server.read_importer() {
@@ -1618,8 +1685,8 @@ fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     });
     tracing::info!(%address, %filter, "reading account nonce");
 
-    let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
-    let (account, _) = ctx.server.storage.read_account(address, ExecutionKind::RPC(point_in_time))?;
+    let target_state = ctx.server.storage.translate_to_target_state(filter)?;
+    let (account, _) = ctx.server.storage.read_account(address, target_state)?;
     Ok(hex_num(account.nonce))
 }
 
@@ -1640,8 +1707,8 @@ fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) ->
     tracing::info!(%address, %filter, "reading account native balance");
 
     // execute
-    let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
-    let (account, _) = ctx.server.storage.read_account(address, ExecutionKind::RPC(point_in_time))?;
+    let target_state = ctx.server.storage.translate_to_target_state(filter)?;
+    let (account, _) = ctx.server.storage.read_account(address, target_state)?;
     Ok(hex_num(account.balance))
 }
 
@@ -1661,8 +1728,8 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     });
 
     // execute
-    let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
-    let (account, _) = ctx.server.storage.read_account(address, ExecutionKind::RPC(point_in_time))?;
+    let target_state = ctx.server.storage.translate_to_target_state(filter)?;
+    let (account, _) = ctx.server.storage.read_account(address, target_state)?;
 
     Ok(account.bytecode.map(|bytecode| hex_data(bytecode.original_bytes())).unwrap_or_else(hex_null))
 }
@@ -1753,8 +1820,8 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions)
     });
 
     // execute
-    let point_in_time = ctx.server.storage.translate_to_point_in_time(block_filter)?;
-    let (slot, _) = ctx.server.storage.read_slot(address, index, ExecutionKind::RPC(point_in_time))?;
+    let target_state = ctx.server.storage.translate_to_target_state(block_filter)?;
+    let (slot, _) = ctx.server.storage.read_slot(address, index, target_state)?;
 
     // It must be padded, even if it is zero.
     Ok(hex_num_zero_padded(slot.value.as_u256()))

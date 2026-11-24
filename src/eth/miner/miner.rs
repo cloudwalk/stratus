@@ -4,7 +4,6 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use anyhow::anyhow;
 use parking_lot::Mutex;
 use parking_lot::MutexGuard;
 use parking_lot::RwLock;
@@ -19,17 +18,16 @@ use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::types::state::Complete;
 use crate::eth::miner::MinerMode;
+use crate::eth::storage::JournalRecord;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::Block;
 use crate::eth::types::BlockHeader;
-use crate::eth::types::ExternalBlock;
 use crate::eth::types::Hash;
 use crate::eth::types::LogMessage;
 use crate::eth::types::StratusError;
 use crate::ext::DisplayExt;
 use crate::ext::not;
-use crate::globals::STRATUS_SHUTDOWN_SIGNAL;
 use crate::infra::tracing::SpanExt;
 
 cfg_if::cfg_if! {
@@ -54,7 +52,7 @@ pub struct Miner {
 
     storage: Arc<StratusStorage>,
 
-    /// Miner is enabled by default, but can be disabled.
+    /// Set by [`Self::pause`] to stop interval and automine block mining.
     is_paused: AtomicBool,
 
     /// Mode the block miner is running.
@@ -111,7 +109,7 @@ impl Miner {
             notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
-            shutdown_signal: Mutex::new(STRATUS_SHUTDOWN_SIGNAL.child_token()),
+            shutdown_signal: Mutex::new(CancellationToken::new()),
             interval_joinset: AsyncMutex::new(None),
         }
     }
@@ -131,7 +129,7 @@ impl Miner {
 
         // spawn miner and ticker
         let (ticks_tx, ticks_rx) = mpsc::channel();
-        let new_shutdown_signal = STRATUS_SHUTDOWN_SIGNAL.child_token();
+        let new_shutdown_signal = CancellationToken::new();
         let mut joinset = JoinSet::new();
 
         joinset.spawn_blocking({
@@ -157,17 +155,38 @@ impl Miner {
         self.unpause();
     }
 
-    // Unpause interval miner (if in interval mode)
+    /// Resumes interval and automine block mining.
     pub fn unpause(&self) {
         self.is_paused.store(false, Ordering::Relaxed);
     }
 
-    // Pause interval miner (if in interval mode)
-    pub fn pause(&self) {
-        self.is_paused.store(true, Ordering::Relaxed);
+    /// Stops interval and automine block mining and commits the pending block.
+    ///
+    /// Waits for the block being mined to be committed. Calling it while paused is a no-op, so executions saved after
+    /// the first call stay in the pending block.
+    pub fn pause(&self) -> Result<(), StorageError> {
+        // miners check `is_paused` while holding this lock, so no block is mined after it is released
+        let _mine_and_commit_lock = self.locks.mine_and_commit.lock();
+
+        if self.is_paused.swap(true, Ordering::Relaxed) {
+            return Ok(());
+        }
+        tracing::info!("pausing miner");
+
+        if self.mode().is_external() {
+            return Ok(());
+        }
+
+        let pending_transactions = self.storage.pending_transactions().len();
+        if pending_transactions == 0 {
+            return Ok(());
+        }
+
+        tracing::info!(%pending_transactions, "committing pending block");
+        let (block, changes) = self.mine_local();
+        self.commit(CommitItem::Block(block), changes)
     }
 
-    // Whether or not interval miner is paused (means nothing if not in interval mode)
     pub fn is_paused(&self) -> bool {
         self.is_paused.load(Ordering::Relaxed)
     }
@@ -199,7 +218,7 @@ impl Miner {
             return;
         };
 
-        tracing::warn!("shutting down interval miner to switch to external mode");
+        tracing::warn!("shutting down interval miner");
 
         self.shutdown_signal.lock().cancel();
 
@@ -211,8 +230,23 @@ impl Miner {
         }
     }
 
-    /// Persists a transaction execution.
-    pub fn save_execution(&self, tx_execution: TransactionExecution, state: State<Complete>) -> Result<(), StratusError> {
+    /// Pauses the miner through [`Self::pause`], committing the pending block, and stops the interval miner.
+    pub async fn shutdown(&self) {
+        tracing::info!("shutting down miner");
+        if let Err(e) = self.pause() {
+            tracing::error!(reason = ?e, "failed to commit pending block");
+        }
+        self.shutdown_and_wait().await;
+        tracing::info!("miner shut down");
+    }
+
+    /// Persists a transaction execution, appending its journal record to the pending block journal when provided.
+    pub fn save_execution(
+        &self,
+        tx_execution: TransactionExecution,
+        state: State<Complete>,
+        journal_record: Option<&JournalRecord>,
+    ) -> Result<(), StratusError> {
         let tx_hash = tx_execution.info.hash;
 
         // track
@@ -226,7 +260,7 @@ impl Miner {
         let _save_execution_lock = if is_automine { Some(self.locks.save_execution.lock()) } else { None };
 
         // save execution to temporary storage
-        self.storage.save_execution(tx_execution, state)?;
+        self.storage.save_execution(tx_execution, state, journal_record)?;
 
         // notify
         if self.has_pending_tx_subscribers() {
@@ -235,42 +269,14 @@ impl Miner {
 
         // if automine is enabled, automatically mines a block
         if is_automine {
-            self.mine_local_and_commit()?;
+            let _mine_and_commit_lock = self.locks.mine_and_commit.lock();
+            if not(self.is_paused()) {
+                let (block, changes) = self.mine_local();
+                self.commit(CommitItem::Block(block), changes)?;
+            }
         }
 
         Ok(())
-    }
-
-    /// Mines external block and external transactions.
-    ///
-    /// Local transactions are not allowed to be part of the block.
-    pub fn mine_external(&self, external_block: ExternalBlock) -> anyhow::Result<(Block, State<Complete>)> {
-        // track
-        #[cfg(feature = "tracing")]
-        let _span = info_span!("miner::mine_external", block_number = field::Empty).entered();
-
-        // lock
-        let _mine_lock = self.locks.mine.lock();
-
-        // mine block
-        let (pending_block, changes) = self.storage.finish_pending_block();
-        let mut block: Block = pending_block.into();
-
-        Span::with(|s| s.rec_str("block_number", &block.header.number));
-        block.apply_external(&external_block);
-
-        match external_block == block {
-            true => Ok((block, changes)),
-            false => Err(anyhow!(
-                "mismatching block info:\n\tlocal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}\n\texternal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}",
-                block.number(),
-                block.header.timestamp,
-                block.hash(),
-                external_block.number(),
-                external_block.timestamp(),
-                external_block.hash()
-            )),
-        }
     }
 
     /// Same as [`Self::mine_local`], but automatically commits the block instead of returning it.
@@ -426,6 +432,8 @@ pub mod interval_miner {
                 }
             };
 
+            // checked under the lock so `Miner::pause` waits for this block and no block is mined after it returns
+            let miner_guard = miner.locks.mine_and_commit.lock();
             if miner.is_paused() {
                 tracing::warn!("skipping mining block because block mining is paused");
                 continue;
@@ -433,7 +441,6 @@ pub mod interval_miner {
 
             // mine
             tracing::info!(lag_us = %tick.elapsed().as_micros(), "interval mining block");
-            let miner_guard = miner.locks.mine_and_commit.lock();
             let (block, changes) = miner.mine_local();
             commit_retry(&miner, block, changes, miner_guard);
         }
@@ -483,16 +490,92 @@ mod interval_miner_ticker {
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Burst);
 
         loop {
-            if cancellation.is_cancelled() {
-                warn_task_cancellation(TASK_NAME);
-                return;
-            }
-
-            let tick = ticker.tick().await;
+            let tick = tokio::select! {
+                tick = ticker.tick() => tick,
+                _ = cancellation.cancelled() => {
+                    warn_task_cancellation(TASK_NAME);
+                    return;
+                }
+            };
             if ticks_tx.send(tick).is_err() {
                 warn_task_rx_closed(TASK_NAME);
                 break;
             };
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::eth::rpc::BlockFilter;
+
+    fn miner_with_pending_execution(mode: MinerMode) -> (Arc<StratusStorage>, Miner) {
+        let storage = Arc::new(StratusStorage::new_test().expect("failed to build test storage"));
+        let miner = Miner::new(Arc::clone(&storage), mode);
+        miner.save_execution(storage.mock_execution(), State::default(), None).expect("save execution");
+        (storage, miner)
+    }
+
+    #[tokio::test]
+    async fn shutdown_commits_pending_block() {
+        let (storage, miner) = miner_with_pending_execution(MinerMode::Interval(Duration::from_secs(1)));
+        let pending_number = storage.read_pending_block_header().number;
+
+        miner.shutdown().await;
+
+        assert_eq!(storage.read_mined_block_number(), pending_number);
+        let block = storage.read_block(BlockFilter::Number(pending_number)).expect("read block");
+        assert_eq!(block.expect("committed block").transactions.len(), 1);
+        assert!(storage.pending_transactions().is_empty());
+    }
+
+    #[test]
+    fn pause_commits_pending_block() {
+        let (storage, miner) = miner_with_pending_execution(MinerMode::Interval(Duration::from_secs(1)));
+        let pending_number = storage.read_pending_block_header().number;
+
+        miner.pause().expect("pause");
+
+        assert!(miner.is_paused());
+        assert_eq!(storage.read_mined_block_number(), pending_number);
+        assert!(storage.pending_transactions().is_empty());
+    }
+
+    #[tokio::test]
+    async fn shutdown_after_pause_keeps_pending_block() {
+        let (storage, miner) = miner_with_pending_execution(MinerMode::Interval(Duration::from_secs(1)));
+        miner.pause().expect("pause");
+        let mined_number = storage.read_mined_block_number();
+        miner.save_execution(storage.mock_execution(), State::default(), None).expect("save execution");
+
+        miner.shutdown().await;
+
+        assert_eq!(storage.read_mined_block_number(), mined_number);
+        assert_eq!(storage.pending_transactions().len(), 1);
+    }
+
+    #[test]
+    fn automine_while_paused_keeps_pending_block() {
+        let storage = Arc::new(StratusStorage::new_test().expect("failed to build test storage"));
+        let miner = Miner::new(Arc::clone(&storage), MinerMode::Automine);
+        miner.pause().expect("pause");
+        let mined_number = storage.read_mined_block_number();
+
+        miner.save_execution(storage.mock_execution(), State::default(), None).expect("save execution");
+
+        assert_eq!(storage.read_mined_block_number(), mined_number);
+        assert_eq!(storage.pending_transactions().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn shutdown_in_external_mode_keeps_pending_block() {
+        let (storage, miner) = miner_with_pending_execution(MinerMode::External);
+        let mined_number = storage.read_mined_block_number();
+
+        miner.shutdown().await;
+
+        assert_eq!(storage.read_mined_block_number(), mined_number);
+        assert_eq!(storage.pending_transactions().len(), 1);
     }
 }

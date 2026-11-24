@@ -46,10 +46,17 @@ where
 }
 
 impl ReexecutionFollower {
-    fn new(executor: Arc<Executor>, miner: Arc<Miner>, chain: Arc<BlockchainClient>, kafka_connector: Option<KafkaConnector>) -> Self {
+    fn new(
+        executor: Arc<Executor>,
+        miner: Arc<Miner>,
+        storage: Arc<StratusStorage>,
+        chain: Arc<BlockchainClient>,
+        kafka_connector: Option<KafkaConnector>,
+    ) -> Self {
         let importer = ReexecutionWorker {
             executor,
             miner,
+            storage,
             kafka_connector,
         };
 
@@ -137,7 +144,7 @@ pub async fn start_importer(
                 .await?;
         }
         ImporterMode::ReexecutionFollower => {
-            ReexecutionFollower::new(executor, miner, Arc::clone(&chain), kafka_connector)
+            ReexecutionFollower::new(executor, miner, storage, Arc::clone(&chain), kafka_connector)
                 .run(resume_from, sync_interval, chain, stop_at_block)
                 .await?;
         }
