@@ -173,7 +173,6 @@ impl CommonConfig {
 
 /// Configuration for main Stratus service.
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
-#[cfg_attr(test, derive(Default))]
 #[clap(group = ArgGroup::new("mode").args(&["leader", "follower", "fake_leader"]).required(true))]
 pub struct StratusConfig {
     #[arg(id = "leader", long = "leader", conflicts_with_all = ["follower", "fake_leader"])]

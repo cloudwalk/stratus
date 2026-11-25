@@ -32,7 +32,6 @@ impl Drop for DropTimer {
 
 #[derive(Deref, Default)]
 pub struct Semaphore {
-    // refac to another file
     #[deref]
     sem: Arc<SemaphoreInner>,
 }
