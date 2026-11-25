@@ -73,10 +73,6 @@ impl KindGate {
 
 /// Admission control of the unified EVM pool: tasks of any kind are admitted immediately while the
 /// pool is below the busy threshold, and limited per kind above it.
-///
-/// Both paths are counted by the same per-kind in-flight counters, so when the busy threshold is
-/// crossed and throttling starts, executions that were admitted without a limit check are already
-/// accounted for.
 pub struct PoolAdmission {
     call_present: Arc<KindGate>,
     call_past: Arc<KindGate>,
