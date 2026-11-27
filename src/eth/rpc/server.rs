@@ -1,6 +1,7 @@
 //! RPC server for HTTP and WS.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -37,6 +38,7 @@ use serde_json::json;
 use serde_json::value::RawValue;
 use serde_json::value::to_raw_value;
 use stratus_metrics as metrics;
+use strum::IntoEnumIterator;
 use tokio::runtime::Handle;
 use tokio::select;
 use tokio::sync::Semaphore;
@@ -75,6 +77,7 @@ use crate::eth::rpc::LogFilterInput;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcHttpMiddleware;
+use crate::eth::rpc::RpcMethod;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::rpc::RpcSubscriptions;
@@ -272,10 +275,10 @@ impl Server {
         let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |service| RpcMiddleware::new(service, Arc::clone(&ctx)));
         let http_middleware = tower::ServiceBuilder::new().layer(cors).layer_fn(RpcHttpMiddleware::new).layer(
             ProxyGetRequestLayer::new([
-                ("/health", "stratus_health"),
-                ("/version", "stratus_version"),
-                ("/config", "stratus_config"),
-                ("/state", "stratus_state"),
+                ("/health", RpcMethod::StratusHealth.as_str()),
+                ("/version", RpcMethod::StratusVersion.as_str()),
+                ("/config", RpcMethod::StratusConfig.as_str()),
+                ("/state", RpcMethod::StratusState.as_str()),
             ])
             .unwrap(),
         );
@@ -362,110 +365,301 @@ impl Server {
 }
 
 fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModule<RpcContext>> {
-    // dev mode methods
-    #[cfg(feature = "dev")]
+    for method in RpcMethod::iter() {
+        register_method(&mut module, method)?;
+    }
+    Ok(module)
+}
+
+/// jsonrpsee registration wrappers taking the wire name from [`RpcMethod`], so the registration
+/// call sites and the enum cannot drift apart.
+trait RpcModuleRegisterExt {
+    /// Synchronous flavor, forwards to [`RpcModule::register_method`].
+    fn register<R, F>(&mut self, method: RpcMethod, callback: F) -> anyhow::Result<()>
+    where
+        R: IntoResponse + 'static,
+        F: Fn(Params, &RpcContext, &Extensions) -> R + Send + Sync + 'static;
+
+    /// Blocking flavor, forwards to [`RpcModule::register_blocking_method`].
+    fn register_blocking<R, F>(&mut self, method: RpcMethod, callback: F) -> anyhow::Result<()>
+    where
+        R: IntoResponse + 'static,
+        F: Fn(Params, Arc<RpcContext>, Extensions) -> R + Clone + Send + Sync + 'static;
+
+    /// Async flavor, forwards to [`RpcModule::register_async_method`].
+    fn register_async<R, Fun, Fut>(&mut self, method: RpcMethod, callback: Fun) -> anyhow::Result<()>
+    where
+        R: IntoResponse + 'static,
+        Fun: Fn(Params<'static>, Arc<RpcContext>, Extensions) -> Fut + Clone + Send + Sync + 'static,
+        Fut: Future<Output = R> + Send;
+}
+
+impl RpcModuleRegisterExt for RpcModule<RpcContext> {
+    fn register<R, F>(&mut self, method: RpcMethod, callback: F) -> anyhow::Result<()>
+    where
+        R: IntoResponse + 'static,
+        F: Fn(Params, &RpcContext, &Extensions) -> R + Send + Sync + 'static,
     {
-        module.register_blocking_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
-        module.register_blocking_method("evm_mine", evm_mine)?;
-        module.register_blocking_method("hardhat_reset", stratus_reset)?;
-        module.register_blocking_method("stratus_reset", stratus_reset)?;
-        module.register_blocking_method("hardhat_setStorageAt", stratus_set_storage_at)?;
-        module.register_blocking_method("stratus_setStorageAt", stratus_set_storage_at)?;
-        module.register_blocking_method("hardhat_setNonce", stratus_set_nonce)?;
-        module.register_blocking_method("stratus_setNonce", stratus_set_nonce)?;
-        module.register_blocking_method("hardhat_setBalance", stratus_set_balance)?;
-        module.register_blocking_method("stratus_setBalance", stratus_set_balance)?;
-        module.register_blocking_method("hardhat_setCode", stratus_set_code)?;
-        module.register_blocking_method("stratus_setCode", stratus_set_code)?;
-        module.register_blocking_method("stratus_clearCache", stratus_clear_cache)?;
+        self.register_method(method.as_str(), callback)?;
+        Ok(())
     }
 
-    // stratus status
-    module.register_async_method("stratus_health", stratus_health)?;
+    fn register_blocking<R, F>(&mut self, method: RpcMethod, callback: F) -> anyhow::Result<()>
+    where
+        R: IntoResponse + 'static,
+        F: Fn(Params, Arc<RpcContext>, Extensions) -> R + Clone + Send + Sync + 'static,
+    {
+        self.register_blocking_method(method.as_str(), callback)?;
+        Ok(())
+    }
 
-    // stratus admin
-    module.register_method("stratus_enableTransactions", stratus_enable_transactions)?;
-    module.register_method("stratus_disableTransactions", stratus_disable_transactions)?;
-    module.register_method("stratus_enableMiner", stratus_enable_miner)?;
-    module.register_blocking_method("stratus_disableMiner", stratus_disable_miner)?;
-    module.register_method("stratus_enableUnknownClients", stratus_enable_unknown_clients)?;
-    module.register_method("stratus_disableUnknownClients", stratus_disable_unknown_clients)?;
-    module.register_method("stratus_blockClient", stratus_block_client)?;
-    module.register_method("stratus_unblockClient", stratus_unblock_client)?;
-    module.register_method("stratus_clearBlockedClients", stratus_clear_blocked_clients)?;
-    module.register_method("stratus_enableRestartOnUnhealthy", stratus_enable_restart_on_unhealthy)?;
-    module.register_method("stratus_disableRestartOnUnhealthy", stratus_disable_restart_on_unhealthy)?;
-    module.register_async_method("stratus_changeToLeader", stratus_change_to_leader)?;
-    module.register_async_method("stratus_changeToFollower", stratus_change_to_follower)?;
-    module.register_async_method("stratus_initImporter", stratus_init_importer)?;
-    module.register_async_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
-    module.register_async_method("stratus_changeMinerMode", stratus_change_miner_mode)?;
-    module.register_async_method("stratus_emitBlockEvents", stratus_emit_block_events)?;
+    fn register_async<R, Fun, Fut>(&mut self, method: RpcMethod, callback: Fun) -> anyhow::Result<()>
+    where
+        R: IntoResponse + 'static,
+        Fun: Fn(Params<'static>, Arc<RpcContext>, Extensions) -> Fut + Clone + Send + Sync + 'static,
+        Fut: Future<Output = R> + Send,
+    {
+        self.register_async_method(method.as_str(), callback)?;
+        Ok(())
+    }
+}
 
-    // stratus state
-    module.register_method("stratus_version", stratus_version)?;
-    module.register_method("stratus_config", stratus_config)?;
-    module.register_method("stratus_state", stratus_state)?;
+/// Registers a single method on the module, dispatching to the jsonrpsee flavor it requires.
+///
+/// The exhaustive match guarantees every [`RpcMethod`] variant is either registered here or
+/// explicitly skipped: the middleware-intercepted transaction submission pair is a no-op (see
+/// [`RpcMethod::is_module_registered`]) and `eth_unsubscribe` is registered as a side effect of
+/// the `eth_subscribe` subscription.
+fn register_method(module: &mut RpcModule<RpcContext>, method: RpcMethod) -> anyhow::Result<()> {
+    match method {
+        RpcMethod::EthSendRawTransaction | RpcMethod::StratusSendRawTransactionAndGetReceipt => {}
+        RpcMethod::EthUnsubscribe => {}
 
-    module.register_async_method("stratus_getSubscriptions", stratus_get_subscriptions)?;
-    module.register_method("stratus_pendingTransactionsCount", stratus_pending_transactions_count)?;
+        RpcMethod::StratusHealth => {
+            module.register_async(method, stratus_health)?;
+        }
 
-    // blockchain
-    module.register_method("net_version", net_version)?;
-    module.register_async_method("net_listening", net_listening)?;
-    module.register_method("eth_chainId", eth_chain_id)?;
-    module.register_method("web3_clientVersion", web3_client_version)?;
+        RpcMethod::StratusEnableTransactions => {
+            module.register(method, stratus_enable_transactions)?;
+        }
+        RpcMethod::StratusDisableTransactions => {
+            module.register(method, stratus_disable_transactions)?;
+        }
+        RpcMethod::StratusEnableMiner => {
+            module.register(method, stratus_enable_miner)?;
+        }
+        RpcMethod::StratusDisableMiner => {
+            module.register_blocking(method, stratus_disable_miner)?;
+        }
+        RpcMethod::StratusEnableUnknownClients => {
+            module.register(method, stratus_enable_unknown_clients)?;
+        }
+        RpcMethod::StratusDisableUnknownClients => {
+            module.register(method, stratus_disable_unknown_clients)?;
+        }
+        RpcMethod::StratusBlockClient => {
+            module.register(method, stratus_block_client)?;
+        }
+        RpcMethod::StratusUnblockClient => {
+            module.register(method, stratus_unblock_client)?;
+        }
+        RpcMethod::StratusClearBlockedClients => {
+            module.register(method, stratus_clear_blocked_clients)?;
+        }
+        RpcMethod::StratusEnableRestartOnUnhealthy => {
+            module.register(method, stratus_enable_restart_on_unhealthy)?;
+        }
+        RpcMethod::StratusDisableRestartOnUnhealthy => {
+            module.register(method, stratus_disable_restart_on_unhealthy)?;
+        }
+        RpcMethod::StratusChangeToLeader => {
+            module.register_async(method, stratus_change_to_leader)?;
+        }
+        RpcMethod::StratusChangeToFollower => {
+            module.register_async(method, stratus_change_to_follower)?;
+        }
+        RpcMethod::StratusInitImporter => {
+            module.register_async(method, stratus_init_importer)?;
+        }
+        RpcMethod::StratusShutdownImporter => {
+            module.register_async(method, stratus_shutdown_importer)?;
+        }
+        RpcMethod::StratusChangeMinerMode => {
+            module.register_async(method, stratus_change_miner_mode)?;
+        }
+        RpcMethod::StratusEmitBlockEvents => {
+            module.register_async(method, stratus_emit_block_events)?;
+        }
 
-    // gas
-    module.register_method("eth_gasPrice", eth_gas_price)?;
+        RpcMethod::StratusVersion => {
+            module.register(method, stratus_version)?;
+        }
+        RpcMethod::StratusConfig => {
+            module.register(method, stratus_config)?;
+        }
+        RpcMethod::StratusState => {
+            module.register(method, stratus_state)?;
+        }
+        RpcMethod::StratusGetSubscriptions => {
+            module.register_async(method, stratus_get_subscriptions)?;
+        }
+        RpcMethod::StratusPendingTransactionsCount => {
+            module.register(method, stratus_pending_transactions_count)?;
+        }
 
-    // stratus importing helpers
-    // dispatched to the dedicated exporter runtime, so importer requests cannot stall behind a
-    // saturated main blocking pool (which makes followers fall behind)
-    module.register_async_method("stratus_getBlockAndReceipts", |params, ctx, ext| {
-        dispatch_exporter_method(stratus_get_block_and_receipts, params, ctx, ext)
-    })?;
-    module.register_async_method("stratus_getBlockWithChanges", |params, ctx, ext| {
-        dispatch_exporter_method(stratus_get_block_with_changes, params, ctx, ext)
-    })?;
+        RpcMethod::NetVersion => {
+            module.register(method, net_version)?;
+        }
+        RpcMethod::NetListening => {
+            module.register_async(method, net_listening)?;
+        }
+        RpcMethod::EthChainId => {
+            module.register(method, eth_chain_id)?;
+        }
+        RpcMethod::Web3ClientVersion => {
+            module.register(method, web3_client_version)?;
+        }
 
-    // block
-    // `eth_blockNumber` is on the follower sync critical path (polled every sync interval), so it
-    // is also dispatched to the dedicated exporter runtime
-    module.register_async_method("eth_blockNumber", |params, ctx, ext| {
-        dispatch_exporter_method(eth_block_number, params, ctx, ext)
-    })?;
-    module.register_blocking_method("eth_getBlockByNumber", eth_get_block_by_number)?;
-    module.register_blocking_method("eth_getBlockByHash", eth_get_block_by_hash)?;
-    module.register_blocking_method("stratus_getBlockByTimestamp", stratus_get_block_by_timestamp)?;
-    module.register_method("eth_getUncleByBlockHashAndIndex", eth_get_uncle_by_block_hash_and_index)?;
+        RpcMethod::EthGasPrice => {
+            module.register(method, eth_gas_price)?;
+        }
 
-    // transactions
-    module.register_blocking_method("eth_getTransactionByHash", eth_get_transaction_by_hash)?;
-    module.register_blocking_method("eth_getTransactionReceipt", eth_get_transaction_receipt)?;
-    module.register_blocking_method("eth_estimateGas", eth_estimate_gas)?;
-    module.register_blocking_method("eth_call", eth_call)?;
-    module.register_blocking_method("stratus_call", stratus_call)?;
-    module.register_blocking_method("stratus_accessList", stratus_access_list)?;
-    module.register_blocking_method("stratus_getTransactionResult", stratus_get_transaction_result)?;
-    module.register_blocking_method("debug_traceTransaction", debug_trace_transaction)?;
+        RpcMethod::StratusGetBlockAndReceipts => {
+            module.register_async(method, |params, ctx, ext| {
+                dispatch_exporter_method(stratus_get_block_and_receipts, params, ctx, ext)
+            })?;
+        }
+        RpcMethod::StratusGetBlockWithChanges => {
+            module.register_async(method, |params, ctx, ext| {
+                dispatch_exporter_method(stratus_get_block_with_changes, params, ctx, ext)
+            })?;
+        }
+        RpcMethod::EthBlockNumber => {
+            module.register_async(method, |params, ctx, ext| dispatch_exporter_method(eth_block_number, params, ctx, ext))?;
+        }
 
-    // logs
-    module.register_blocking_method("eth_getLogs", eth_get_logs)?;
+        RpcMethod::EthGetBlockByNumber => {
+            module.register_blocking(method, eth_get_block_by_number)?;
+        }
+        RpcMethod::EthGetBlockByHash => {
+            module.register_blocking(method, eth_get_block_by_hash)?;
+        }
+        RpcMethod::StratusGetBlockByTimestamp => {
+            module.register_blocking(method, stratus_get_block_by_timestamp)?;
+        }
+        RpcMethod::EthGetUncleByBlockHashAndIndex => {
+            module.register(method, eth_get_uncle_by_block_hash_and_index)?;
+        }
 
-    // account
-    module.register_method("eth_accounts", eth_accounts)?;
-    module.register_blocking_method("eth_getTransactionCount", eth_get_transaction_count)?;
-    module.register_blocking_method("eth_getBalance", eth_get_balance)?;
-    module.register_blocking_method("eth_getCode", eth_get_code)?;
+        RpcMethod::EthGetTransactionByHash => {
+            module.register_blocking(method, eth_get_transaction_by_hash)?;
+        }
+        RpcMethod::EthGetTransactionReceipt => {
+            module.register_blocking(method, eth_get_transaction_receipt)?;
+        }
+        RpcMethod::EthEstimateGas => {
+            module.register_blocking(method, eth_estimate_gas)?;
+        }
+        RpcMethod::EthCall => {
+            module.register_blocking(method, eth_call)?;
+        }
+        RpcMethod::StratusCall => {
+            module.register_blocking(method, stratus_call)?;
+        }
+        RpcMethod::StratusAccessList => {
+            module.register_blocking(method, stratus_access_list)?;
+        }
+        RpcMethod::StratusGetTransactionResult => {
+            module.register_blocking(method, stratus_get_transaction_result)?;
+        }
+        RpcMethod::DebugTraceTransaction => {
+            module.register_blocking(method, debug_trace_transaction)?;
+        }
 
-    // storage
-    module.register_blocking_method("eth_getStorageAt", eth_get_storage_at)?;
+        RpcMethod::EthGetLogs => {
+            module.register_blocking(method, eth_get_logs)?;
+        }
 
-    // subscriptions
-    module.register_subscription("eth_subscribe", "eth_subscription", "eth_unsubscribe", eth_subscribe)?;
+        RpcMethod::EthAccounts => {
+            module.register(method, eth_accounts)?;
+        }
+        RpcMethod::EthGetTransactionCount => {
+            module.register_blocking(method, eth_get_transaction_count)?;
+        }
+        RpcMethod::EthGetBalance => {
+            module.register_blocking(method, eth_get_balance)?;
+        }
+        RpcMethod::EthGetCode => {
+            module.register_blocking(method, eth_get_code)?;
+        }
 
-    Ok(module)
+        RpcMethod::EthGetStorageAt => {
+            module.register_blocking(method, eth_get_storage_at)?;
+        }
+
+        RpcMethod::EthSubscribe => {
+            module.register_subscription(
+                RpcMethod::EthSubscribe.as_str(),
+                "eth_subscription",
+                RpcMethod::EthUnsubscribe.as_str(),
+                eth_subscribe,
+            )?;
+        }
+
+        #[cfg(feature = "dev")]
+        RpcMethod::EvmSetNextBlockTimestamp => {
+            module.register_blocking(method, evm_set_next_block_timestamp)?;
+        }
+        #[cfg(feature = "dev")]
+        RpcMethod::EvmMine => {
+            module.register_blocking(method, evm_mine)?;
+        }
+        #[cfg(feature = "dev")]
+        RpcMethod::HardhatReset => {
+            module.register_blocking(method, stratus_reset)?;
+        }
+        #[cfg(feature = "dev")]
+        RpcMethod::StratusReset => {
+            module.register_blocking(method, stratus_reset)?;
+        }
+        #[cfg(feature = "dev")]
+        RpcMethod::HardhatSetStorageAt => {
+            module.register_blocking(method, stratus_set_storage_at)?;
+        }
+        #[cfg(feature = "dev")]
+        RpcMethod::StratusSetStorageAt => {
+            module.register_blocking(method, stratus_set_storage_at)?;
+        }
+        #[cfg(feature = "dev")]
+        RpcMethod::HardhatSetNonce => {
+            module.register_blocking(method, stratus_set_nonce)?;
+        }
+        #[cfg(feature = "dev")]
+        RpcMethod::StratusSetNonce => {
+            module.register_blocking(method, stratus_set_nonce)?;
+        }
+        #[cfg(feature = "dev")]
+        RpcMethod::HardhatSetBalance => {
+            module.register_blocking(method, stratus_set_balance)?;
+        }
+        #[cfg(feature = "dev")]
+        RpcMethod::StratusSetBalance => {
+            module.register_blocking(method, stratus_set_balance)?;
+        }
+        #[cfg(feature = "dev")]
+        RpcMethod::HardhatSetCode => {
+            module.register_blocking(method, stratus_set_code)?;
+        }
+        #[cfg(feature = "dev")]
+        RpcMethod::StratusSetCode => {
+            module.register_blocking(method, stratus_set_code)?;
+        }
+        #[cfg(feature = "dev")]
+        RpcMethod::StratusClearCache => {
+            module.register_blocking(method, stratus_clear_cache)?;
+        }
+    }
+    Ok(())
 }
 
 /// Dispatches an importer-facing blocking method onto the dedicated exporter runtime.
@@ -2062,5 +2256,52 @@ mod tests {
         assert!(result_str.contains("transferFrom(address,address,uint256)"));
         assert!(result_str.contains("balanceOf(address)"));
         assert!(result_str.contains("allowance(address,address)"));
+    }
+
+    /// Minimal [`RpcContext`] whose only purpose is carrying the context type required by
+    /// `register_methods`; no handler is ever invoked on it.
+    fn test_rpc_context() -> RpcContext {
+        use crate::eth::executor::ExecutorConfig;
+        use crate::eth::rpc::subscriptions::RpcSubscriptionsConnected;
+
+        let storage = Arc::new(StratusStorage::new_test().expect("test storage"));
+        let miner = Arc::new(Miner::new(Arc::clone(&storage), MinerMode::External));
+        let executor = Arc::new(Executor::new(Arc::clone(&storage), Arc::clone(&miner), ExecutorConfig::default()));
+        let server = Arc::new(Server {
+            storage,
+            executor,
+            miner,
+            importer: Arc::new(RwLock::new(None)),
+            importer_runtime: Arc::new(RwLock::new(None)),
+            exporter_runtime: Arc::new(RwLock::new(None)),
+            app_config: StratusConfig::default(),
+            rpc_config: RpcServerConfig::default(),
+            chain_id: ChainId::from(1u64),
+        });
+        RpcContext {
+            server,
+            client_version: "stratus",
+            subs: Arc::new(RpcSubscriptionsConnected::default()),
+        }
+    }
+
+    /// Every enum variant marked as module-registered must be present on the module built by
+    /// `register_methods`, and every registered method must have a variant on the enum.
+    #[tokio::test]
+    async fn register_methods_matches_enum() {
+        let module = RpcModule::new(test_rpc_context());
+        let module = register_methods(module).expect("register methods");
+
+        let registered: std::collections::HashSet<&'static str> = module.method_names().collect();
+        let expected: std::collections::HashSet<&'static str> = RpcMethod::iter()
+            .filter(|method| method.is_module_registered())
+            .map(|method| method.as_str())
+            .collect();
+
+        let missing: Vec<&str> = expected.difference(&registered).copied().collect();
+        let unexpected: Vec<&str> = registered.difference(&expected).copied().collect();
+
+        assert!(missing.is_empty(), "enum variants missing from the module: {missing:?}");
+        assert!(unexpected.is_empty(), "module methods missing from the enum: {unexpected:?}");
     }
 }

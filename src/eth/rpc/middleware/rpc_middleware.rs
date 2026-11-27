@@ -33,6 +33,7 @@ use crate::eth::codegen::SoliditySignature;
 use crate::eth::rpc::RpcClientApp;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
+use crate::eth::rpc::RpcMethod;
 use crate::eth::rpc::middleware::multicall::MulticallInfo;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parser::RpcExtensionsExt;
@@ -170,6 +171,7 @@ impl RpcServiceT for RpcMiddleware {
         let client = request.extensions.rpc_client().to_owned();
         let request_id = request.id();
         let method = request.method_name().to_owned();
+        let rpc_method = method.parse::<RpcMethod>().ok();
         let request_params_str = to_json_string(&request.params);
         #[cfg(feature = "metrics")]
         if let Some(guard) = request.extensions.get::<ConnectionGuard>() {
@@ -214,9 +216,12 @@ impl RpcServiceT for RpcMiddleware {
             s.rec_str("rpc_method", &method);
         });
 
-        let (future_response, tracing_identifiers) = if matches!(method.as_str(), "eth_sendRawTransaction" | "stratus_sendRawTransactionAndGetReceipt") {
+        let (future_response, tracing_identifiers) = if matches!(
+            rpc_method,
+            Some(RpcMethod::EthSendRawTransaction | RpcMethod::StratusSendRawTransactionAndGetReceipt)
+        ) {
             drop(middleware_enter);
-            let with_receipt = method == "stratus_sendRawTransactionAndGetReceipt";
+            let with_receipt = rpc_method == Some(RpcMethod::StratusSendRawTransactionAndGetReceipt);
             match eth_send_raw_transaction(request, Arc::clone(&self.ctx), span, with_receipt) {
                 Ok(result) => result,
                 Err(err) => {
@@ -226,9 +231,10 @@ impl RpcServiceT for RpcMiddleware {
                 }
             }
         } else {
-            let tracing_identifiers = match method.as_str() {
-                "eth_call" | "eth_estimateGas" => TransactionTracingIdentifiers::from_call(request.params()).ok(),
-                "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TransactionTracingIdentifiers::from_transaction_query(request.params()).ok(),
+            let tracing_identifiers = match rpc_method {
+                Some(RpcMethod::EthCall | RpcMethod::EthEstimateGas) => TransactionTracingIdentifiers::from_call(request.params()).ok(),
+                Some(RpcMethod::EthGetTransactionByHash | RpcMethod::EthGetTransactionReceipt) =>
+                    TransactionTracingIdentifiers::from_transaction_query(request.params()).ok(),
                 _ => None,
             };
             Span::with(|s| {
