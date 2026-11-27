@@ -23,6 +23,7 @@ use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::ExecutorError;
+use crate::eth::rpc::RpcMethod;
 use crate::eth::rpc::pagination;
 use crate::eth::rpc::pagination::ResponseFormat;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
@@ -187,7 +188,7 @@ impl BlockchainClient {
     pub async fn fetch_listening(&self) -> anyhow::Result<()> {
         tracing::debug!("fetching listening status");
 
-        let result = self.http.request::<bool, _>("net_listening", [(); 0]).await;
+        let result = self.http.request::<bool, _>(RpcMethod::NetListening.as_str(), [(); 0]).await;
         match result {
             Ok(_) => Ok(()),
             Err(e) => log_and_err!(reason = e, "failed to fetch listening status"),
@@ -198,7 +199,7 @@ impl BlockchainClient {
     pub async fn fetch_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("fetching block number");
 
-        let result = self.http.request::<BlockNumber, _>("eth_blockNumber", [(); 0]).await;
+        let result = self.http.request::<BlockNumber, _>(RpcMethod::EthBlockNumber.as_str(), [(); 0]).await;
 
         match result {
             Ok(number) => Ok(number),
@@ -213,7 +214,7 @@ impl BlockchainClient {
     /// ignore the extra parameter and answer normally, which is handled transparently.
     async fn request_importer_data<T: serde::de::DeserializeOwned>(
         &self,
-        method: &'static str,
+        method: RpcMethod,
         block_number: BlockNumber,
         format: Option<ResponseFormat>,
     ) -> anyhow::Result<Option<T>> {
@@ -222,7 +223,7 @@ impl BlockchainClient {
         };
         let value = match serde_json::from_str::<T>(full.get()) {
             Ok(value) => value,
-            Err(e) => return Err(e).with_context(|| format!("failed to deserialize importer data from {method}")),
+            Err(e) => return Err(e).with_context(|| format!("failed to deserialize importer data from {}", method.as_str())),
         };
         Ok(Some(value))
     }
@@ -230,17 +231,17 @@ impl BlockchainClient {
     /// Fetches the full serialized response for an importer method, reassembling pagination chunks.
     async fn fetch_serialized_response(
         &self,
-        method: &'static str,
+        method: RpcMethod,
         block_number: BlockNumber,
         format: Option<ResponseFormat>,
     ) -> anyhow::Result<Option<Box<RawValue>>> {
-        tracing::debug!(%block_number, method, "fetching importer data");
+        tracing::debug!(%block_number, method = method.as_str(), "fetching importer data");
 
         let number = to_json_value(block_number);
 
         // first request from offset zero
         let params = [number.clone(), pagination::request_params(0, format)];
-        let result = self.http.request::<Option<Box<RawValue>>, _>(method, params).await;
+        let result = self.http.request::<Option<Box<RawValue>>, _>(method.as_str(), params).await;
         let raw = match result {
             Ok(Some(raw)) => raw,
             Ok(None) => return Ok(None), // block not available yet
@@ -258,7 +259,7 @@ impl BlockchainClient {
             tracing::error!(
                 total = first_envelope.total,
                 cap = pagination::MAX_REASSEMBLY_TOTAL,
-                method,
+                method = method.as_str(),
                 "paginated response total exceeds the reassembly cap"
             );
             anyhow::bail!(
@@ -268,7 +269,7 @@ impl BlockchainClient {
             );
         }
         let mut reassembler = pagination::Reassembler::new(first_envelope.total);
-        tracing::info!(%block_number, method, total = first_envelope.total, "fetching paginated importer data");
+        tracing::info!(%block_number, method = method.as_str(), total = first_envelope.total, "fetching paginated importer data");
         let mut envelope = first_envelope;
         loop {
             if reassembler.push(envelope)? {
@@ -277,7 +278,7 @@ impl BlockchainClient {
 
             // next chunk from the current offset
             let params = [number.clone(), pagination::request_params(reassembler.next_offset(), format)];
-            let result = self.http.request::<Box<RawValue>, _>(method, params).await;
+            let result = self.http.request::<Box<RawValue>, _>(method.as_str(), params).await;
             let raw = match result {
                 Ok(raw) => raw,
                 Err(e) => return log_and_err!(reason = e, "failed to fetch importer data chunk"),
@@ -298,10 +299,8 @@ impl BlockchainClient {
     pub async fn fetch_block_and_receipts(&self, block_number: BlockNumber) -> anyhow::Result<Option<BlockAndReceiptsResponse>> {
         tracing::debug!(%block_number, "fetching block");
 
-        const METHOD: &str = "stratus_getBlockAndReceipts";
-
         match self
-            .request_importer_data::<BlockAndReceiptsResponse>(METHOD, block_number, Some(ResponseFormat::Stratus))
+            .request_importer_data::<BlockAndReceiptsResponse>(RpcMethod::StratusGetBlockAndReceipts, block_number, Some(ResponseFormat::Stratus))
             .await
         {
             Ok(response) => Ok(response),
@@ -313,7 +312,7 @@ impl BlockchainClient {
     pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<(BlockRocksdb, BlockChangesRocksdb)>> {
         tracing::debug!(%block_number, "fetching block with changes");
 
-        match self.request_importer_data("stratus_getBlockWithChanges", block_number, None).await {
+        match self.request_importer_data(RpcMethod::StratusGetBlockWithChanges, block_number, None).await {
             Ok(block) => Ok(block),
             Err(e) => log_and_err!(reason = e, "failed to fetch block with changes"),
         }
@@ -326,7 +325,7 @@ impl BlockchainClient {
         let number = to_json_value(block_number);
         let result = self
             .http
-            .request::<Option<ExternalBlock>, _>("eth_getBlockByNumber", [number, JsonValue::Bool(true)])
+            .request::<Option<ExternalBlock>, _>(RpcMethod::EthGetBlockByNumber.as_str(), [number, JsonValue::Bool(true)])
             .await;
 
         match result {
@@ -340,7 +339,10 @@ impl BlockchainClient {
         tracing::debug!(%tx_hash, "fetching transaction");
 
         let hash = to_json_value(tx_hash);
-        let result = self.http.request::<Option<AlloyTransaction>, _>("eth_getTransactionByHash", [hash]).await;
+        let result = self
+            .http
+            .request::<Option<AlloyTransaction>, _>(RpcMethod::EthGetTransactionByHash.as_str(), [hash])
+            .await;
 
         match result {
             Ok(tx) => Ok(tx),
@@ -353,7 +355,10 @@ impl BlockchainClient {
         tracing::debug!(%tx_hash, "fetching transaction receipt");
 
         let hash = to_json_value(tx_hash);
-        let result = self.http.request::<Option<ExternalReceipt>, _>("eth_getTransactionReceipt", [hash]).await;
+        let result = self
+            .http
+            .request::<Option<ExternalReceipt>, _>(RpcMethod::EthGetTransactionReceipt.as_str(), [hash])
+            .await;
 
         match result {
             Ok(receipt) => Ok(receipt),
@@ -367,7 +372,7 @@ impl BlockchainClient {
 
         let address = to_json_value(address);
         let number = to_json_value(block_number);
-        let result = self.http.request::<Wei, _>("eth_getBalance", [address, number]).await;
+        let result = self.http.request::<Wei, _>(RpcMethod::EthGetBalance.as_str(), [address, number]).await;
 
         match result {
             Ok(receipt) => Ok(receipt),
@@ -386,7 +391,7 @@ impl BlockchainClient {
     pub async fn send_raw_transaction_to_leader(&self, tx: AlloyBytes, access_list: Option<AccessListOutput>) -> Result<Hash, StratusError> {
         let tx = to_json_value(tx);
         let access_list = to_json_value(access_list);
-        let result = self.http.request::<Hash, _>("eth_sendRawTransaction", [tx, access_list]).await;
+        let result = self.http.request::<Hash, _>(RpcMethod::EthSendRawTransaction.as_str(), [tx, access_list]).await;
 
         match result {
             Ok(hash) => Ok(hash),
@@ -404,7 +409,7 @@ impl BlockchainClient {
         let access_list = to_json_value(access_list);
         let result = self
             .http
-            .request::<AlloyReceipt, _>("stratus_sendRawTransactionAndGetReceipt", [tx, access_list])
+            .request::<AlloyReceipt, _>(RpcMethod::StratusSendRawTransactionAndGetReceipt.as_str(), [tx, access_list])
             .await;
 
         match result {
@@ -433,7 +438,11 @@ impl BlockchainClient {
 
             let ws_read = self.require_ws().await?;
             let result = ws_read
-                .subscribe::<ExternalBlock, _>("eth_subscribe", [JsonValue::String("newHeads".to_owned())], "eth_unsubscribe")
+                .subscribe::<ExternalBlock, _>(
+                    RpcMethod::EthSubscribe.as_str(),
+                    [JsonValue::String("newHeads".to_owned())],
+                    RpcMethod::EthUnsubscribe.as_str(),
+                )
                 .await;
 
             match result {
