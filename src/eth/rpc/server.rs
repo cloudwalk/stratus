@@ -12,15 +12,12 @@ use alloy_primitives::U256;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::Result;
-use futures::FutureExt;
-use futures::future::BoxFuture;
 use futures::join;
 use http::Method;
 use itertools::Itertools;
 use jsonrpsee::Extensions;
 use jsonrpsee::IntoResponse;
 use jsonrpsee::IntoSubscriptionCloseResponse;
-use jsonrpsee::MethodResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use jsonrpsee::server::BatchRequestConfig;
 use jsonrpsee::server::RandomStringIdProvider;
@@ -29,9 +26,7 @@ use jsonrpsee::server::Server as RpcServer;
 use jsonrpsee::server::ServerConfig;
 use jsonrpsee::server::ServerHandle;
 use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
-use jsonrpsee::types::Id;
 use jsonrpsee::types::Params;
-use jsonrpsee::types::Request;
 use jsonrpsee::ws_client::RpcServiceBuilder;
 use parking_lot::RwLock;
 use serde_json::json;
@@ -272,7 +267,7 @@ impl Server {
 
         // configure middleware
         let cors = CorsLayer::new().allow_methods([Method::POST]).allow_origin(Any).allow_headers(Any);
-        let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |service| RpcMiddleware::new(service, Arc::clone(&ctx)));
+        let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
         let http_middleware = tower::ServiceBuilder::new().layer(cors).layer_fn(RpcHttpMiddleware::new).layer(
             ProxyGetRequestLayer::new([
                 ("/health", RpcMethod::StratusHealth.as_str()),
@@ -426,13 +421,17 @@ impl RpcModuleRegisterExt for RpcModule<RpcContext> {
 
 /// Registers a single method on the module, dispatching to the jsonrpsee flavor it requires.
 ///
-/// The exhaustive match guarantees every [`RpcMethod`] variant is either registered here or
-/// explicitly skipped: the middleware-intercepted transaction submission pair is a no-op (see
-/// [`RpcMethod::is_module_registered`]) and `eth_unsubscribe` is registered as a side effect of
-/// the `eth_subscribe` subscription.
+/// The exhaustive match guarantees every [`RpcMethod`] variant is registered here, except
+/// `eth_unsubscribe`, which is registered as a side effect of the `eth_subscribe` subscription.
 fn register_method(module: &mut RpcModule<RpcContext>, method: RpcMethod) -> anyhow::Result<()> {
     match method {
-        RpcMethod::EthSendRawTransaction | RpcMethod::StratusSendRawTransactionAndGetReceipt => {}
+        RpcMethod::EthSendRawTransaction => {
+            module.register_async(method, send_raw_transaction)?;
+        }
+        RpcMethod::StratusSendRawTransactionAndGetReceipt => {
+            module.register_async(method, send_raw_transaction_and_get_receipt)?;
+        }
+
         RpcMethod::EthUnsubscribe => {}
 
         RpcMethod::StratusHealth => {
@@ -1636,15 +1635,8 @@ fn stratus_access_list(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
         .inspect_err(|e| tracing::warn!(reason = ?e, "failed to execute stratus_accessList"))
 }
 
-pub fn eth_send_raw_transaction<'a>(
-    mut request: Request<'a>,
-    ctx: Arc<RpcContext>,
-    span: Span,
-    with_receipt: bool,
-) -> Result<(BoxFuture<'a, MethodResponse>, Option<TransactionTracingIdentifiers>), StratusError> {
-    let enter = span.enter();
-    let params = request.params();
-    let id = request.id().into_owned();
+async fn send_raw_transaction_core(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions, with_receipt: bool) -> Result<JsonValue, StratusError> {
+    let middleware_enter = ext.enter_middleware_span();
     let (params, data) = next_rpc_param::<Bytes>(params.sequence())?;
     let (_, access_list) = next_rpc_param_or_default::<Option<AccessListOutput>>(params)?;
     let input = parse_rpc_rlp::<TransactionInput>(&data)?;
@@ -1655,48 +1647,41 @@ pub fn eth_send_raw_transaction<'a>(
             tx.record_span(s);
         }
     });
-    drop(enter);
+    drop(middleware_enter);
 
-    request.extensions_mut().insert(span.clone());
-
-    let ext = request.extensions;
-    let ext_clone = ext.clone();
-
-    let future = {
-        let prepared_handle = tokio::task::spawn_blocking(move || _prepare_eth_send_raw_transaction(input, data, access_list, ctx, ext, with_receipt));
-        async move {
-            let prepared = prepared_handle.await;
-
-            let response = match prepared {
-                Ok(Ok(PreparedRawTransaction::Complete(result))) => MethodResponse::response(id, result.into_response(), usize::MAX),
-                Ok(Ok(PreparedRawTransaction::Forward {
-                    importer,
-                    tx_hash,
-                    data,
-                    access_list,
-                })) => {
-                    let result = if with_receipt {
-                        importer.forward_and_get_receipt(tx_hash, data, access_list).await.map(to_json_value)
-                    } else {
-                        importer.forward(tx_hash, data, access_list).await.map(|hash| to_json_value(hex_data(hash)))
-                    };
-                    MethodResponse::response(id, result.into_response(), usize::MAX)
-                }
-                Ok(Err(err)) => MethodResponse::response(id, Err::<JsonValue, _>(err).into_response(), usize::MAX),
-                Err(err) => {
-                    tracing::error!("Join error for blocking RPC method: {:?}", err);
-                    MethodResponse::error(
-                        Id::Null,
-                        StratusError::Unexpected(crate::eth::types::UnexpectedError::Unexpected(anyhow::anyhow!(err))),
-                    )
-                }
-            };
-            response.with_extensions(ext_clone)
+    let span = ext.get::<Span>().cloned().unwrap_or_else(Span::none);
+    let prepared_handle = tokio::task::spawn_blocking(move || _prepare_eth_send_raw_transaction(input, data, access_list, ctx, ext, with_receipt));
+    async move {
+        match prepared_handle.await {
+            Ok(Ok(PreparedRawTransaction::Complete(result))) => result,
+            Ok(Ok(PreparedRawTransaction::Forward {
+                importer,
+                tx_hash,
+                data,
+                access_list,
+            })) =>
+                if with_receipt {
+                    importer.forward_and_get_receipt(tx_hash, data, access_list).await.map(to_json_value)
+                } else {
+                    importer.forward(tx_hash, data, access_list).await.map(|hash| to_json_value(hex_data(hash)))
+                },
+            Ok(Err(err)) => Err(err),
+            Err(err) => {
+                tracing::error!(reason = ?err, "transaction submission blocking task failed to join");
+                Err(StratusError::Unexpected(crate::eth::types::UnexpectedError::Unexpected(anyhow::anyhow!(err))))
+            }
         }
     }
     .instrument(span)
-    .boxed();
-    Ok((future, tracing_identifiers))
+    .await
+}
+
+async fn send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    send_raw_transaction_core(params, ctx, ext, false).await
+}
+
+async fn send_raw_transaction_and_get_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    send_raw_transaction_core(params, ctx, ext, true).await
 }
 
 enum PreparedRawTransaction {
@@ -2285,18 +2270,15 @@ mod tests {
         }
     }
 
-    /// Every enum variant marked as module-registered must be present on the module built by
-    /// `register_methods`, and every registered method must have a variant on the enum.
+    /// Every enum variant must be present on the module built by `register_methods`, and every
+    /// registered method must have a variant on the enum.
     #[tokio::test]
     async fn register_methods_matches_enum() {
         let module = RpcModule::new(test_rpc_context());
         let module = register_methods(module).expect("register methods");
 
         let registered: std::collections::HashSet<&'static str> = module.method_names().collect();
-        let expected: std::collections::HashSet<&'static str> = RpcMethod::iter()
-            .filter(|method| method.is_module_registered())
-            .map(|method| method.as_str())
-            .collect();
+        let expected: std::collections::HashSet<&'static str> = RpcMethod::iter().map(|method| method.as_str()).collect();
 
         let missing: Vec<&str> = expected.difference(&registered).copied().collect();
         let unexpected: Vec<&str> = registered.difference(&expected).copied().collect();
