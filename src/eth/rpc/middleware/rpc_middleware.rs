@@ -31,13 +31,11 @@ use crate::eth::codegen;
 use crate::eth::codegen::ContractName;
 use crate::eth::codegen::SoliditySignature;
 use crate::eth::rpc::RpcClientApp;
-use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcMethod;
 use crate::eth::rpc::middleware::multicall::MulticallInfo;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parser::RpcExtensionsExt;
-use crate::eth::rpc::server::eth_send_raw_transaction;
 use crate::eth::types::Address;
 use crate::eth::types::CallInput;
 #[cfg(feature = "metrics")]
@@ -62,15 +60,11 @@ use crate::infra::tracing::new_cid;
 #[derive(Debug, Clone)]
 pub struct RpcMiddleware {
     service: Arc<RpcService>,
-    ctx: Arc<RpcContext>,
 }
 
 impl RpcMiddleware {
-    pub fn new(service: RpcService, ctx: Arc<RpcContext>) -> Self {
-        Self {
-            service: Arc::new(service),
-            ctx,
-        }
+    pub fn new(service: RpcService) -> Self {
+        Self { service: Arc::new(service) }
     }
 }
 
@@ -216,38 +210,21 @@ impl RpcServiceT for RpcMiddleware {
             s.rec_str("rpc_method", &method);
         });
 
-        let (future_response, tracing_identifiers) = if matches!(
-            rpc_method,
-            Some(RpcMethod::EthSendRawTransaction | RpcMethod::StratusSendRawTransactionAndGetReceipt)
-        ) {
-            drop(middleware_enter);
-            let with_receipt = rpc_method == Some(RpcMethod::StratusSendRawTransactionAndGetReceipt);
-            match eth_send_raw_transaction(request, Arc::clone(&self.ctx), span, with_receipt) {
-                Ok(result) => result,
-                Err(err) => {
-                    tracing::warn!(?err, %method, "failed to parse transaction submission request");
-                    let future: BoxFuture<'a, MethodResponse> = Box::pin(err.to_response_future(request_id.clone()));
-                    (future, None)
-                }
-            }
-        } else {
-            let tracing_identifiers = match rpc_method {
-                Some(RpcMethod::EthCall | RpcMethod::EthEstimateGas) => TransactionTracingIdentifiers::from_call(request.params()).ok(),
-                Some(RpcMethod::EthGetTransactionByHash | RpcMethod::EthGetTransactionReceipt) =>
-                    TransactionTracingIdentifiers::from_transaction_query(request.params()).ok(),
-                _ => None,
-            };
-            Span::with(|s| {
-                if let Some(ref tx) = tracing_identifiers {
-                    tx.record_span(s);
-                }
-            });
-            // make span available to rpc-server
-            drop(middleware_enter);
-            request.extensions_mut().insert(span);
-            let future: BoxFuture<'a, MethodResponse> = Box::pin(self.service.call(request));
-            (future, tracing_identifiers)
+        let tracing_identifiers = match rpc_method {
+            Some(RpcMethod::EthCall | RpcMethod::EthEstimateGas) => TransactionTracingIdentifiers::from_call(request.params()).ok(),
+            Some(RpcMethod::EthGetTransactionByHash | RpcMethod::EthGetTransactionReceipt) =>
+                TransactionTracingIdentifiers::from_transaction_query(request.params()).ok(),
+            _ => None,
         };
+        Span::with(|s| {
+            if let Some(ref tx) = tracing_identifiers {
+                tx.record_span(s);
+            }
+        });
+        // make span available to rpc-server
+        drop(middleware_enter);
+        request.extensions_mut().insert(span);
+        let future_response: BoxFuture<'a, MethodResponse> = Box::pin(self.service.call(request));
 
         let tx_ref = tracing_identifiers.as_ref();
         let multicall_ref = tx_ref.and_then(|tx| tx.multicall.as_ref());

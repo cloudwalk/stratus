@@ -11,11 +11,11 @@ use strum::IntoStaticStr;
 /// Every RPC method handled by the Stratus JSON-RPC server.
 ///
 /// Registration in `server::register_methods` loops over all variants of this enum and the compiler
-/// enforces an arm for each one, so a new variant cannot be introduced without being registered
-/// (or explicitly marked as a skip). The wire name is declared once, on the variant.
+/// enforces an arm for each one, so a new variant cannot be introduced without being registered.
+/// The wire name is declared once, on the variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, EnumIter, IntoStaticStr)]
 pub enum RpcMethod {
-    // middleware-intercepted methods
+    // transaction submission
     #[strum(serialize = "eth_sendRawTransaction")]
     EthSendRawTransaction,
     #[strum(serialize = "stratus_sendRawTransactionAndGetReceipt")]
@@ -198,15 +198,6 @@ impl RpcMethod {
     /// Exact JSON-RPC wire name of the method.
     pub fn as_str(self) -> &'static str {
         self.into()
-    }
-
-    /// Whether `server::register_methods` registers this method on the `RpcModule`.
-    ///
-    /// `false` marks the middleware-intercepted transaction submission pair: both variants share a
-    /// single handler running on the dedicated blocking pool, distinguished by a `with_receipt`
-    /// flag, so they never reach module registration.
-    pub const fn is_module_registered(self) -> bool {
-        !matches!(self, Self::EthSendRawTransaction | Self::StratusSendRawTransactionAndGetReceipt)
     }
 }
 
